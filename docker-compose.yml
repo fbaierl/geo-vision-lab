@@ -1,0 +1,128 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: geovision-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: >
+      sh -c "ollama serve &
+             sleep 5 &&
+             ollama pull qwen2.5:7b &&
+             wait"
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 600s
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: geovision-postgres
+    environment:
+      - POSTGRES_USER=geovision
+      - POSTGRES_PASSWORD=geovision
+      - POSTGRES_DB=geovision
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U geovision" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: geovision-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@geovision.lab
+      - PGADMIN_DEFAULT_PASSWORD=geovision
+    ports:
+      - "8082:80"
+    volumes:
+      - ./monitoring/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ingest:
+    build: .
+    container_name: geovision-ingest
+    volumes:
+      - ./documents:/app/documents
+    environment:
+      - POSTGRES_URI=postgresql+psycopg://geovision:geovision@geovision-postgres:5432/geovision
+      - OLLAMA_HOST=http://geovision-ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    command: python ingest.py
+    restart: "no"
+
+  app:
+    build: .
+    container_name: geovision-app
+    volumes:
+      - .:/app
+    environment:
+      - OLLAMA_HOST=http://geovision-ollama:11434
+      - POSTGRES_URI=postgresql+psycopg://geovision:geovision@geovision-postgres:5432/geovision
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- Monitoring Stack ---
+
+  loki:
+    image: grafana/loki:latest
+    container_name: geovision-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: geovision-promtail
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: geovision-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=geovision
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - loki
+
+volumes:
+  postgres_data:
+  ollama_data:
+  loki_data:
+  grafana_data:

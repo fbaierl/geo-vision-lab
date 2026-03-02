@@ -1,0 +1,13 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "GeoVision PostgreSQL",
+            "Group": "Servers",
+            "Host": "geovision-postgres",
+            "Port": 5432,
+            "MaintenanceDB": "geovision",
+            "Username": "geovision",
+            "SSLMode": "prefer"
+        }
+    }
+}

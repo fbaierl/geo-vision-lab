@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoVision Lab // Tactical Intelligence Terminal</title>
+    <meta name="description" content="GeoVision Lab — Advanced Geopolitical Intelligence Analysis System.">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@600;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --cyan: #00e5ff;
+            --cyan-d: rgba(0, 229, 255, 0.12);
+            --cyan-g: rgba(0, 229, 255, 0.35);
+            --amber: #ffab00;
+            --amber-d: rgba(255, 171, 0, 0.1);
+            --red: #ff1744;
+            --red-d: rgba(255, 23, 68, 0.12);
+            --muted: #4a6272;
+            --white: #d8eef5;
+            --bg: #040c10;
+            --panel: rgba(4, 14, 20, 0.92);
+            --border: rgba(0, 229, 255, 0.2);
+            --mono: 'Share Tech Mono', monospace;
+            --ui: 'Rajdhani', sans-serif;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            color: var(--white);
+            font-family: var(--mono);
+        }
+
+        /* Grid */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(0, 229, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.03) 1px, transparent 1px);
+            background-size: 36px 36px;
+        }
+
+        /* Scanlines */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            pointer-events: none;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+                    rgba(0, 0, 0, 0.15) 2px, rgba(0, 0, 0, 0.15) 4px);
+        }
+
+        /* ═══ LAYOUT ═══ */
+        #shell {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-rows: 46px 1fr 36px;
+            grid-template-columns: 200px 1fr;
+            grid-template-areas:
+                "header  header"
+                "history chat"
+                "footer  footer";
+            height: 100vh;
+        }
+
+        /* ═══ HEADER ═══ */
+        header {
+            grid-area: header;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(2, 8, 12, 0.98);
+        }
+
+        .logo {
+            font-family: var(--ui);
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 5px;
+            color: var(--cyan);
+            text-shadow: 0 0 14px var(--cyan-g);
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            font-size: 0.62rem;
+            letter-spacing: 2px;
+        }
+
+        .pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--cyan);
+            text-transform: uppercase;
+        }
+
+        .pill .dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--cyan);
+            box-shadow: 0 0 5px var(--cyan);
+            animation: blink 1.4s ease-in-out infinite;
+        }
+
+        .pill.processing {
+            color: var(--amber);
+            display: none;
+        }
+
+        .pill.processing .dot {
+            background: var(--amber);
+            box-shadow: 0 0 5px var(--amber);
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.2
+            }
+        }
+
+        /* ═══ HISTORY PANEL ═══ */
+        #history-panel {
+            grid-area: history;
+            border-right: 1px solid var(--border);
+            background: rgba(2, 10, 15, 0.95);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #history-panel::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        #history-panel::-webkit-scrollbar-thumb {
+            background: var(--border);
+        }
+
+        .panel-head {
+            padding: 10px 14px 8px;
+            font-size: 0.58rem;
+            letter-spacing: 3px;
+            color: var(--cyan);
+            text-transform: uppercase;
+            font-family: var(--ui);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        /* Live stats */
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 8px 14px;
+            border-bottom: 1px solid rgba(0, 229, 255, 0.06);
+            flex-shrink: 0;
+        }
+
+        .stat .k {
+            font-size: 0.58rem;
+            letter-spacing: 1.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .stat .v {
+            font-size: 0.72rem;
+            color: var(--cyan);
+        }
+
+        .stat .v.amber {
+            color: var(--amber);
+        }
+
+        /* Query history entries */
+        #history-entries {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .h-entry {
+            padding: 8px 14px;
+            border-bottom: 1px solid rgba(0, 229, 255, 0.05);
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+
+        .h-entry:hover {
+            background: var(--cyan-d);
+        }
+
+        .h-entry .h-label {
+            font-size: 0.58rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 3px;
+        }
+
+        .h-entry .h-text {
+            font-size: 0.68rem;
+            color: var(--white);
+            line-height: 1.3;
+            word-break: break-word;
+        }
+
+        .no-history {
+            padding: 16px 14px;
+            font-size: 0.62rem;
+            color: var(--muted);
+            text-align: center;
+            line-height: 1.8;
+        }
+
+        /* ═══ CHAT ═══ */
+        #chat-area {
+            grid-area: chat;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        #messages::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        /* Messages */
+        .msg {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            max-width: 80%;
+            animation: pop 0.18s ease-out;
+        }
+
+        @keyframes pop {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .msg-meta {
+            font-size: 0.57rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .msg-body {
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            position: relative;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* Corner brackets */
+        .msg-body::before,
+        .msg-body::after {
+            content: '';
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            border-style: solid;
+        }
+
+        /* User */
+        .msg.user {
+            align-self: flex-end;
+        }
+
+        .msg.user .msg-meta {
+            text-align: right;
+            color: var(--amber);
+        }
+
+        .msg.user .msg-body {
+            background: var(--amber-d);
+            border: 1px solid rgba(255, 171, 0, 0.28);
+            color: #ffe082;
+        }
+
+        .msg.user .msg-body::before {
+            top: -1px;
+            right: -1px;
+            border-color: var(--amber);
+            border-width: 2px 2px 0 0;
+        }
+
+        .msg.user .msg-body::after {
+            bottom: -1px;
+            left: -1px;
+            border-color: var(--amber);
+            border-width: 0 0 2px 2px;
+        }
+
+        /* Agent */
+        .msg.agent {
+            align-self: flex-start;
+        }
+
+        .msg.agent .msg-meta {
+            color: var(--cyan);
+        }
+
+        .msg.agent .msg-body {
+            background: var(--cyan-d);
+            border: 1px solid var(--border);
+            color: var(--white);
+        }
+
+        .msg.agent .msg-body::before {
+            top: -1px;
+            left: -1px;
+            border-color: var(--cyan);
+            border-width: 2px 0 0 2px;
+        }
+
+        .msg.agent .msg-body::after {
+            bottom: -1px;
+            right: -1px;
+            border-color: var(--cyan);
+            border-width: 0 2px 2px 0;
+        }
+
+        /* Error */
+        .msg.error .msg-body {
+            background: var(--red-d);
+            border-color: rgba(255, 23, 68, 0.35);
+            color: #ff8a80;
+        }
+
+        .msg.error .msg-body::before,
+        .msg.error .msg-body::after {
+            border-color: var(--red);
+        }
+
+        /* System divider */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.58rem;
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-transform: uppercase;
+            align-self: stretch;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* ═══ TYPING ═══ */
+        #typing {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 24px 8px;
+            font-size: 0.6rem;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            text-transform: uppercase;
+        }
+
+        #typing .bar {
+            width: 3px;
+            height: 11px;
+            background: var(--cyan);
+            animation: tb 0.85s ease-in-out infinite;
+        }
+
+        #typing .bar:nth-child(2) {
+            animation-delay: 0.14s;
+        }
+
+        #typing .bar:nth-child(3) {
+            animation-delay: 0.28s;
+        }
+
+        @keyframes tb {
+
+            0%,
+            100% {
+                opacity: 0.2;
+                transform: scaleY(0.5)
+            }
+
+            50% {
+                opacity: 1;
+                transform: scaleY(1)
+            }
+        }
+
+        /* ═══ INPUT ═══ */
+        #input-bar {
+            display: flex;
+            align-items: center;
+            height: 52px;
+            border-top: 1px solid var(--border);
+            background: rgba(2, 8, 12, 0.98);
+            padding: 0 18px;
+            gap: 10px;
+            position: relative;
+        }
+
+        /* Animated corner on input bar */
+        #input-bar::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 0;
+            width: 28px;
+            height: 2px;
+            background: var(--cyan);
+            box-shadow: 0 0 8px var(--cyan);
+        }
+
+        .prompt {
+            color: var(--cyan);
+            font-size: 1rem;
+            text-shadow: 0 0 8px var(--cyan-g);
+            flex-shrink: 0;
+        }
+
+        #query-input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            color: var(--white);
+            caret-color: var(--cyan);
+            letter-spacing: 0.5px;
+        }
+
+        #query-input::placeholder {
+            color: var(--muted);
+        }
+
+        #send-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--cyan);
+            font-family: var(--ui);
+            font-weight: 700;
+            font-size: 0.7rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            padding: 5px 16px;
+            cursor: pointer;
+            transition: all 0.15s;
+            position: relative;
+        }
+
+        #send-btn::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 6px;
+            height: 6px;
+            border-bottom: 2px solid var(--cyan);
+            border-right: 2px solid var(--cyan);
+        }
+
+        #send-btn:hover:not(:disabled) {
+            background: var(--cyan-d);
+            box-shadow: 0 0 10px var(--cyan-g);
+        }
+
+        #send-btn:disabled {
+            opacity: 0.25;
+            cursor: not-allowed;
+        }
+
+        /* ═══ FOOTER ═══ */
+        footer {
+            grid-area: footer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 18px;
+            border-top: 1px solid var(--border);
+            background: rgba(2, 6, 10, 1);
+            font-size: 0.57rem;
+            letter-spacing: 1.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        footer .right {
+            display: flex;
+            gap: 20px;
+        }
+
+        footer .cyan {
+            color: var(--cyan);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="shell">
+
+        <!-- HEADER -->
+        <header>
+            <div class="logo">▸ GEOVISION LAB</div>
+            <div class="header-meta">
+                <div class="pill processing" id="pill-proc">
+                    <div class="dot"></div> Processing
+                </div>
+                <div class="pill">
+                    <div class="dot"></div> Online
+                </div>
+                <div style="color:var(--muted)">UTC <span id="clock">--:--:--</span></div>
+            </div>
+        </header>
+
+        <!-- HISTORY / STATS PANEL -->
+        <div id="history-panel">
+            <div class="panel-head">// Session</div>
+            <div class="stat">
+                <span class="k">Queries</span>
+                <span class="v" id="s-count">0</span>
+            </div>
+            <div class="stat">
+                <span class="k">Avg. Resp</span>
+                <span class="v" id="s-avg">—</span>
+            </div>
+            <div class="stat">
+                <span class="k">Last Tool</span>
+                <span class="v amber" id="s-tool">—</span>
+            </div>
+
+            <div class="panel-head" style="margin-top:4px">// History</div>
+            <div id="history-entries">
+                <div class="no-history" id="no-hist">No queries yet.<br>Submit a query<br>to begin.</div>
+            </div>
+        </div>
+
+        <!-- CHAT -->
+        <div id="chat-area">
+            <div id="messages">
+                <div class="divider">Secure channel established</div>
+                <div class="msg agent">
+                    <div class="msg-meta">Agent // <span id="boot-time"></span></div>
+                    <div class="msg-body">Terminal online. Submit a query for geopolitical analysis — I will search
+                        archival conflict data or live open-source intelligence as needed.</div>
+                </div>
+            </div>
+
+            <div id="typing">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                &nbsp;Processing signal...
+            </div>
+
+            <div id="input-bar">
+                <span class="prompt">▸</span>
+                <input type="text" id="query-input" placeholder="Enter tactical query..." autocomplete="off">
+                <button id="send-btn">Transmit</button>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <footer>
+            <span id="f-status">// Standby</span>
+            <div class="right">
+                <span>Qwen2.5:7B + pgvector</span>
+                <span class="cyan">Conn: Secure</span>
+            </div>
+        </footer>
+
+    </div>
+
+    <script>
+        const elMessages = document.getElementById('messages');
+        const elInput = document.getElementById('query-input');
+        const elSend = document.getElementById('send-btn');
+        const elTyping = document.getElementById('typing');
+        const elPillProc = document.getElementById('pill-proc');
+        const elClock = document.getElementById('clock');
+        const elFStatus = document.getElementById('f-status');
+        const elCount = document.getElementById('s-count');
+        const elAvg = document.getElementById('s-avg');
+        const elTool = document.getElementById('s-tool');
+        const elHistory = document.getElementById('history-entries');
+        const elNoHist = document.getElementById('no-hist');
+
+        let queryCount = 0, totalMs = 0;
+
+        document.getElementById('boot-time').textContent = utcNow();
+
+        // Live clock
+        function utcNow() {
+            const d = new Date();
+            return d.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+        }
+        function tickClock() { elClock.textContent = new Date().toUTCString().slice(17, 25); }
+        tickClock(); setInterval(tickClock, 1000);
+
+        // Escape HTML
+        function esc(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Append message
+        function addMsg(text, type) {
+            const wrap = document.createElement('div');
+            wrap.className = `msg ${type}`;
+            if (type === 'divider') {
+                wrap.className = 'divider';
+                wrap.textContent = text;
+            } else {
+                const sender = type === 'user' ? 'Operator' : 'Agent';
+                wrap.innerHTML = `
+                <div class="msg-meta">${esc(sender)} // ${utcNow()}</div>
+                <div class="msg-body">${esc(text)}</div>`;
+            }
+            elMessages.appendChild(wrap);
+            elMessages.scrollTop = elMessages.scrollHeight;
+        }
+
+        // Add history entry
+        function addHistory(q) {
+            elNoHist && elNoHist.remove();
+            const el = document.createElement('div');
+            el.className = 'h-entry';
+            el.innerHTML = `<div class="h-label">↩ Replay</div><div class="h-text">${esc(q)}</div>`;
+            el.addEventListener('click', () => { elInput.value = q; elInput.focus(); });
+            elHistory.prepend(el);
+            // Keep last 8
+            while (elHistory.children.length > 8) elHistory.lastChild.remove();
+        }
+
+        // Send
+        async function send() {
+            const q = elInput.value.trim();
+            if (!q) return;
+
+            addMsg(q, 'user');
+            addHistory(q);
+            elInput.value = '';
+            elInput.disabled = true;
+            elSend.disabled = true;
+            elTyping.style.display = 'flex';
+            elPillProc.style.display = 'flex';
+            elFStatus.textContent = '// Agent Processing';
+
+            const t0 = Date.now();
+            try {
+                const fd = new FormData();
+                fd.append('query', q);
+                const res = await fetch('/chat', { method: 'POST', body: fd });
+                const data = await res.json();
+                const ms = Date.now() - t0;
+
+                queryCount++;
+                totalMs += ms;
+                elCount.textContent = queryCount;
+                elAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
+
+                if (res.ok) {
+                    addMsg(data.answer, 'agent');
+                    // Heuristic: guess which tool was used
+                    elTool.textContent = /\b(war|conflict|cold war|gulf|ww[12]|world war|civil war|battle)\b/i.test(q)
+                        ? 'vector_search' : 'web_search';
+                } else {
+                    addMsg(`Error: ${data.answer}`, 'error');
+                }
+            } catch (e) {
+                addMsg(`Connection lost — ${e.message}`, 'error');
+            } finally {
+                elTyping.style.display = 'none';
+                elPillProc.style.display = 'none';
+                elInput.disabled = false;
+                elSend.disabled = false;
+                elInput.focus();
+                elFStatus.textContent = '// Standby';
+            }
+        }
+
+        elSend.addEventListener('click', send);
+        elInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+        });
+        elInput.focus();
+    </script>
+</body>
+
+</html>

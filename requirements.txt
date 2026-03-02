@@ -1,0 +1,15 @@
+langchain
+langchain_core
+langchain_community
+langchain_ollama
+langchain_postgres
+psycopg[binary]
+langgraph
+wikipedia
+duckduckgo-search
+pypdf
+sentence-transformers
+numpy
+fastapi
+uvicorn
+python-multipart

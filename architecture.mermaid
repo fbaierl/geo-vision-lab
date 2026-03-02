@@ -1,0 +1,27 @@
+graph TD
+    subgraph Infrastructure ["Core Infrastructure (Docker)"]
+        PG[("PostgreSQL<br/>(pgvector)")]
+        OL["Ollama<br/>(Qwen 2.5)"]
+        LK["Loki + Promtail<br/>(Logs)"]
+        GF["Grafana<br/>(Monitoring)"]
+        PA["pgAdmin<br/>(DB Admin)"]
+    end
+
+    subgraph Pipeline ["Ingestion Pipeline"]
+        PDF["PDF Reports<br/>(./documents/pdf)"] --> ING["ingest.py<br/>(RecursiveCharacterSplitter)"]
+        ING -->|"Vector Embeddings<br/>(all-MiniLM-L6-v2)"| PG
+    end
+
+    subgraph Agent ["GeoVision Intelligence Agent"]
+        UI["Terminal Interface<br/>(Vanilla JS/CSS)"] <--> APP["FastAPI Backend<br/>(main.py)"]
+        APP <--> LG["LangGraph Controller<br/>(agent.py)"]
+        
+        LG -->|"Context Retrieval"| PG
+        LG -->|"LLM Reasoning"| OL
+        LG -.->|"Future: Live Tooling"| WEB["Wikipedia/Web Scraper"]
+    end
+
+    %% Observability
+    APP -.->|"Stream Logs"| LK
+    ING -.->|"Stream Logs"| LK
+    LK --> GF
