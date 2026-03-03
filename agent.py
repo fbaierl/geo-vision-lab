@@ -1,5 +1,6 @@
 import os
-from typing import TypedDict, Annotated, List, Literal
+import asyncio
+from typing import TypedDict, Annotated, List, Literal, AsyncGenerator
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
@@ -68,7 +69,7 @@ class AgentState(TypedDict):
 
 
 # Setup the LLM
-llm = ChatOllama(model="qwen2.5:7b", base_url=OLLAMA_HOST)
+llm = ChatOllama(model="qwen3.5:9b", base_url=OLLAMA_HOST)
 llm_with_tools = llm.bind_tools(tools)
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
@@ -110,15 +111,31 @@ app_graph = workflow.compile(checkpointer=checkpointer)
 
 # External interface
 def process_query(user_query: str, thread_id: str = "default") -> str:
-    """Process a user query with conversational memory.
-
-    Args:
-        user_query: The user's question or command.
-        thread_id: A unique session identifier so the agent can maintain
-                   context across follow-up questions within the same thread.
-    """
+    """Process a user query with conversational memory (non-streaming)."""
     print(f"\n[QUERY] New query received (thread={thread_id}): '{user_query}'")
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     result = app_graph.invoke(inputs, config=config)
     return result["messages"][-1].content
+
+
+async def process_query_stream(user_query: str, thread_id: str = "default") -> AsyncGenerator[str, None]:
+    """Process a user query and stream the final response token by token.
+
+    Yields individual text chunks as they arrive from the LLM.
+    Tool calls and intermediate steps are processed silently;
+    only the final human-facing text is streamed.
+    """
+    print(f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'")
+    inputs = {"messages": [HumanMessage(content=user_query)]}
+    config = {"configurable": {"thread_id": thread_id}}
+
+    async for event in app_graph.astream_events(inputs, config=config, version="v2"):
+        kind = event.get("event")
+        # Stream only the final LLM text chunks (not tool calls or intermediate steps)
+        if kind == "on_chat_model_stream":
+            chunk = event.get("data", {}).get("chunk")
+            if chunk and hasattr(chunk, "content") and chunk.content:
+                # Skip tool call chunks (they have no user-facing text)
+                if not chunk.tool_calls and not chunk.tool_call_chunks:
+                    yield chunk.content

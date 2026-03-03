@@ -9,7 +9,7 @@ services:
     entrypoint: >
       sh -c "ollama serve &
              sleep 5 &&
-             ollama pull qwen2.5:7b &&
+             ollama pull qwen3.5:9b &&
              wait"
     healthcheck:
       test: [ "CMD", "ollama", "list" ]
