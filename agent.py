@@ -9,6 +9,7 @@ import wikipedia
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 # Environment properties
 POSTGRES_URI = os.getenv(
@@ -96,19 +97,28 @@ def call_model(state: AgentState):
     return {"messages": [response]}
 
 
-# Build the Graph
+# Build the Graph with short-term conversational memory
+checkpointer = MemorySaver()
 workflow = StateGraph(AgentState)
 workflow.add_node("agent", call_model)
 workflow.add_node("tools", ToolNode(tools))
 workflow.set_entry_point("agent")
 workflow.add_conditional_edges("agent", should_continue)
 workflow.add_edge("tools", "agent")
-app_graph = workflow.compile()
+app_graph = workflow.compile(checkpointer=checkpointer)
 
 
 # External interface
-def process_query(user_query: str) -> str:
-    print(f"\n[QUERY] New query received: '{user_query}'")
+def process_query(user_query: str, thread_id: str = "default") -> str:
+    """Process a user query with conversational memory.
+
+    Args:
+        user_query: The user's question or command.
+        thread_id: A unique session identifier so the agent can maintain
+                   context across follow-up questions within the same thread.
+    """
+    print(f"\n[QUERY] New query received (thread={thread_id}): '{user_query}'")
     inputs = {"messages": [HumanMessage(content=user_query)]}
-    result = app_graph.invoke(inputs)
+    config = {"configurable": {"thread_id": thread_id}}
+    result = app_graph.invoke(inputs, config=config)
     return result["messages"][-1].content

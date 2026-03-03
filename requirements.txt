@@ -5,6 +5,8 @@ langchain_ollama
 langchain_postgres
 psycopg[binary]
 langgraph
+sqlalchemy
+alembic
 wikipedia
 duckduckgo-search
 pypdf

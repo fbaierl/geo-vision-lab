@@ -83,7 +83,8 @@ services:
         condition: service_completed_successfully
     ports:
       - "8000:8000"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   # --- Monitoring Stack ---
 
@@ -120,6 +121,15 @@ services:
       - ./monitoring/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
     depends_on:
       - loki
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: geovision-dozzle
+    ports:
+      - "9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
 
 volumes:
   postgres_data:

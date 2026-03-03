@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Form
+import uuid
+
+from fastapi import FastAPI, Form, Cookie
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
@@ -24,15 +26,26 @@ async def read_root():
         return f"<h1>GeoVision Lab UI not found.</h1><p>Please ensure static/index.html exists.</p>"
 
 @app.post("/chat")
-async def chat_endpoint(query: str = Form(...)):
-    """Accepts a query from the frontend and passes it to the LangGraph agent."""
+async def chat_endpoint(
+    query: str = Form(...),
+    thread_id: str = Form(None),
+):
+    """Accepts a query from the frontend and passes it to the LangGraph agent.
+
+    The thread_id groups messages into a conversational session so the agent
+    can handle follow-up questions contextually.  If not supplied, a new
+    thread is created.
+    """
     if not query or query.strip() == "":
         return JSONResponse({"answer": "Empty transmission. Please provide a valid query."}, status_code=400)
-    
+
+    # Use the provided thread_id or generate a new one
+    session_id = thread_id if thread_id else str(uuid.uuid4())
+
     try:
-        # Run the agent processing
-        response_text = process_query(query)
-        return {"answer": response_text}
+        # Run the agent processing with conversational memory
+        response_text = process_query(query, thread_id=session_id)
+        return {"answer": response_text, "thread_id": session_id}
     except Exception as e:
         print(f"[ERROR] Agent execution failed: {e}")
         return JSONResponse({"answer": f"System error during analysis: {str(e)}"}, status_code=500)
