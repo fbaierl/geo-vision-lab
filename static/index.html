@@ -556,6 +556,13 @@
         footer .cyan {
             color: var(--cyan);
         }
+
+        /* Streaming cursor */
+        .streaming-cursor::after {
+            content: '\u25cb';
+            color: var(--cyan);
+            animation: blink 0.7s step-end infinite;
+        }
     </style>
 </head>
 
@@ -649,11 +656,10 @@
         const elNoHist = document.getElementById('no-hist');
 
         let queryCount = 0, totalMs = 0;
-        let threadId = null;  // Session thread for conversational memory
+        let threadId = null;
 
         document.getElementById('boot-time').textContent = utcNow();
 
-        // Live clock
         function utcNow() {
             const d = new Date();
             return d.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
@@ -661,12 +667,10 @@
         function tickClock() { elClock.textContent = new Date().toUTCString().slice(17, 25); }
         tickClock(); setInterval(tickClock, 1000);
 
-        // Escape HTML
         function esc(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        // Append message
         function addMsg(text, type) {
             const wrap = document.createElement('div');
             wrap.className = `msg ${type}`;
@@ -675,27 +679,40 @@
                 wrap.textContent = text;
             } else {
                 const sender = type === 'user' ? 'Operator' : 'Agent';
-                wrap.innerHTML = `
-                <div class="msg-meta">${esc(sender)} // ${utcNow()}</div>
-                <div class="msg-body">${esc(text)}</div>`;
+                wrap.innerHTML =
+                    '<div class="msg-meta">' + esc(sender) + ' // ' + utcNow() + '</div>' +
+                    '<div class="msg-body">' + esc(text) + '</div>';
             }
             elMessages.appendChild(wrap);
             elMessages.scrollTop = elMessages.scrollHeight;
         }
 
-        // Add history entry
+        function addStreamMsg() {
+            const wrap = document.createElement('div');
+            wrap.className = 'msg agent';
+            wrap.innerHTML =
+                '<div class="msg-meta">Agent // ' + utcNow() + '</div>' +
+                '<div class="msg-body streaming-cursor"></div>';
+            elMessages.appendChild(wrap);
+            elMessages.scrollTop = elMessages.scrollHeight;
+            return wrap.querySelector('.msg-body');
+        }
+
+        function appendToMsg(bodyEl, text) {
+            bodyEl.textContent += text;
+            elMessages.scrollTop = elMessages.scrollHeight;
+        }
+
         function addHistory(q) {
             elNoHist && elNoHist.remove();
             const el = document.createElement('div');
             el.className = 'h-entry';
-            el.innerHTML = `<div class="h-label">↩ Replay</div><div class="h-text">${esc(q)}</div>`;
-            el.addEventListener('click', () => { elInput.value = q; elInput.focus(); });
+            el.innerHTML = '<div class="h-label">\u21a9 Replay</div><div class="h-text">' + esc(q) + '</div>';
+            el.addEventListener('click', function() { elInput.value = q; elInput.focus(); });
             elHistory.prepend(el);
-            // Keep last 8
             while (elHistory.children.length > 8) elHistory.lastChild.remove();
         }
 
-        // Send
         async function send() {
             const q = elInput.value.trim();
             if (!q) return;
@@ -710,31 +727,67 @@
             elFStatus.textContent = '// Agent Processing';
 
             const t0 = Date.now();
+            let msgBody = null;
+
             try {
                 const fd = new FormData();
                 fd.append('query', q);
                 if (threadId) fd.append('thread_id', threadId);
-                const res = await fetch('/chat', { method: 'POST', body: fd });
-                const data = await res.json();
-                const ms = Date.now() - t0;
 
+                const res = await fetch('/chat/stream', { method: 'POST', body: fd });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    addMsg('Error: ' + (data.answer || 'Unknown error'), 'error');
+                    return;
+                }
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const jsonStr = line.slice(6).trim();
+                        if (!jsonStr) continue;
+
+                        try {
+                            const evt = JSON.parse(jsonStr);
+
+                            if (evt.type === 'meta' && evt.thread_id) {
+                                threadId = evt.thread_id;
+                            } else if (evt.type === 'token') {
+                                elTyping.style.display = 'none';
+                                elFStatus.textContent = '// Receiving';
+                                if (!msgBody) msgBody = addStreamMsg();
+                                appendToMsg(msgBody, evt.content);
+                            } else if (evt.type === 'error') {
+                                addMsg('Error: ' + evt.content, 'error');
+                            }
+                        } catch (parseErr) { /* skip malformed */ }
+                    }
+                }
+
+                if (msgBody) msgBody.classList.remove('streaming-cursor');
+
+                const ms = Date.now() - t0;
                 queryCount++;
                 totalMs += ms;
                 elCount.textContent = queryCount;
                 elAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
+                elTool.textContent = /\b(war|conflict|cold war|gulf|ww[12]|world war|civil war|battle)\b/i.test(q)
+                    ? 'vector_search' : 'web_search';
 
-                if (res.ok) {
-                    addMsg(data.answer, 'agent');
-                    // Persist the session thread for follow-up queries
-                    if (data.thread_id) threadId = data.thread_id;
-                    // Heuristic: guess which tool was used
-                    elTool.textContent = /\b(war|conflict|cold war|gulf|ww[12]|world war|civil war|battle)\b/i.test(q)
-                        ? 'vector_search' : 'web_search';
-                } else {
-                    addMsg(`Error: ${data.answer}`, 'error');
-                }
             } catch (e) {
-                addMsg(`Connection lost — ${e.message}`, 'error');
+                addMsg('Connection lost \u2014 ' + e.message, 'error');
             } finally {
                 elTyping.style.display = 'none';
                 elPillProc.style.display = 'none';
@@ -746,7 +799,7 @@
         }
 
         elSend.addEventListener('click', send);
-        elInput.addEventListener('keydown', e => {
+        elInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
         });
         elInput.focus();
