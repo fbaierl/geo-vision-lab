@@ -4,6 +4,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_postgres import PGVector
+from sqlalchemy import create_engine, text
 
 POSTGRES_URI = os.getenv(
     "POSTGRES_URI",
@@ -59,7 +60,17 @@ def main():
         pre_delete_collection=True,
     )
 
-    print("[SUCCESS] All documents successfully ingested into GeoVision Lab.")
+    # 5. Build the HNSW Index for high-speed approximate nearest neighbor search
+    print("[DB] Vectors inserted. Building HNSW index for high-speed retrieval...")
+    engine = create_engine(POSTGRES_URI)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_langchain_hnsw
+            ON langchain_pg_embedding USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64);
+        """))
+    engine.dispose()
+    print("[SUCCESS] HNSW Index built. Ingestion complete.")
 
 
 if __name__ == "__main__":

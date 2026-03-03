@@ -649,6 +649,7 @@
         const elNoHist = document.getElementById('no-hist');
 
         let queryCount = 0, totalMs = 0;
+        let threadId = null;  // Session thread for conversational memory
 
         document.getElementById('boot-time').textContent = utcNow();
 
@@ -712,6 +713,7 @@
             try {
                 const fd = new FormData();
                 fd.append('query', q);
+                if (threadId) fd.append('thread_id', threadId);
                 const res = await fetch('/chat', { method: 'POST', body: fd });
                 const data = await res.json();
                 const ms = Date.now() - t0;
@@ -723,6 +725,8 @@
 
                 if (res.ok) {
                     addMsg(data.answer, 'agent');
+                    // Persist the session thread for follow-up queries
+                    if (data.thread_id) threadId = data.thread_id;
                     // Heuristic: guess which tool was used
                     elTool.textContent = /\b(war|conflict|cold war|gulf|ww[12]|world war|civil war|battle)\b/i.test(q)
                         ? 'vector_search' : 'web_search';
