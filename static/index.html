@@ -137,6 +137,43 @@
             box-shadow: 0 0 5px var(--amber);
         }
 
+        /* GPU status pill */
+        .pill.gpu-active {
+            color: var(--cyan);
+        }
+
+        .pill.gpu-active .hex {
+            text-shadow: 0 0 8px var(--cyan), 0 0 16px var(--cyan-g);
+            animation: gpu-pulse 2s ease-in-out infinite;
+        }
+
+        .pill.gpu-inactive {
+            color: var(--amber);
+        }
+
+        .pill.gpu-inactive .hex {
+            text-shadow: 0 0 4px rgba(255, 171, 0, 0.3);
+            opacity: 0.7;
+        }
+
+        .pill.gpu-checking {
+            color: var(--muted);
+        }
+
+        @keyframes gpu-pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                text-shadow: 0 0 8px var(--cyan), 0 0 16px var(--cyan-g);
+            }
+
+            50% {
+                opacity: 0.7;
+                text-shadow: 0 0 4px var(--cyan);
+            }
+        }
+
         @keyframes blink {
 
             0%,
@@ -576,6 +613,9 @@
                 <div class="pill processing" id="pill-proc">
                     <div class="dot"></div> Processing
                 </div>
+                <div class="pill gpu-checking" id="pill-gpu">
+                    <span class="hex">⬡</span> <span id="gpu-label">Checking…</span>
+                </div>
                 <div class="pill">
                     <div class="dot"></div> Online
                 </div>
@@ -635,6 +675,7 @@
             <span id="f-status">// Standby</span>
             <div class="right">
                 <span>Qwen2.5:7B + pgvector</span>
+                <span id="f-gpu" style="color:var(--muted)">Accel: —</span>
                 <span class="cyan">Conn: Secure</span>
             </div>
         </footer>
@@ -658,6 +699,11 @@
         let queryCount = 0, totalMs = 0;
         let threadId = null;
 
+        const elGpuPill = document.getElementById('pill-gpu');
+        const elGpuLabel = document.getElementById('gpu-label');
+        const elGpuHex = elGpuPill.querySelector('.hex');
+        const elFGpu = document.getElementById('f-gpu');
+
         document.getElementById('boot-time').textContent = utcNow();
 
         function utcNow() {
@@ -666,6 +712,36 @@
         }
         function tickClock() { elClock.textContent = new Date().toUTCString().slice(17, 25); }
         tickClock(); setInterval(tickClock, 1000);
+
+        /* ═══ GPU STATUS ═══ */
+        async function fetchGpuStatus() {
+            try {
+                const res = await fetch('/system/status');
+                const data = await res.json();
+                if (data.gpu_engaged) {
+                    elGpuPill.className = 'pill gpu-active';
+                    elGpuHex.textContent = '⬢';
+                    elGpuLabel.textContent = 'GPU Active';
+                    const vramMB = (data.vram_bytes / (1024 * 1024)).toFixed(0);
+                    elFGpu.textContent = 'Accel: GPU (' + vramMB + ' MB)';
+                    elFGpu.style.color = 'var(--cyan)';
+                } else {
+                    elGpuPill.className = 'pill gpu-inactive';
+                    elGpuHex.textContent = '⬡';
+                    elGpuLabel.textContent = 'CPU Only';
+                    elFGpu.textContent = 'Accel: CPU';
+                    elFGpu.style.color = 'var(--amber)';
+                }
+            } catch (e) {
+                elGpuPill.className = 'pill gpu-inactive';
+                elGpuHex.textContent = '⬡';
+                elGpuLabel.textContent = 'CPU Only';
+                elFGpu.textContent = 'Accel: —';
+                elFGpu.style.color = 'var(--muted)';
+            }
+        }
+        // Fetch on page load
+        fetchGpuStatus();
 
         function esc(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -708,7 +784,7 @@
             const el = document.createElement('div');
             el.className = 'h-entry';
             el.innerHTML = '<div class="h-label">\u21a9 Replay</div><div class="h-text">' + esc(q) + '</div>';
-            el.addEventListener('click', function() { elInput.value = q; elInput.focus(); });
+            el.addEventListener('click', function () { elInput.value = q; elInput.focus(); });
             elHistory.prepend(el);
             while (elHistory.children.length > 8) elHistory.lastChild.remove();
         }
@@ -795,11 +871,12 @@
                 elSend.disabled = false;
                 elInput.focus();
                 elFStatus.textContent = '// Standby';
+                fetchGpuStatus(); // Refresh GPU status after each query
             }
         }
 
         elSend.addEventListener('click', send);
-        elInput.addEventListener('keydown', function(e) {
+        elInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
         });
         elInput.focus();
