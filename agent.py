@@ -119,23 +119,56 @@ def process_query(user_query: str, thread_id: str = "default") -> str:
     return result["messages"][-1].content
 
 
-async def process_query_stream(user_query: str, thread_id: str = "default") -> AsyncGenerator[str, None]:
-    """Process a user query and stream the final response token by token.
-
-    Yields individual text chunks as they arrive from the LLM.
-    Tool calls and intermediate steps are processed silently;
-    only the final human-facing text is streamed.
-    """
+async def process_query_stream(user_query: str, thread_id: str = "default") -> AsyncGenerator[dict, None]:
+    """Yields dicts with type: 'status'|'tool_result'|'token'|'done'|'error'"""
     print(f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'")
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
+    streaming_started = False
 
     async for event in app_graph.astream_events(inputs, config=config, version="v2"):
         kind = event.get("event")
-        # Stream only the final LLM text chunks (not tool calls or intermediate steps)
-        if kind == "on_chat_model_stream":
+
+        if kind == "on_chat_model_start":
+            yield {"type": "status", "phase": "reasoning"}
+
+        elif kind == "on_tool_start":
+            tool_name = event.get("name", "unknown")
+            tool_input = event.get("data", {}).get("input", {})
+            query_used = tool_input.get("query", "")
+            phase = "local_rag" if tool_name == "vector_search" else "online_rag"
+            yield {
+                "type": "status",
+                "phase": phase,
+                "tool": tool_name,
+                "query": query_used
+            }
+
+        elif kind == "on_tool_end":
+            tool_name = event.get("name", "unknown")
+            output = event.get("data", {}).get("output", "")
+            yield {
+                "type": "tool_result",
+                "tool": tool_name,
+                "summary": _summarise_tool_output(output)
+            }
+
+        elif kind == "on_chat_model_stream":
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
                 # Skip tool call chunks (they have no user-facing text)
-                if not chunk.tool_calls and not chunk.tool_call_chunks:
-                    yield chunk.content
+                if not getattr(chunk, "tool_calls", None) and not getattr(chunk, "tool_call_chunks", None):
+                    if not streaming_started:
+                        yield {"type": "status", "phase": "streaming"}
+                        streaming_started = True
+                    yield {"type": "token", "content": chunk.content}
+
+    yield {"type": "done"}
+
+
+def _summarise_tool_output(output: str) -> str:
+    """Create a short summary of tool output for the activity trail."""
+    if not output or "Error" in output:
+        return "No results found"
+    lines = output.strip().split("\n")
+    return f"Retrieved {len(lines)} text blocks"
