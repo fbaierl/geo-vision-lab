@@ -1,13 +1,16 @@
 import uuid
 import json
+import os
 
+import httpx
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-import os
 
 # Import our custom LangGraph agent workflow
 from agent import process_query, process_query_stream
+
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://geovision-ollama:11434")
 
 app = FastAPI(title="GeoVision Lab API")
 
@@ -26,6 +29,27 @@ async def read_root():
             return f.read()
     except Exception:
         return "<h1>GeoVision Lab UI not found.</h1><p>Please ensure static/index.html exists.</p>"
+
+
+@app.get("/system/status")
+async def system_status():
+    """Return system status including GPU engagement from Ollama."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{OLLAMA_HOST}/api/ps")
+            data = resp.json()
+            models = data.get("models", [])
+            if models:
+                model_info = models[0]
+                vram_bytes = model_info.get("size_vram", 0)
+                return {
+                    "gpu_engaged": vram_bytes > 0,
+                    "model": model_info.get("name", "unknown"),
+                    "vram_bytes": vram_bytes,
+                }
+            return {"gpu_engaged": False, "model": None, "reason": "no model loaded"}
+    except Exception as e:
+        return {"gpu_engaged": False, "model": None, "reason": str(e)}
 
 
 @app.post("/chat")
