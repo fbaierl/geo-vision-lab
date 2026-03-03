@@ -166,8 +166,14 @@ async def process_query_stream(user_query: str, thread_id: str = "default") -> A
     yield {"type": "done"}
 
 
-def _summarise_tool_output(output: str) -> str:
+def _summarise_tool_output(output) -> str:
     """Create a short summary of tool output for the activity trail."""
+    if not isinstance(output, str):
+        if hasattr(output, "content"):
+            output = output.content
+        else:
+            output = str(output)
+
     if not output or "Error" in output:
         return "No results found"
     lines = output.strip().split("\n")
