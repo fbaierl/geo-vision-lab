@@ -1,53 +1,105 @@
-# GeoVision Lab [DEMO PROJECT FOR LEARNING]
+<p align="center">
+  <img src="static/banner.png" alt="GeoVision Lab Banner" width="600" />
+</p>
 
-GeoVision Lab is an autonomous geopolitical intelligence platform designed for privacy-preserving, local-first operations. It implements a hybrid RAG (Retrieval-Augmented Generation) pipeline that synthesizes information from local archival documents and live online signals.
+<h1 align="center">GeoVision Lab</h1>
+
+<p align="center">
+  <em>Autonomous Geopolitical Intelligence Platform — fully containerized, privacy-first</em>
+</p>
+
+<p align="center">
+  <strong>📝 This is a demo / learning project</strong>
+</p>
 
 ---
 
-## Core Capabilities
+## What is this?
 
-- **100% Offline Inference**: All reasoning and embedding generation are performed locally via Ollama and HuggingFace Transformers. No data leaves the local environment.
-- **Hybrid Data Sources**:
-    - **Offline Archival Intel**: A local directory is continuously scanned for PDF documents. These are processed, vectorized, and stored in a PostgreSQL database (pgvector) for efficient retrieval.
-    - **Online Intelligence**: The agent can autonomously query live sources (e.g., Wikipedia, RSS feeds) to provide up-to-the-minute context.
-- **Autonomous Reasoning**: Utilizing LangGraph, the agent identifies when to pull from historical archives versus live web sources to answer complex geopolitical queries.
+GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for geopolitical analysis. It ingests PDF documents, vectorizes them, and lets you query them through an AI-powered chat interface — all running inside Docker with zero cloud dependencies.
+
+### Key Features
+
+- **Fully Dockerized** — one `docker compose up --build` and everything runs. No local installs needed.
+- **Hybrid RAG Pipeline** — combines a local vector database (archival intelligence) with live sources (Wikipedia) for comprehensive answers.
+- **Conversational Memory** — the agent remembers context within a session, so you can ask follow-up questions naturally.
+- **HNSW Vector Index** — approximate nearest neighbor search for fast retrieval, even with large document collections.
+- **Built-in Monitoring** — Grafana + Loki for log aggregation, Dozzle for real-time container logs, pgAdmin for database inspection.
 
 ---
 
-## Architecture and Component Overview
-
-The system utilizes a PostgreSQL-based vector store with integrated real-time monitoring and local LLM execution.
+## Architecture
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TD
-    subgraph Infrastructure ["Core Infrastructure (Docker)"]
-        PG[("PostgreSQL<br/>(pgvector)")]
-        OL["Ollama<br/>(Qwen 2.5)"]
-        LK["Loki + Promtail<br/>(Logs)"]
-        GF["Grafana<br/>(Monitoring)"]
-        PA["pgAdmin<br/>(DB Admin)"]
+    subgraph Docker ["Everything runs in Docker"]
+        subgraph Data ["Data Layer"]
+            PG[("PostgreSQL + pgvector\n(HNSW indexed)")]
+        end
+
+        subgraph LLM ["LLM Layer"]
+            OL["Ollama\n(Qwen 2.5:7B)"]
+        end
+
+        subgraph Ingestion ["Ingestion Pipeline"]
+            PDF["PDF Documents\n(./documents/pdf/)"] --> ING["ingest.py"]
+            ING -->|"all-MiniLM-L6-v2\nembeddings"| PG
+        end
+
+        subgraph App ["Application"]
+            UI["Tactical UI\n(Vanilla JS)"] <--> API["FastAPI\n(main.py)"]
+            API <--> AGENT["LangGraph Agent\n(agent.py + MemorySaver)"]
+            AGENT -->|"Vector Search"| PG
+            AGENT -->|"LLM Reasoning"| OL
+            AGENT -->|"Live Intel"| WEB["Wikipedia API"]
+        end
+
+        subgraph Ops ["Observability"]
+            DZ["Dozzle\n(Container Logs)"]
+            GF["Grafana + Loki\n(Log Aggregation)"]
+            PA["pgAdmin\n(DB Explorer)"]
+        end
     end
 
-    subgraph Pipeline ["Ingestion Pipeline"]
-        PDF["PDF Reports<br/>(./documents/pdf)"] --> ING["ingest.py<br/>(RecursiveCharacterSplitter)"]
-        ING -->|"Vector Embeddings<br/>(all-MiniLM-L6-v2)"| PG
-    end
-
-    subgraph Agent ["GeoVision Intelligence Agent"]
-        UI["Terminal Interface<br/>(Vanilla JS/CSS)"] <--> APP["FastAPI Backend<br/>(main.py)"]
-        APP <--> LG["LangGraph Controller<br/>(agent.py)"]
-        
-        LG -->|"Context Retrieval"| PG
-        LG -->|"LLM Reasoning"| OL
-        LG -.->|"Future: Live Tooling"| WEB["Wikipedia/Web Scraper"]
-    end
-
-    %% Observability
-    APP -.->|"Stream Logs"| LK
-    ING -.->|"Stream Logs"| LK
-    LK --> GF
+    API -.->|"logs"| GF
+    ING -.->|"logs"| GF
 ```
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Docker** and **Docker Compose** — that's it. Everything else runs inside containers.
+
+### 1. Add your documents
+
+Place PDF files in the `./documents/pdf/` directory. These are your source documents for the RAG pipeline.
+
+### 2. Launch
+
+```bash
+docker compose up --build
+```
+
+This will:
+1. Start **PostgreSQL** (with pgvector extension)
+2. Start **Ollama** and pull the Qwen 2.5:7B model (first run takes a while)
+3. Run the **ingestion pipeline** — loads your PDFs, chunks them, generates embeddings, and stores them in the vector database
+4. Run **database migrations** (Alembic) — creates the HNSW index for fast vector search
+5. Start the **FastAPI application** with the chat UI
+6. Start all **monitoring services**
+
+### 3. Open the dashboards
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Intelligence Terminal** | [localhost:8000](http://localhost:8000) | Main chat interface for querying the agent |
+| **Container Logs (Dozzle)** | [localhost:9999](http://localhost:9999) | Real-time per-container log viewer |
+| **Grafana** | [localhost:3000](http://localhost:3000) | Log aggregation dashboard (admin / geovision) |
+| **pgAdmin** | [localhost:8082](http://localhost:8082) | Database explorer (admin@geovision.lab / geovision) |
 
 ---
 
@@ -55,24 +107,23 @@ graph TD
 
 ```text
 .
-├── static/               # Frontend (Dark Tactical UI)
+├── static/                # Frontend UI
 │   └── index.html
-├── agent.py              # LangGraph Agent logic + conversational memory
-├── alembic.ini           # Alembic configuration
-├── docker-compose.yml    # Full stack definition
-├── Dockerfile            # Python backend container
-├── ingest.py             # Data ingestion (PDF -> pgvector)
-├── main.py               # FastAPI backend & API
-├── README.md             # This file
-├── requirements.txt      # Python dependencies
-├── documents/            # Local document storage
-│   └── pdf/              # Place PDF intelligence reports here for RAG
-├── migrations/           # Alembic database migrations
-│   ├── env.py            # Migration environment config
-│   ├── script.py.mako    # Template for new migrations
-│   └── versions/         # Individual migration scripts
+├── agent.py               # LangGraph agent + conversational memory
+├── main.py                # FastAPI backend & /chat endpoint
+├── ingest.py              # PDF ingestion pipeline
+├── docker-compose.yml     # Full stack definition (all services)
+├── Dockerfile             # Python app container
+├── requirements.txt       # Python dependencies
+├── alembic.ini            # Alembic migration config
+├── migrations/            # Database migrations
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
 │       └── 001_add_hnsw_index.py
-└── monitoring/           # Monitoring Configs
+├── documents/             # Your source documents
+│   └── pdf/               # Place PDFs here
+└── monitoring/            # Observability configs
     ├── promtail-config.yaml
     ├── grafana-datasources.yaml
     ├── pgadmin-servers.json
@@ -81,41 +132,34 @@ graph TD
 
 ---
 
-## Quick Start
+## Tech Stack
 
-### 1. Local Model Setup
-Ensure **Ollama** is installed and running on the host machine. The platform is optimized for the **Qwen 2.5** model family.
-
-### 2. Ingest Local Documents
-Place PDF files in the `./documents/pdf/` directory. The `ingest` service automatically scans this directory, shards the text, generates embeddings via `all-MiniLM-L6-v2`, and populates the vector database.
-
-### 3. Launch the Stack
-Initialize all services using Docker Compose:
-```bash
-docker compose up --build
-```
-
-### 4. Service Access
-- **Intelligence Terminal**: [http://localhost:8000](http://localhost:8000)
-- **Database Explorer (pgAdmin)**: [http://localhost:8082](http://localhost:8082)
-- **Observability Dashboard (Grafana)**: [http://localhost:3000](http://localhost:3000)
-- **Container Logs (Dozzle)**: [http://localhost:9999](http://localhost:9999)
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| LLM | Ollama + Qwen 2.5:7B | Local language model inference |
+| Embeddings | all-MiniLM-L6-v2 (HuggingFace) | Document vectorization (384 dim) |
+| Vector DB | PostgreSQL + pgvector + HNSW | Vector storage and similarity search |
+| Agent Framework | LangGraph + MemorySaver | Autonomous reasoning with conversational memory |
+| Backend | FastAPI | REST API and static file serving |
+| Frontend | Vanilla JS/CSS | Dark tactical terminal UI |
+| Monitoring | Grafana, Loki, Promtail, Dozzle | Logs, metrics, real-time container views |
+| DB Admin | pgAdmin | Database inspection and management |
 
 ---
 
 ## Database Migrations (Alembic)
 
-This project uses [Alembic](https://alembic.sqlalchemy.org/) for database schema management. Alembic works like **version control for your database** — each migration is a Python script that describes a schema change (e.g., adding an index or a column), and Alembic tracks which ones have already been applied.
+This project uses [Alembic](https://alembic.sqlalchemy.org/) for database schema management. Think of it as **version control for your database** — each migration describes a schema change, and Alembic tracks which ones have already been applied.
 
-### How it works in this project
+### How it works
 
-- **On startup**, the app container runs `alembic upgrade head` before starting the server. This automatically applies any pending migrations.
-- Alembic stores which migrations have been applied in a table called `alembic_version` in the database, so migrations are never run twice.
-- Migration scripts live in `migrations/versions/`. Each one has an `upgrade()` (apply) and `downgrade()` (revert) function.
+- On startup, the app container runs `alembic upgrade head` **before** starting the server. Pending migrations are applied automatically.
+- Applied migrations are tracked in the `alembic_version` table, so they never run twice.
+- Each migration has an `upgrade()` and `downgrade()` function for applying and reverting changes.
 
 ### Common commands
 
-Run these from inside the `app` container (`docker compose exec app sh`):
+Run these inside the app container (`docker compose exec app sh`):
 
 ```bash
 # Apply all pending migrations
@@ -124,34 +168,32 @@ alembic upgrade head
 # Revert the last migration
 alembic downgrade -1
 
-# Check which migration is currently applied
+# Show current migration
 alembic current
 
-# View the migration history
+# Show migration history
 alembic history
 ```
 
 ### Creating a new migration
 
-When you need a new schema change (e.g., adding a table or index):
-
 ```bash
-# Generate a new migration script from the template
+# Generate a new migration script
 alembic revision -m "describe your change here"
 ```
 
-This creates a new file in `migrations/versions/`. Edit the `upgrade()` and `downgrade()` functions with your SQL changes using `op.execute(text("..."))`, then restart the app (or run `alembic upgrade head`) to apply it.
+This creates a file in `migrations/versions/`. Edit the `upgrade()` and `downgrade()` functions, then restart the app or run `alembic upgrade head`.
 
 ---
 
-## Agent Logic and Data Flow
+## Agent Workflow
 
-The GeoVision Agent implements a multi-turn reasoning workflow using **LangGraph** with short-term conversational memory:
+The GeoVision Agent uses **LangGraph** to autonomously decide how to answer queries:
 
-1.  **Analysis and Triage**: The agent evaluates the user query to determine if historical context or live status is required.
-2.  **RAG Fetch**: If historical context is needed, the agent queries the `historical_reports` collection in PostgreSQL, retrieving the most relevant chunks based on vector similarity (accelerated by an HNSW index).
-3.  **Online Synthesis**: If current events are relevant, the agent leverages live scrapers (e.g., Wikipedia API) to gather immediate data.
-4.  **Integrated Response**: The local LLM synthesizes the retrieved vector data and live signals into a comprehensive, structured assessment.
-5.  **Conversational Memory**: The agent maintains context within a session using LangGraph's `MemorySaver`, allowing it to handle follow-up questions (e.g., "What were its main proxy conflicts?" after asking about the Cold War).
+1. **Triage** — evaluates whether the question needs historical archives, live data, or both
+2. **Vector Search** — retrieves relevant document chunks from PostgreSQL using HNSW-accelerated similarity search
+3. **Web Search** — queries Wikipedia for current events and background information
+4. **Synthesis** — the local LLM combines all sources into a structured intelligence assessment
+5. **Memory** — maintains conversational context within a session via `MemorySaver`, enabling follow-up questions
 
-All data remains local, ensuring complete system autonomy and privacy.
+All inference runs locally inside Docker. No data leaves your machine.
