@@ -99,6 +99,7 @@ docker compose up --build
 - **Intelligence Terminal**: [http://localhost:8000](http://localhost:8000)
 - **Database Explorer (pgAdmin)**: [http://localhost:8082](http://localhost:8082)
 - **Observability Dashboard (Grafana)**: [http://localhost:3000](http://localhost:3000)
+- **Container Logs (Dozzle)**: [http://localhost:9999](http://localhost:9999)
 
 ---
 
