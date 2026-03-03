@@ -20,12 +20,24 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Create HNSW index on the langchain_pg_embedding table.
 
-    Parameters:
+    The HNSW index requires a column with a fixed vector dimension.
+    LangChain creates the column as generic `vector`, so we first alter it
+    to `vector(384)` to match the all-MiniLM-L6-v2 embedding model.
+
+    Index parameters:
         m = 16: Max bidirectional links per vector in the graph.
                  Industry-standard default, works well up to millions of vectors.
         ef_construction = 64: Dynamic candidate list size during index build.
                  A solid middle-ground between accuracy and build speed.
     """
+    # Step 1: Set a fixed dimension on the embedding column (required for HNSW)
+    op.execute(
+        text("""
+            ALTER TABLE langchain_pg_embedding
+            ALTER COLUMN embedding TYPE vector(384);
+        """)
+    )
+    # Step 2: Create the HNSW index
     op.execute(
         text("""
             CREATE INDEX IF NOT EXISTS idx_langchain_hnsw
@@ -36,5 +48,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop the HNSW index, reverting to sequential scan for vector search."""
+    """Drop the HNSW index and revert column to untyped vector."""
     op.execute(text("DROP INDEX IF EXISTS idx_langchain_hnsw;"))
+    op.execute(
+        text("""
+            ALTER TABLE langchain_pg_embedding
+            ALTER COLUMN embedding TYPE vector;
+        """)
+    )
