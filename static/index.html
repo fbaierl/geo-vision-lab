@@ -426,6 +426,118 @@
             border-color: var(--red);
         }
 
+        /* ═══ ACTIVITY TRAIL ═══ */
+        .trail-container {
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .trail-header {
+            font-size: 0.6rem;
+            color: var(--muted);
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            user-select: none;
+            display: none;
+            /* hidden until collapsed */
+            padding: 4px 0;
+            transition: color 0.15s;
+        }
+
+        .trail-header:hover {
+            color: var(--cyan);
+        }
+
+        .trail-body {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .trail-step {
+            font-size: 0.65rem;
+            line-height: 1.4;
+            padding: 4px 8px;
+            border-left: 2px solid var(--border);
+            background: rgba(2, 10, 15, 0.6);
+            animation: slideFadeDown 0.2s ease-out forwards;
+            opacity: 0;
+            transform: translateY(-5px);
+            display: flex;
+            gap: 8px;
+            font-family: var(--ui);
+            letter-spacing: 0.5px;
+        }
+
+        .trail-step .phase-label {
+            font-weight: 700;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        .trail-step .phase-desc {
+            color: var(--white);
+            font-family: var(--mono);
+        }
+
+        .trail-result {
+            font-size: 0.6rem;
+            color: var(--muted);
+            padding-left: 12px;
+            margin-top: 2px;
+            font-family: var(--mono);
+            display: flex;
+            gap: 6px;
+            animation: slideFadeDown 0.2s ease-out forwards;
+            opacity: 0;
+            transform: translateY(-5px);
+        }
+
+        .phase-reasoning {
+            border-color: var(--amber);
+        }
+
+        .phase-reasoning .phase-label {
+            color: var(--amber);
+            text-shadow: 0 0 5px rgba(255, 171, 0, 0.4);
+        }
+
+        .phase-local_rag {
+            border-color: var(--cyan);
+        }
+
+        .phase-local_rag .phase-label {
+            color: var(--cyan);
+            text-shadow: 0 0 5px var(--cyan-g);
+        }
+
+        .phase-online_rag {
+            border-color: #00e676;
+        }
+
+        .phase-online_rag .phase-label {
+            color: #00e676;
+            text-shadow: 0 0 5px rgba(0, 230, 118, 0.3);
+        }
+
+        .phase-streaming {
+            border-color: var(--muted);
+        }
+
+        .phase-streaming .phase-label {
+            color: var(--muted);
+        }
+
+        @keyframes slideFadeDown {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         /* System divider */
         .divider {
             display: flex;
@@ -763,15 +875,56 @@
             elMessages.scrollTop = elMessages.scrollHeight;
         }
 
-        function addStreamMsg() {
+        function addAgentResponseWrapper() {
             const wrap = document.createElement('div');
             wrap.className = 'msg agent';
             wrap.innerHTML =
                 '<div class="msg-meta">Agent // ' + utcNow() + '</div>' +
-                '<div class="msg-body streaming-cursor"></div>';
+                '<div class="trail-container" style="display:none">' +
+                '<div class="trail-header">▸ <span class="step-count">0</span> steps executed</div>' +
+                '<div class="trail-body"></div>' +
+                '</div>' +
+                '<div class="msg-body streaming-cursor" style="display:none"></div>';
             elMessages.appendChild(wrap);
             elMessages.scrollTop = elMessages.scrollHeight;
-            return wrap.querySelector('.msg-body');
+            return {
+                trailContainer: wrap.querySelector('.trail-container'),
+                trailBody: wrap.querySelector('.trail-body'),
+                trailHeader: wrap.querySelector('.trail-header'),
+                msgBody: wrap.querySelector('.msg-body')
+            };
+        }
+
+        function createTrailStep(phase, tool, query) {
+            const step = document.createElement('div');
+            let label = phase.toUpperCase();
+            let desc = '';
+
+            if (phase === 'reasoning') {
+                desc = 'Planning analysis approach...';
+            } else if (phase === 'local_rag') {
+                label = 'LOCAL RAG';
+                desc = `Searching archival database for "${query}"`;
+            } else if (phase === 'online_rag') {
+                label = 'ONLINE RAG';
+                desc = `Querying live sources for "${query}"`;
+            } else if (phase === 'streaming') {
+                desc = 'Delivering response';
+            }
+
+            step.className = `trail-step phase-${phase}`;
+            step.innerHTML = `
+                <div class="phase-label">▸ ${label}</div>
+                <div class="phase-desc">${esc(desc)}</div>
+            `;
+            return step;
+        }
+
+        function createTrailResult(summary) {
+            const res = document.createElement('div');
+            res.className = 'trail-result';
+            res.innerHTML = `<span>↳</span> <span>${esc(summary)}</span>`;
+            return res;
         }
 
         function appendToMsg(bodyEl, text) {
@@ -783,7 +936,7 @@
             elNoHist && elNoHist.remove();
             const el = document.createElement('div');
             el.className = 'h-entry';
-            el.innerHTML = '<div class="h-label">\u21a9 Replay</div><div class="h-text">' + esc(q) + '</div>';
+            el.innerHTML = '<div class="h-label">↩ Replay</div><div class="h-text">' + esc(q) + '</div>';
             el.addEventListener('click', function () { elInput.value = q; elInput.focus(); });
             elHistory.prepend(el);
             while (elHistory.children.length > 8) elHistory.lastChild.remove();
@@ -803,7 +956,8 @@
             elFStatus.textContent = '// Agent Processing';
 
             const t0 = Date.now();
-            let msgBody = null;
+            let msgWrapper = null;
+            let stepCount = 0;
 
             try {
                 const fd = new FormData();
@@ -840,11 +994,34 @@
 
                             if (evt.type === 'meta' && evt.thread_id) {
                                 threadId = evt.thread_id;
+                            } else if (evt.type === 'status') {
+                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
+                                msgWrapper.trailContainer.style.display = 'flex';
+
+                                const step = createTrailStep(evt.phase, evt.tool, evt.query);
+                                msgWrapper.trailBody.appendChild(step);
+                                stepCount++;
+                                msgWrapper.trailHeader.querySelector('.step-count').textContent = stepCount;
+
+                                // Update tool display
+                                if (evt.tool && evt.tool !== 'unknown') {
+                                    elTool.textContent = evt.tool;
+                                }
+                                elMessages.scrollTop = elMessages.scrollHeight;
+
+                            } else if (evt.type === 'tool_result') {
+                                if (msgWrapper && msgWrapper.trailBody) {
+                                    msgWrapper.trailBody.appendChild(createTrailResult(evt.summary));
+                                    elMessages.scrollTop = elMessages.scrollHeight;
+                                }
                             } else if (evt.type === 'token') {
                                 elTyping.style.display = 'none';
                                 elFStatus.textContent = '// Receiving';
-                                if (!msgBody) msgBody = addStreamMsg();
-                                appendToMsg(msgBody, evt.content);
+                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
+                                if (msgWrapper.msgBody.style.display === 'none') {
+                                    msgWrapper.msgBody.style.display = 'block';
+                                }
+                                appendToMsg(msgWrapper.msgBody, evt.content);
                             } else if (evt.type === 'error') {
                                 addMsg('Error: ' + evt.content, 'error');
                             }
@@ -852,15 +1029,23 @@
                     }
                 }
 
-                if (msgBody) msgBody.classList.remove('streaming-cursor');
+                if (msgWrapper) {
+                    msgWrapper.msgBody.classList.remove('streaming-cursor');
+                    if (stepCount > 0) {
+                        msgWrapper.trailHeader.style.display = 'block';
+                        msgWrapper.trailBody.style.display = 'none'; // collapsed by default
+                        msgWrapper.trailHeader.onclick = () => {
+                            const b = msgWrapper.trailBody;
+                            b.style.display = b.style.display === 'none' ? 'flex' : 'none';
+                        };
+                    }
+                }
 
                 const ms = Date.now() - t0;
                 queryCount++;
                 totalMs += ms;
                 elCount.textContent = queryCount;
                 elAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
-                elTool.textContent = /\b(war|conflict|cold war|gulf|ww[12]|world war|civil war|battle)\b/i.test(q)
-                    ? 'vector_search' : 'web_search';
 
             } catch (e) {
                 addMsg('Connection lost \u2014 ' + e.message, 'error');

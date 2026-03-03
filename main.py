@@ -90,12 +90,9 @@ async def chat_stream_endpoint(
         yield f"data: {meta}\n\n"
 
         try:
-            async for token in process_query_stream(query, thread_id=session_id):
-                data = json.dumps({"type": "token", "content": token})
+            async for evt in process_query_stream(query, thread_id=session_id):
+                data = json.dumps(evt)
                 yield f"data: {data}\n\n"
-
-            done = json.dumps({"type": "done"})
-            yield f"data: {done}\n\n"
         except Exception as e:
             print(f"[ERROR] Stream failed: {e}")
             err = json.dumps({"type": "error", "content": str(e)})
