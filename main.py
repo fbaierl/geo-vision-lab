@@ -46,10 +46,12 @@ async def system_status():
                     "gpu_engaged": vram_bytes > 0,
                     "model": model_info.get("name", "unknown"),
                     "vram_bytes": vram_bytes,
+                    "reason": "gpu" if vram_bytes > 0 else "cpu_only",
                 }
-            return {"gpu_engaged": False, "model": None, "reason": "no model loaded"}
+            # No model currently loaded (idle between requests)
+            return {"gpu_engaged": False, "model": None, "vram_bytes": 0, "reason": "no_model_loaded"}
     except Exception as e:
-        return {"gpu_engaged": False, "model": None, "reason": str(e)}
+        return {"gpu_engaged": False, "model": None, "vram_bytes": 0, "reason": str(e)}
 
 
 @app.post("/chat")
