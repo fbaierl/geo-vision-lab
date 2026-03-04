@@ -70,7 +70,7 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
-    command: python ingest.py
+    command: python -m app.ingestion.ingest
     restart: "no"
 
   app:
@@ -91,7 +91,7 @@ services:
     ports:
       - "8000:8000"
     command: >
-      sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   # --- Monitoring Stack ---
 
