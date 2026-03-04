@@ -74,6 +74,30 @@ graph TD
 
 - **Docker** and **Docker Compose** — that's it. Everything else runs inside containers.
 
+#### GPU Acceleration (optional)
+
+The Ollama LLM service can use an NVIDIA GPU for significantly faster inference. Without a GPU, the stack still works — it just runs in CPU-only mode.
+
+To enable GPU acceleration:
+
+1. Install [NVIDIA drivers](https://www.nvidia.com/Download/index.aspx) for your GPU
+2. Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+3. Verify your setup:
+
+```bash
+# Host GPU visible?
+nvidia-smi
+
+# GPU accessible inside Docker?
+docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
+```
+
+Once configured, `docker compose up --build` will automatically pass the GPU through to the Ollama container. You can confirm GPU detection in the Ollama logs:
+
+```bash
+docker logs geovision-ollama 2>&1 | grep -i "gpu\|cuda\|nvidia"
+```
+
 ### 1. Add your documents
 
 Place PDF files in the `./documents/pdf/` directory. These are your source documents for the RAG pipeline.
