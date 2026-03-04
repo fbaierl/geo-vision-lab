@@ -242,6 +242,50 @@
             color: var(--amber);
         }
 
+        /* ═══ SERVICES PANEL ═══ */
+        #services-panel {
+            flex-shrink: 0;
+            border-top: 1px solid var(--border);
+            padding: 8px 0 4px;
+        }
+
+        .svc-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 14px;
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 0.62rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            transition: color 0.15s, background 0.15s;
+            border-left: 2px solid transparent;
+        }
+
+        .svc-link:hover {
+            color: var(--cyan);
+            background: var(--cyan-d);
+            border-left-color: var(--cyan);
+        }
+
+        .svc-link .svc-icon {
+            font-size: 0.75rem;
+            width: 14px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .svc-link .svc-port {
+            margin-left: auto;
+            font-size: 0.55rem;
+            color: rgba(0, 229, 255, 0.35);
+        }
+
+        .svc-link:hover .svc-port {
+            color: var(--cyan);
+        }
+
         /* Query history entries */
         #history-entries {
             flex: 1;
@@ -494,6 +538,150 @@
             animation: slideFadeDown 0.2s ease-out forwards;
             opacity: 0;
             transform: translateY(-5px);
+        }
+
+        .trail-result.has-content {
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+
+        .trail-result.has-content:hover {
+            color: var(--cyan);
+        }
+
+        .trail-result.has-content .trail-expand {
+            color: rgba(0, 229, 255, 0.4);
+            font-size: 0.55rem;
+            transition: color 0.15s;
+        }
+
+        .trail-result.has-content:hover .trail-expand {
+            color: var(--cyan);
+        }
+
+        /* ═══ INTEL MODAL ═══ */
+        #intel-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        #intel-modal.open {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        #modal-box {
+            position: relative;
+            width: min(680px, 92vw);
+            max-height: 75vh;
+            background: rgba(2, 10, 16, 0.98);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 40px rgba(0, 229, 255, 0.08), 0 0 0 1px rgba(0, 229, 255, 0.05);
+            animation: popUp 0.18s ease-out;
+        }
+
+        @keyframes popUp {
+            from {
+                opacity: 0;
+                transform: scale(0.96) translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        #modal-box::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            width: 20px;
+            height: 20px;
+            border-top: 2px solid var(--cyan);
+            border-left: 2px solid var(--cyan);
+        }
+
+        #modal-box::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 20px;
+            height: 20px;
+            border-bottom: 2px solid var(--cyan);
+            border-right: 2px solid var(--cyan);
+        }
+
+        #modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 18px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        #modal-title {
+            font-family: var(--ui);
+            font-weight: 700;
+            font-size: 0.72rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--cyan);
+        }
+
+        #modal-close {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 2px 4px;
+            transition: color 0.15s;
+        }
+
+        #modal-close:hover {
+            color: var(--cyan);
+        }
+
+        #modal-body {
+            overflow-y: auto;
+            padding: 16px 18px;
+            font-family: var(--mono);
+            font-size: 0.72rem;
+            line-height: 1.7;
+            color: var(--white);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        #modal-body::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        #modal-body::-webkit-scrollbar-thumb {
+            background: var(--border);
         }
 
         .phase-reasoning {
@@ -755,6 +943,31 @@
             <div id="history-entries">
                 <div class="no-history" id="no-hist">No queries yet.<br>Submit a query<br>to begin.</div>
             </div>
+
+            <div id="services-panel">
+                <div class="panel-head">// Services</div>
+                <a class="svc-link" href="http://localhost:8000" target="_blank" title="Intelligence Terminal">
+                    <span class="svc-icon">▸</span>
+                    <span>Terminal</span>
+                    <span class="svc-port">:8000</span>
+                </a>
+                <a class="svc-link" href="http://localhost:9999" target="_blank" title="Container Logs (Dozzle)">
+                    <span class="svc-icon">⬡</span>
+                    <span>Dozzle</span>
+                    <span class="svc-port">:9999</span>
+                </a>
+                <a class="svc-link" href="http://localhost:3000" target="_blank" title="Grafana — admin / geovision">
+                    <span class="svc-icon">◈</span>
+                    <span>Grafana</span>
+                    <span class="svc-port">:3000</span>
+                </a>
+                <a class="svc-link" href="http://localhost:8082" target="_blank"
+                    title="pgAdmin — admin@geovision.lab / geovision">
+                    <span class="svc-icon">⬢</span>
+                    <span>pgAdmin</span>
+                    <span class="svc-port">:8082</span>
+                </a>
+            </div>
         </div>
 
         <!-- CHAT -->
@@ -779,6 +992,17 @@
                 <span class="prompt">▸</span>
                 <input type="text" id="query-input" placeholder="Enter tactical query..." autocomplete="off">
                 <button id="send-btn">Transmit</button>
+            </div>
+        </div>
+
+        <!-- INTEL MODAL -->
+        <div id="intel-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div id="modal-box">
+                <div id="modal-header">
+                    <span id="modal-title">Intel Report</span>
+                    <button id="modal-close" title="Close">✕</button>
+                </div>
+                <div id="modal-body"></div>
             </div>
         </div>
 
@@ -929,10 +1153,33 @@
             return step;
         }
 
-        function createTrailResult(summary) {
+        /* ═══ INTEL MODAL ═══ */
+        const elModal = document.getElementById('intel-modal');
+        const elModalBody = document.getElementById('modal-body');
+        const elModalTitle = document.getElementById('modal-title');
+        const elModalClose = document.getElementById('modal-close');
+
+        function openModal(title, content) {
+            elModalTitle.textContent = title;
+            elModalBody.textContent = content;
+            elModal.classList.add('open');
+            elModalBody.scrollTop = 0;
+        }
+
+        function closeModal() { elModal.classList.remove('open'); }
+
+        elModalClose.addEventListener('click', closeModal);
+        elModal.addEventListener('click', (e) => { if (e.target === elModal) closeModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+        function createTrailResult(summary, content) {
             const res = document.createElement('div');
-            res.className = 'trail-result';
-            res.innerHTML = `<span>↳</span> <span>${esc(summary)}</span>`;
+            res.className = 'trail-result' + (content ? ' has-content' : '');
+            res.innerHTML = `<span>↳</span> <span>${esc(summary)}</span>` +
+                (content ? ' <span class="trail-expand">[view]</span>' : '');
+            if (content) {
+                res.addEventListener('click', () => openModal('Intel Report — ' + esc(summary), content));
+            }
             return res;
         }
 
@@ -1020,7 +1267,7 @@
 
                             } else if (evt.type === 'tool_result') {
                                 if (msgWrapper && msgWrapper.trailBody) {
-                                    msgWrapper.trailBody.appendChild(createTrailResult(evt.summary));
+                                    msgWrapper.trailBody.appendChild(createTrailResult(evt.summary, evt.content || null));
                                     elMessages.scrollTop = elMessages.scrollHeight;
                                 }
                             } else if (evt.type === 'token') {
