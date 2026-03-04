@@ -24,11 +24,28 @@ def vector_search(query: str) -> str:
 
 @tool
 def web_search(query: str) -> str:
-    """Searches Wikipedia to get live, up-to-date news and background on CURRENT events and recent geopolitical shifts."""
+    """Searches Wikipedia to get background information on geopolitical topics, countries, leaders, and historical events."""
     logger.debug(f"[AGENT LOG] Using web_search for: {query}")
     try:
         results = wikipedia.summary(query, sentences=4)
         return f"LIVE WEB INTELLIGENCE:\n{results}"
+    except wikipedia.exceptions.PageError:
+        # Exact page not found — search for the best match
+        matches = wikipedia.search(query, results=3)
+        if not matches:
+            return f"No Wikipedia article found for '{query}'."
+        try:
+            results = wikipedia.summary(matches[0], sentences=4)
+            return f"LIVE WEB INTELLIGENCE (closest match: {matches[0]}):\n{results}"
+        except Exception as inner:
+            return f"Wikipedia search found matches {matches} but failed to retrieve them. Error: {inner}"
+    except wikipedia.exceptions.DisambiguationError as e:
+        # Multiple matches — pick the first option
+        try:
+            results = wikipedia.summary(e.options[0], sentences=4)
+            return f"LIVE WEB INTELLIGENCE (resolved: {e.options[0]}):\n{results}"
+        except Exception as inner:
+            return f"Wikipedia disambiguation for '{query}' found options {e.options[:5]} but retrieval failed. Error: {inner}"
     except Exception as e:
         return f"Failed to retrieve web information on '{query}'. Error: {e}"
 

@@ -21,7 +21,7 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 ### Key Features
 
 - **Fully Dockerized** — one `docker compose up --build` and everything runs. No local installs needed.
-- **Hybrid RAG Pipeline** — combines a local vector database (archival intelligence) with live sources (Wikipedia) for comprehensive answers.
+- **Hybrid RAG Pipeline** — combines a local vector database (archival intelligence) with live sources (Wikipedia + DuckDuckGo) for comprehensive answers.
 - **Conversational Memory** — the agent remembers context within a session, so you can ask follow-up questions naturally.
 - **HNSW Vector Index** — approximate nearest neighbor search for fast retrieval, even with large document collections.
 - **Built-in Monitoring** — Grafana + Loki for log aggregation, Dozzle for real-time container logs, pgAdmin for database inspection.
@@ -39,7 +39,7 @@ graph TD
         end
 
         subgraph LLM ["LLM Layer"]
-            OL["Ollama\n(Qwen 2.5:7B)"]
+            OL["Ollama\n(Qwen 3.5:9B)"]
         end
 
         subgraph Ingestion ["Ingestion Pipeline"]
@@ -48,11 +48,12 @@ graph TD
         end
 
         subgraph App ["Application"]
-            UI["Tactical UI\n(Vanilla JS)"] <--> API["FastAPI\n(main.py)"]
-            API <--> AGENT["LangGraph Agent\n(agent.py + MemorySaver)"]
+            UI["Tactical UI\n(Vanilla JS)"] <--> API["FastAPI\n(app/main.py)"]
+            API <--> AGENT["LangGraph Agent\n(app/agents/ + MemorySaver)"]
             AGENT -->|"Vector Search"| PG
             AGENT -->|"LLM Reasoning"| OL
             AGENT -->|"Live Intel"| WEB["Wikipedia API"]
+            AGENT -->|"Web Search"| DDG["DuckDuckGo"]
         end
 
         subgraph Ops ["Observability"]
@@ -132,7 +133,7 @@ docker compose up --build
 
 This will:
 1. Start **PostgreSQL** (with pgvector extension)
-2. Start **Ollama** and pull the Qwen 2.5:7B model (first run takes a while)
+2. Start **Ollama** and pull the Qwen 3.5:9B model (first run takes a while)
 3. Run the **ingestion pipeline** — loads your PDFs, chunks them, generates embeddings, and stores them in the vector database
 4. Run **database migrations** (Alembic) — creates the HNSW index for fast vector search
 5. Start the **FastAPI application** with the chat UI
@@ -174,27 +175,19 @@ To verify that the entire pipeline (Ingestion -> Vector Storage -> Agent Logic) 
 
 ```text
 .
+├── app/                   # Python application package
+│   ├── agents/            #   LangGraph agent, tools & state
+│   ├── api/routes/        #   FastAPI endpoints (chat, health)
+│   ├── core/              #   Centralised settings
+│   ├── ingestion/         #   PDF ingestion pipeline
+│   └── services/          #   LLM & vector store factories
 ├── static/                # Frontend UI
-│   └── index.html
-├── agent.py               # LangGraph agent + conversational memory
-├── main.py                # FastAPI backend & /chat endpoint
-├── ingest.py              # PDF ingestion pipeline
-├── docker-compose.yml     # Full stack definition (all services)
-├── Dockerfile             # Python app container
-├── requirements.txt       # Python dependencies
-├── alembic.ini            # Alembic migration config
-├── migrations/            # Database migrations
-│   ├── env.py
-│   ├── script.py.mako
-│   └── versions/
-│       └── 001_add_hnsw_index.py
-├── documents/             # Your source documents
-│   └── pdf/               # Place PDFs here
-└── monitoring/            # Observability configs
-    ├── promtail-config.yaml
-    ├── grafana-datasources.yaml
-    ├── pgadmin-servers.json
-    └── pgpass
+├── documents/pdf/         # Source PDFs for RAG ingestion
+├── migrations/            # Alembic database migrations
+├── monitoring/            # Grafana, Loki & Promtail configs
+├── docker-compose.yml
+├── Dockerfile
+└── requirements.txt
 ```
 
 ---
@@ -203,7 +196,7 @@ To verify that the entire pipeline (Ingestion -> Vector Storage -> Agent Logic) 
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| LLM | Ollama + Qwen 2.5:7B | Local language model inference |
+| LLM | Ollama + Qwen 3.5:9B | Local language model inference |
 | Embeddings | all-MiniLM-L6-v2 (HuggingFace) | Document vectorization (384 dim) |
 | Vector DB | PostgreSQL + pgvector + HNSW | Vector storage and similarity search |
 | Agent Framework | LangGraph + MemorySaver | Autonomous reasoning with conversational memory |
@@ -259,8 +252,9 @@ The GeoVision Agent uses **LangGraph** to autonomously decide how to answer quer
 
 1. **Triage** — evaluates whether the question needs historical archives, live data, or both
 2. **Vector Search** — retrieves relevant document chunks from PostgreSQL using HNSW-accelerated similarity search
-3. **Web Search** — queries Wikipedia for current events and background information
-4. **Synthesis** — the local LLM combines all sources into a structured intelligence assessment
-5. **Memory** — maintains conversational context within a session via `MemorySaver`, enabling follow-up questions
+3. **Web Search** — queries Wikipedia for background information
+4. **DuckDuckGo Search** — searches the live web for current events and general queries
+5. **Synthesis** — the local LLM combines all sources into a structured intelligence assessment
+6. **Memory** — maintains conversational context within a session via `MemorySaver`, enabling follow-up questions
 
 All inference runs locally inside Docker. No data leaves your machine.

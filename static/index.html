@@ -693,20 +693,20 @@
             text-shadow: 0 0 5px rgba(255, 171, 0, 0.4);
         }
 
-        .phase-local_rag {
+        .phase-vector_search {
             border-color: var(--cyan);
         }
 
-        .phase-local_rag .phase-label {
+        .phase-vector_search .phase-label {
             color: var(--cyan);
             text-shadow: 0 0 5px var(--cyan-g);
         }
 
-        .phase-online_rag {
+        .phase-online_search {
             border-color: #00e676;
         }
 
-        .phase-online_rag .phase-label {
+        .phase-online_search .phase-label {
             color: #00e676;
             text-shadow: 0 0 5px rgba(0, 230, 118, 0.3);
         }
@@ -1135,11 +1135,11 @@
 
             if (phase === 'reasoning') {
                 desc = 'Planning analysis approach...';
-            } else if (phase === 'local_rag') {
-                label = 'LOCAL RAG';
+            } else if (phase === 'vector_search') {
+                label = 'VECTOR SEARCH';
                 desc = `Searching archival database for "${query}"`;
-            } else if (phase === 'online_rag') {
-                label = 'ONLINE RAG';
+            } else if (phase === 'online_search') {
+                label = 'ONLINE SEARCH';
                 desc = `Querying live sources for "${query}"`;
             } else if (phase === 'streaming') {
                 desc = 'Delivering response';

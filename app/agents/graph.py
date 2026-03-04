@@ -94,7 +94,7 @@ async def process_query_stream(user_query: str, thread_id: str = "default") -> A
             tool_name = event.get("name", "unknown")
             tool_input = event.get("data", {}).get("input", {})
             query_used = tool_input.get("query", "")
-            phase = "local_rag" if tool_name == "vector_search" else "online_rag"
+            phase = "vector_search" if tool_name == "vector_search" else "online_search"
             yield {
                 "type": "status",
                 "phase": phase,
