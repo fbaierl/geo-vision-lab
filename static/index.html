@@ -242,6 +242,50 @@
             color: var(--amber);
         }
 
+        /* ═══ SERVICES PANEL ═══ */
+        #services-panel {
+            flex-shrink: 0;
+            border-top: 1px solid var(--border);
+            padding: 8px 0 4px;
+        }
+
+        .svc-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 14px;
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 0.62rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            transition: color 0.15s, background 0.15s;
+            border-left: 2px solid transparent;
+        }
+
+        .svc-link:hover {
+            color: var(--cyan);
+            background: var(--cyan-d);
+            border-left-color: var(--cyan);
+        }
+
+        .svc-link .svc-icon {
+            font-size: 0.75rem;
+            width: 14px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .svc-link .svc-port {
+            margin-left: auto;
+            font-size: 0.55rem;
+            color: rgba(0, 229, 255, 0.35);
+        }
+
+        .svc-link:hover .svc-port {
+            color: var(--cyan);
+        }
+
         /* Query history entries */
         #history-entries {
             flex: 1;
@@ -754,6 +798,31 @@
             <div class="panel-head" style="margin-top:4px">// History</div>
             <div id="history-entries">
                 <div class="no-history" id="no-hist">No queries yet.<br>Submit a query<br>to begin.</div>
+            </div>
+
+            <div id="services-panel">
+                <div class="panel-head">// Services</div>
+                <a class="svc-link" href="http://localhost:8000" target="_blank" title="Intelligence Terminal">
+                    <span class="svc-icon">▸</span>
+                    <span>Terminal</span>
+                    <span class="svc-port">:8000</span>
+                </a>
+                <a class="svc-link" href="http://localhost:9999" target="_blank" title="Container Logs (Dozzle)">
+                    <span class="svc-icon">⬡</span>
+                    <span>Dozzle</span>
+                    <span class="svc-port">:9999</span>
+                </a>
+                <a class="svc-link" href="http://localhost:3000" target="_blank" title="Grafana — admin / geovision">
+                    <span class="svc-icon">◈</span>
+                    <span>Grafana</span>
+                    <span class="svc-port">:3000</span>
+                </a>
+                <a class="svc-link" href="http://localhost:8082" target="_blank"
+                    title="pgAdmin — admin@geovision.lab / geovision">
+                    <span class="svc-icon">⬢</span>
+                    <span>pgAdmin</span>
+                    <span class="svc-port">:8082</span>
+                </a>
             </div>
         </div>
 
