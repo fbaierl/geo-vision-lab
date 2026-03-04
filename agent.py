@@ -147,10 +147,12 @@ async def process_query_stream(user_query: str, thread_id: str = "default") -> A
         elif kind == "on_tool_end":
             tool_name = event.get("name", "unknown")
             output = event.get("data", {}).get("output", "")
+            text = output.content if hasattr(output, "content") else str(output)
             yield {
                 "type": "tool_result",
                 "tool": tool_name,
-                "summary": _summarise_tool_output(output)
+                "summary": _summarise_tool_output(output),
+                "content": text,
             }
 
         elif kind == "on_chat_model_stream":
