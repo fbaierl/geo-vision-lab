@@ -837,7 +837,15 @@
                     const vramMB = (data.vram_bytes / (1024 * 1024)).toFixed(0);
                     elFGpu.textContent = 'Accel: GPU (' + vramMB + ' MB)';
                     elFGpu.style.color = 'var(--cyan)';
+                } else if (data.reason === 'no_model_loaded') {
+                    // Idle between requests — GPU is available but model unloaded
+                    elGpuPill.className = 'pill gpu-checking';
+                    elGpuHex.textContent = '⬡';
+                    elGpuLabel.textContent = 'GPU Standby';
+                    elFGpu.textContent = 'Accel: GPU (standby)';
+                    elFGpu.style.color = 'var(--cyan)';
                 } else {
+                    // Model is loaded but no VRAM used → true CPU-only
                     elGpuPill.className = 'pill gpu-inactive';
                     elGpuHex.textContent = '⬡';
                     elGpuLabel.textContent = 'CPU Only';
@@ -845,15 +853,16 @@
                     elFGpu.style.color = 'var(--amber)';
                 }
             } catch (e) {
-                elGpuPill.className = 'pill gpu-inactive';
+                elGpuPill.className = 'pill gpu-checking';
                 elGpuHex.textContent = '⬡';
-                elGpuLabel.textContent = 'CPU Only';
+                elGpuLabel.textContent = 'Checking…';
                 elFGpu.textContent = 'Accel: —';
                 elFGpu.style.color = 'var(--muted)';
             }
         }
-        // Fetch on page load
+        // Fetch on page load and poll every 10 s so the indicator updates live
         fetchGpuStatus();
+        setInterval(fetchGpuStatus, 10000);
 
         function esc(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
