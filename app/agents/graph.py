@@ -117,10 +117,16 @@ async def process_query_stream(user_query: str, thread_id: str = "default") -> A
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
                 if not getattr(chunk, "tool_calls", None) and not getattr(chunk, "tool_call_chunks", None):
+                    # Strip Qwen reasoning/tool tags from streamed output
+                    import re
+                    cleaned = re.sub(r'</?(?:tool_code|think|tool_call)>', '', chunk.content)
+                    if not cleaned:
+                        continue
+
                     if not streaming_started:
                         yield {"type": "status", "phase": "streaming"}
                         streaming_started = True
                         
-                    yield {"type": "token", "content": chunk.content}
+                    yield {"type": "token", "content": cleaned}
 
     yield {"type": "done"}

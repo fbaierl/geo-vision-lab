@@ -12,6 +12,10 @@
   <strong>📝 This is a demo / learning project</strong>
 </p>
 
+<p align="center">
+  <img src="static/demo.webp" alt="GeoVision Lab Demo" width="700" />
+</p>
+
 ---
 
 ## What is this?

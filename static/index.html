@@ -8,6 +8,7 @@
     <meta name="description" content="GeoVision Lab — Advanced Geopolitical Intelligence Analysis System.">
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@600;700&display=swap"
         rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <style>
         :root {
@@ -387,6 +388,99 @@
             position: relative;
             white-space: pre-wrap;
             word-break: break-word;
+        }
+
+        .msg-body.md-rendered {
+            white-space: normal;
+        }
+
+        .msg-body.md-rendered h1,
+        .msg-body.md-rendered h2,
+        .msg-body.md-rendered h3 {
+            font-family: var(--ui);
+            color: var(--cyan);
+            margin: 0.8em 0 0.3em;
+            letter-spacing: 1px;
+        }
+
+        .msg-body.md-rendered h1 {
+            font-size: 1rem;
+        }
+
+        .msg-body.md-rendered h2 {
+            font-size: 0.9rem;
+        }
+
+        .msg-body.md-rendered h3 {
+            font-size: 0.82rem;
+            color: var(--amber);
+        }
+
+        .msg-body.md-rendered p {
+            margin: 0.4em 0;
+        }
+
+        .msg-body.md-rendered ul,
+        .msg-body.md-rendered ol {
+            padding-left: 1.4em;
+            margin: 0.4em 0;
+        }
+
+        .msg-body.md-rendered li {
+            margin: 0.2em 0;
+        }
+
+        .msg-body.md-rendered strong {
+            color: var(--cyan);
+        }
+
+        .msg-body.md-rendered table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0.6em 0;
+            font-size: 0.75rem;
+        }
+
+        .msg-body.md-rendered th,
+        .msg-body.md-rendered td {
+            border: 1px solid var(--border);
+            padding: 4px 8px;
+            text-align: left;
+        }
+
+        .msg-body.md-rendered th {
+            background: rgba(0, 229, 255, 0.08);
+            color: var(--cyan);
+            font-family: var(--ui);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-size: 0.65rem;
+        }
+
+        .msg-body.md-rendered code {
+            background: rgba(0, 229, 255, 0.08);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+        }
+
+        .msg-body.md-rendered pre {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            overflow-x: auto;
+            margin: 0.5em 0;
+        }
+
+        .msg-body.md-rendered pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .msg-body.md-rendered hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 0.8em 0;
         }
 
         /* Corner brackets */
@@ -1183,9 +1277,20 @@
             return res;
         }
 
+        let _rawStreamBuffer = '';
+
         function appendToMsg(bodyEl, text) {
-            bodyEl.textContent += text;
+            _rawStreamBuffer += text;
+            bodyEl.textContent = _rawStreamBuffer;
             elMessages.scrollTop = elMessages.scrollHeight;
+        }
+
+        function renderMarkdown(bodyEl) {
+            if (typeof marked !== 'undefined' && _rawStreamBuffer) {
+                bodyEl.innerHTML = marked.parse(_rawStreamBuffer);
+                bodyEl.classList.add('md-rendered');
+            }
+            _rawStreamBuffer = '';
         }
 
         function addHistory(q) {
@@ -1214,6 +1319,7 @@
             const t0 = Date.now();
             let msgWrapper = null;
             let stepCount = 0;
+            _rawStreamBuffer = '';
 
             try {
                 const fd = new FormData();
@@ -1286,6 +1392,7 @@
                 }
 
                 if (msgWrapper) {
+                    renderMarkdown(msgWrapper.msgBody);
                     msgWrapper.msgBody.classList.remove('streaming-cursor');
                     if (stepCount > 0) {
                         msgWrapper.trailHeader.style.display = 'block';
