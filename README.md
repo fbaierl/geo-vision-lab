@@ -149,6 +149,27 @@ This will:
 
 ---
 
+## Testing the Agent Flow
+
+To verify that the entire pipeline (Ingestion -> Vector Storage -> Agent Logic) is working correctly:
+
+1.  **Ingestion Verification**: 
+    - Place a sample PDF document inside `./documents/pdf/`.
+    - Run `docker compose up --build`.
+    - Observe the logs in Dozzle (`http://localhost:9999`) for the `geovision-app` service. You should see logs indicating the document was loaded, chunked, and stored in the vector database.
+2.  **Vector Search Test**:
+    - Open the Intelligence Terminal at `http://localhost:8000`.
+    - Ask a query specifically related to the contents of the PDF you ingested.
+    - Check the terminal logs or Dozzle to verify that the `vector_search` tool was invoked (`[AGENT LOG] Using vector_search for: ...`) and archival data was synthesized.
+3.  **Live Web Search Test (DuckDuckGo)**:
+    - Ask a query about a highly specific or current event (e.g., "What is the latest breaking news regarding AI?").
+    - Ensure the `duckduckgo_search` tool is triggered by checking the app logs (`[AGENT LOG] Using duckduckgo_search for: ...`).
+4.  **Time Awareness Test**:
+    - Ask the agent, "What exact date and time is it right now?".
+    - The LLM should accurately respond with the current system time dynamically injected into its context.
+
+---
+
 ## Project Structure
 
 ```text

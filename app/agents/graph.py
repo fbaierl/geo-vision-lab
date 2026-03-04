@@ -1,6 +1,8 @@
 import json
 from typing import Literal, AsyncGenerator
 from langchain_core.messages import HumanMessage, SystemMessage
+import logging
+from datetime import datetime
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
@@ -12,26 +14,38 @@ from app.services.llm import get_llm
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
 
-You have access to two primary intel feeds:
+You have access to intel feeds:
 1. `vector_search`: For historical reports, past wars, and cold war intelligence stored locally.
-2. `web_search`: For current, up-to-date, live news and background information on active geopolitics.
+2. `web_search`: For Wikipedia summaries of background information on active geopolitics.
+3. `duckduckgo_search`: For live web search results regarding current events and general queries.
 
 Use the proper tool depending on whether the user asks about deep history or current events. If you don't know the answer, use a tool to find out.
 
 Respond in a clear, brief, unclassified military-style format, avoiding robotic language. Always summarize the intel you found.
 """
 
+logger = logging.getLogger("agent_flow")
+
 def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
     last_message = state["messages"][-1]
-    if last_message.tool_calls:
+    if getattr(last_message, "tool_calls", None):
+        logger.debug(f"[AGENT LOG] Transitioning to 'tools' node. Tools requested: {last_message.tool_calls}")
         return "tools"
+    logger.debug("[AGENT LOG] Transitioning to '__end__'.")
     return "__end__"
 
 def call_model(state: AgentState):
+    logger.debug("[AGENT LOG] Entering 'call_model' node.")
     llm = get_llm()
     llm_with_tools = llm.bind_tools(tools)
-    messages = [SystemMessage(content=system_msg)] + list(state["messages"])
+    
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    time_prompt = f"\n\nCURRENT SYSTEM TIME: {current_time}. Keep this in mind for time-sensitive queries."
+    
+    messages = [SystemMessage(content=system_msg + time_prompt)] + list(state["messages"])
+    logger.debug(f"[AGENT LOG] Invoking LLM with {len(messages)} messages.")
     response = llm_with_tools.invoke(messages)
+    logger.debug("[AGENT LOG] LLM responded.")
     return {"messages": [response]}
 
 def get_graph():
@@ -49,7 +63,7 @@ app_graph = get_graph()
 # External interface
 def process_query(user_query: str, thread_id: str = "default") -> str:
     """Process a user query with conversational memory (non-streaming)."""
-    print(f"\n[QUERY] New query received (thread={thread_id}): '{user_query}'")
+    logger.info(f"\n[QUERY] New query received (thread={thread_id}): '{user_query}'")
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     result = app_graph.invoke(inputs, config=config)
@@ -65,7 +79,7 @@ def _summarise_tool_output(output) -> str:
 
 async def process_query_stream(user_query: str, thread_id: str = "default") -> AsyncGenerator[dict, None]:
     """Yields dicts with type: 'status'|'tool_result'|'token'|'done'|'error'"""
-    print(f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'")
+    logger.info(f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'")
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False

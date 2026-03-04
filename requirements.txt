@@ -8,7 +8,7 @@ langgraph
 sqlalchemy
 alembic
 wikipedia
-duckduckgo-search
+ddgs
 pypdf
 sentence-transformers
 numpy
