@@ -5,6 +5,7 @@ from app.core.config import settings
 # Shared embedding model (loaded once at startup)
 _embeddings = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL_NAME)
 
+
 def get_vector_store() -> PGVector:
     return PGVector(
         embeddings=_embeddings,

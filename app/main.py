@@ -20,6 +20,7 @@ os.makedirs("static", exist_ok=True)
 # Mount static files to serve the frontend
 app.mount("/ui", StaticFiles(directory="static"), name="static")
 
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serve the main tactical interface on root."""

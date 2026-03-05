@@ -1,4 +1,3 @@
-import json
 from typing import Literal, AsyncGenerator
 from langchain_core.messages import HumanMessage, SystemMessage
 import logging
@@ -26,27 +25,34 @@ Respond in a clear, brief, unclassified military-style format, avoiding robotic 
 
 logger = logging.getLogger("agent_flow")
 
+
 def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
     last_message = state["messages"][-1]
     if getattr(last_message, "tool_calls", None):
-        logger.debug(f"[AGENT LOG] Transitioning to 'tools' node. Tools requested: {last_message.tool_calls}")
+        logger.debug(
+            f"[AGENT LOG] Transitioning to 'tools' node. Tools requested: {last_message.tool_calls}"
+        )
         return "tools"
     logger.debug("[AGENT LOG] Transitioning to '__end__'.")
     return "__end__"
+
 
 def call_model(state: AgentState):
     logger.debug("[AGENT LOG] Entering 'call_model' node.")
     llm = get_llm()
     llm_with_tools = llm.bind_tools(tools)
-    
+
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     time_prompt = f"\n\nCURRENT SYSTEM TIME: {current_time}. Keep this in mind for time-sensitive queries."
-    
-    messages = [SystemMessage(content=system_msg + time_prompt)] + list(state["messages"])
+
+    messages = [SystemMessage(content=system_msg + time_prompt)] + list(
+        state["messages"]
+    )
     logger.debug(f"[AGENT LOG] Invoking LLM with {len(messages)} messages.")
     response = llm_with_tools.invoke(messages)
     logger.debug("[AGENT LOG] LLM responded.")
     return {"messages": [response]}
+
 
 def get_graph():
     checkpointer = MemorySaver()
@@ -58,7 +64,9 @@ def get_graph():
     workflow.add_edge("tools", "agent")
     return workflow.compile(checkpointer=checkpointer)
 
+
 app_graph = get_graph()
+
 
 # External interface
 def process_query(user_query: str, thread_id: str = "default") -> str:
@@ -69,6 +77,7 @@ def process_query(user_query: str, thread_id: str = "default") -> str:
     result = app_graph.invoke(inputs, config=config)
     return result["messages"][-1].content
 
+
 def _summarise_tool_output(output) -> str:
     """Create a short summary of tool output for the activity trail."""
     text = output.content if hasattr(output, "content") else str(output)
@@ -77,9 +86,14 @@ def _summarise_tool_output(output) -> str:
     lines = text.strip().split("\n")
     return f"Retrieved {len(lines)} text blocks"
 
-async def process_query_stream(user_query: str, thread_id: str = "default") -> AsyncGenerator[dict, None]:
+
+async def process_query_stream(
+    user_query: str, thread_id: str = "default"
+) -> AsyncGenerator[dict, None]:
     """Yields dicts with type: 'status'|'tool_result'|'token'|'done'|'error'"""
-    logger.info(f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'")
+    logger.info(
+        f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'"
+    )
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False
@@ -99,7 +113,7 @@ async def process_query_stream(user_query: str, thread_id: str = "default") -> A
                 "type": "status",
                 "phase": phase,
                 "tool": tool_name,
-                "query": query_used
+                "query": query_used,
             }
 
         elif kind == "on_tool_end":
@@ -116,17 +130,22 @@ async def process_query_stream(user_query: str, thread_id: str = "default") -> A
         elif kind == "on_chat_model_stream":
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
-                if not getattr(chunk, "tool_calls", None) and not getattr(chunk, "tool_call_chunks", None):
+                if not getattr(chunk, "tool_calls", None) and not getattr(
+                    chunk, "tool_call_chunks", None
+                ):
                     # Strip Qwen reasoning/tool tags from streamed output
                     import re
-                    cleaned = re.sub(r'</?(?:tool_code|think|tool_call)>', '', chunk.content)
+
+                    cleaned = re.sub(
+                        r"</?(?:tool_code|think|tool_call)>", "", chunk.content
+                    )
                     if not cleaned:
                         continue
 
                     if not streaming_started:
                         yield {"type": "status", "phase": "streaming"}
                         streaming_started = True
-                        
+
                     yield {"type": "token", "content": cleaned}
 
     yield {"type": "done"}

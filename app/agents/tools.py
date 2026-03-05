@@ -8,6 +8,7 @@ logger = logging.getLogger("agent_flow")
 
 duckduckgo_tool = DuckDuckGoSearchRun()
 
+
 @tool
 def vector_search(query: str) -> str:
     """Searches the local archival intelligence database for historical conflict reports or past war events."""
@@ -21,6 +22,7 @@ def vector_search(query: str) -> str:
         return f"ARCHIVAL INTELLIGENCE REPORT:\n{results}"
     except Exception as e:
         return f"Error accessing vector database: {str(e)}"
+
 
 @tool
 def web_search(query: str) -> str:
@@ -49,6 +51,7 @@ def web_search(query: str) -> str:
     except Exception as e:
         return f"Failed to retrieve web information on '{query}'. Error: {e}"
 
+
 @tool
 def duckduckgo_search(query: str) -> str:
     """Searches DuckDuckGo to get live, up-to-date web results for current events and general queries when Wikipedia is not sufficient."""
@@ -58,5 +61,6 @@ def duckduckgo_search(query: str) -> str:
         return f"LIVE WEB SEARCH RESULTS:\n{results}"
     except Exception as e:
         return f"Failed to retrieve duckduckgo web information on '{query}'. Error: {e}"
+
 
 tools = [vector_search, web_search, duckduckgo_search]

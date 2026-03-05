@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
 
+
 class Settings(BaseSettings):
     # --- App Info ---
     APP_NAME: str = "GeoVision Lab"
@@ -38,8 +39,10 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
 
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
 
 settings = get_settings()

@@ -11,6 +11,7 @@ from app.services.vector_store import _embeddings
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 PDF_DIR = os.path.join(PROJECT_ROOT, "documents", "pdf")
 
+
 def main():
     print("[INIT] Starting ingestion of geopolitical intelligence documents...")
 
@@ -35,8 +36,7 @@ def main():
     print(f"[PROCESS] Loaded {len(all_docs)} page(s) from PDFs.")
 
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=settings.CHUNK_SIZE, 
-        chunk_overlap=settings.CHUNK_OVERLAP
+        chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP
     )
     splits = text_splitter.split_documents(all_docs)
     print(f"[PROCESS] Split into {len(splits)} chunk(s).")
@@ -57,6 +57,7 @@ def main():
     )
 
     print("[SUCCESS] All documents successfully ingested into GeoVision Lab.")
+
 
 if __name__ == "__main__":
     main()
