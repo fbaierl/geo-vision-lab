@@ -6,6 +6,7 @@ from app.agents.graph import process_query, process_query_stream
 
 router = APIRouter()
 
+
 @router.post("/chat")
 async def chat_endpoint(
     query: str = Form(...),
@@ -25,6 +26,7 @@ async def chat_endpoint(
         return JSONResponse(
             {"answer": f"System error during analysis: {str(e)}"}, status_code=500
         )
+
 
 @router.post("/chat/stream")
 async def chat_stream_endpoint(

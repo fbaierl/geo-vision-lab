@@ -4,6 +4,7 @@ from app.core.config import settings
 
 router = APIRouter()
 
+
 @router.get("/system/status")
 async def system_status():
     """Return system status including GPU engagement from Ollama."""
@@ -22,6 +23,11 @@ async def system_status():
                     "reason": "gpu" if vram_bytes > 0 else "cpu_only",
                 }
             # No model currently loaded (idle between requests)
-            return {"gpu_engaged": False, "model": None, "vram_bytes": 0, "reason": "no_model_loaded"}
+            return {
+                "gpu_engaged": False,
+                "model": None,
+                "vram_bytes": 0,
+                "reason": "no_model_loaded",
+            }
     except Exception as e:
         return {"gpu_engaged": False, "model": None, "vram_bytes": 0, "reason": str(e)}
