@@ -125,7 +125,7 @@ def test_real_db_ingestion_and_search(postgres_container):
                                 summary = last_msg.content[:100].replace('\n', ' ') + "..."
                                 print(f"  🛠️ Action: Tool '{last_msg.name}' returned data: {summary}")
                             else:
-                                print(f"  ✅ Action: LLM synthesized the final answer.")
+                                print("  ✅ Action: LLM synthesized the final answer.")
                 
                 print("\n" + "="*50)
                 print("🏁 END LANGGRAPH EXECUTION FLOW")
