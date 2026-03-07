@@ -164,4 +164,4 @@ To verify the components are working:
 ## Additional Documentation
 
 - [**Database Migrations (Alembic) Guide**](docs/database_migrations.md)
-- [**Debugging Guide**](debugging.md)
+- [**Debugging Guide**](docs/debugging.md)
