@@ -16,6 +16,14 @@
   <img src="static/demo.webp" alt="GeoVision Lab Demo" width="700" />
 </p>
 
+<p align="center">
+  <strong>Interactive Tactical Maps (Leaflet.js) automatically generated from location entities</strong>
+</p>
+
+<p align="center">
+  <img src="static/map_demo.webp" alt="GeoVision Map Demo" width="700" />
+</p>
+
 ---
 
 ## What is this?
