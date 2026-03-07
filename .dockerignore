@@ -2,3 +2,7 @@
 __pycache__
 *.pyc
 .env
+.idea
+.venv
+.pytest_cache
+documents/

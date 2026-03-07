@@ -1,5 +1,6 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 import sys
+import os
 
 # Mock settings before app imports to avoid Validation Error
 mock_settings = MagicMock()
@@ -19,9 +20,14 @@ with patch("app.core.config.settings", mock_settings):
 @patch("app.ingestion.ingest.glob.glob")
 @patch("app.ingestion.ingest.PyPDFLoader")
 @patch("app.ingestion.ingest.PGVector")
-def test_ingestion_pipeline_success(mock_pg_vector, mock_pdf_loader, mock_glob):
+@patch("app.ingestion.ingest.compute_files_hash")
+@patch("os.path.exists")
+@patch("builtins.open", new_callable=mock_open)
+def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_pg_vector, mock_pdf_loader, mock_glob):
     # Setup mocks
     mock_glob.return_value = ["/mock/path/doc.pdf"]
+    mock_hash.return_value = "new_hash_123"
+    mock_exists.return_value = False  # Simulate HASH_FILE does not exist
     
     # Mock PDF loader
     mock_loader_instance = MagicMock()

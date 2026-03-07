@@ -121,7 +121,7 @@
         <footer>
             <span id="f-status">// Standby</span>
             <div class="right">
-                <span>Qwen2.5:7B + pgvector</span>
+                <span id="f-model">Awaiting Model... + pgvector</span>
                 <span id="f-gpu" style="color:var(--muted)">Accel: —</span>
                 <span class="cyan">Conn: Secure</span>
             </div>
@@ -165,6 +165,15 @@
             try {
                 const res = await fetch('/system/status');
                 const data = await res.json();
+                
+                // Update LLM indicator Model Name if one is active:
+                const elModel = document.getElementById('f-model');
+                if (data.model) {
+                    elModel.textContent = data.model + ' + pgvector';
+                } else {
+                    elModel.textContent = 'Awaiting Model... + pgvector';
+                }
+
                 if (data.gpu_engaged) {
                     elGpuPill.className = 'pill gpu-active';
                     elGpuHex.textContent = '⬢';
@@ -195,9 +204,9 @@
                 elFGpu.style.color = 'var(--muted)';
             }
         }
-        // Fetch on page load and poll every 10 s so the indicator updates live
+        // Fetch on page load and poll every 3 s so the indicator updates live
         fetchGpuStatus();
-        setInterval(fetchGpuStatus, 10000);
+        setInterval(fetchGpuStatus, 3000);
 
         function esc(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -239,13 +248,22 @@
             };
         }
 
-        function createTrailStep(phase, tool, query) {
+        function createTrailStep(phase, tool, query, model) {
             const step = document.createElement('div');
             let label = phase.toUpperCase();
             let desc = '';
+            
+            let modelTag = model ? ` <span style="font-size:0.55rem;color:var(--muted);margin-left:6px;">[${model}]</span>` : '';
 
             if (phase === 'reasoning') {
+                label = 'REASONING' + modelTag;
                 desc = 'Planning analysis approach...';
+            } else if (phase === 'reviewing') {
+                label = 'QA REVIEW' + modelTag;
+                desc = 'Analyzing intelligence report against requirements...';
+            } else if (phase === 'revising') {
+                label = 'REVISING' + modelTag;
+                desc = 'Formulating corrected response...';
             } else if (phase === 'vector_search') {
                 label = 'VECTOR SEARCH';
                 desc = `Searching archival database for "${query}"`;
@@ -270,11 +288,69 @@
         const elModalTitle = document.getElementById('modal-title');
         const elModalClose = document.getElementById('modal-close');
 
+        let modalBlocks = [];
+        let modalCurrentIndex = 0;
+
         function openModal(title, content) {
             elModalTitle.textContent = title;
-            elModalBody.textContent = content;
+            
+            // Format and split content into blocks, ONLY if it is an intel report.
+            let isIntel = content.match(/^(?:ARCHIVAL INTELLIGENCE REPORT|LIVE WEB INTELLIGENCE|LIVE WEB SEARCH RESULTS)/i) 
+                          || title.toLowerCase().includes("text block");
+            
+            if (isIntel) {
+                let cleanContent = content.replace(/^ARCHIVAL INTELLIGENCE REPORT:\n*/i, '')
+                                          .replace(/^LIVE WEB INTELLIGENCE(?: \(.*?\))?:\n*/i, '')
+                                          .replace(/^LIVE WEB SEARCH RESULTS:\n*/i, '');
+                                          
+                if (cleanContent.includes('\n\n')) {
+                    modalBlocks = cleanContent.split('\n\n').map(b => b.trim()).filter(b => b);
+                } else {
+                    modalBlocks = cleanContent.split('\n').map(b => b.trim()).filter(b => b);
+                }
+                if (modalBlocks.length === 0) modalBlocks = [content];
+            } else {
+                modalBlocks = [content];
+            }
+            
+            modalCurrentIndex = 0;
+            renderModalBlock();
+            
             elModal.classList.add('open');
             elModalBody.scrollTop = 0;
+        }
+        
+        function renderModalBlock() {
+            if (modalBlocks.length <= 1) {
+                elModalBody.innerHTML = `<div style="white-space: pre-wrap; font-family: inherit;">${esc(modalBlocks[0])}</div>`;
+            } else {
+                const btnPrevStyle = `background:var(--bg-panel); color:var(--cyan); border:1px solid var(--cyan); padding:4px 10px; font-family:'Share Tech Mono', monospace; cursor:${modalCurrentIndex === 0 ? 'not-allowed' : 'pointer'}; opacity: ${modalCurrentIndex === 0 ? '0.4' : '1'}; transition: opacity 0.2s;`;
+                const btnNextStyle = `background:var(--bg-panel); color:var(--cyan); border:1px solid var(--cyan); padding:4px 10px; font-family:'Share Tech Mono', monospace; cursor:${modalCurrentIndex === modalBlocks.length - 1 ? 'not-allowed' : 'pointer'}; opacity: ${modalCurrentIndex === modalBlocks.length - 1 ? '0.4' : '1'}; transition: opacity 0.2s;`;
+                
+                elModalBody.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
+                        <button id="car-prev" style="${btnPrevStyle}" ${modalCurrentIndex === 0 ? 'disabled' : ''}>◀ Prev</button>
+                        <span style="font-family: 'Share Tech Mono', monospace; font-size: 0.9em; color: var(--cyan);">BLOCK ${modalCurrentIndex + 1} OF ${modalBlocks.length}</span>
+                        <button id="car-next" style="${btnNextStyle}" ${modalCurrentIndex === modalBlocks.length - 1 ? 'disabled' : ''}>Next ▶</button>
+                    </div>
+                    <div style="white-space: pre-wrap; font-family: inherit; line-height: 1.5; color: var(--text-color);">${esc(modalBlocks[modalCurrentIndex])}</div>
+                `;
+                
+                const btnPrev = document.getElementById('car-prev');
+                const btnNext = document.getElementById('car-next');
+                if (btnPrev) btnPrev.addEventListener('click', () => {
+                    if (modalCurrentIndex > 0) {
+                        modalCurrentIndex--;
+                        renderModalBlock();
+                    }
+                });
+                if (btnNext) btnNext.addEventListener('click', () => {
+                    if (modalCurrentIndex < modalBlocks.length - 1) {
+                        modalCurrentIndex++;
+                        renderModalBlock();
+                    }
+                });
+            }
         }
 
         function closeModal() { elModal.classList.remove('open'); }
@@ -368,9 +444,12 @@
             elInput.value = '';
             elInput.disabled = true;
             elSend.disabled = true;
+            elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;Processing signal...';
             elTyping.style.display = 'flex';
             elPillProc.style.display = 'flex';
             elFStatus.textContent = '// Agent Processing';
+            
+            fetchGpuStatus(); // Fetch GPU status early to show activation sooner
 
             const t0 = Date.now();
             let msgWrapper = null;
@@ -413,10 +492,23 @@
                             if (evt.type === 'meta' && evt.thread_id) {
                                 threadId = evt.thread_id;
                             } else if (evt.type === 'status') {
+                                if (evt.phase === 'revising' && msgWrapper) {
+                                    // An earlier response was rejected; start fresh output block
+                                    renderMarkdown(msgWrapper.msgBody);
+                                    msgWrapper.msgBody.classList.remove('streaming-cursor');
+                                    
+                                    msgWrapper.msgBody = document.createElement('div');
+                                    msgWrapper.msgBody.className = 'msg-body streaming-cursor';
+                                    msgWrapper.msgBody.style.display = 'none';
+                                    msgWrapper.trailContainer.parentNode.appendChild(msgWrapper.msgBody);
+                                    
+                                    _rawStreamBuffer = '';
+                                }
+
                                 if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
                                 msgWrapper.trailContainer.style.display = 'flex';
 
-                                const step = createTrailStep(evt.phase, evt.tool, evt.query);
+                                const step = createTrailStep(evt.phase, evt.tool, evt.query, evt.model);
                                 msgWrapper.trailBody.appendChild(step);
                                 stepCount++;
                                 msgWrapper.trailHeader.querySelector('.step-count').textContent = stepCount;
@@ -425,6 +517,17 @@
                                 if (evt.tool && evt.tool !== 'unknown') {
                                     elTool.textContent = evt.tool;
                                 }
+                                
+                                if (evt.phase === 'reviewing') {
+                                    elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;QA Review in progress...';
+                                    elTyping.style.display = 'flex';
+                                    elFStatus.textContent = '// QA Review';
+                                } else {
+                                    elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;Processing signal...';
+                                    elTyping.style.display = 'flex';
+                                    elFStatus.textContent = '// Agent Processing';
+                                }
+                                
                                 elMessages.scrollTop = elMessages.scrollHeight;
 
                             } else if (evt.type === 'tool_result') {
@@ -452,7 +555,7 @@
                     msgWrapper.msgBody.classList.remove('streaming-cursor');
                     if (stepCount > 0) {
                         msgWrapper.trailHeader.style.display = 'block';
-                        msgWrapper.trailBody.style.display = 'none'; // collapsed by default
+                        msgWrapper.trailBody.style.display = 'flex'; // Expanded by default so user can see it
                         msgWrapper.trailHeader.onclick = () => {
                             const b = msgWrapper.trailBody;
                             b.style.display = b.style.display === 'none' ? 'flex' : 'none';

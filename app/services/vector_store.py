@@ -1,5 +1,5 @@
 from langchain_postgres import PGVector
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from app.core.config import settings
 
 # Shared embedding model (loaded once at startup)

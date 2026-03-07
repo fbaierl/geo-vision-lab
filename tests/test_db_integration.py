@@ -27,8 +27,6 @@ def test_real_db_ingestion_and_search(postgres_container, monkeypatch):
     user = postgres_container.username
     password = postgres_container.password
     dbname = postgres_container.dbname
-    
-    db_url = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
 
     # Use monkeypatch to modify the global settings singleton correctly.
     # The vector_store module might already be imported, so patching the `settings` object

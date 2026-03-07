@@ -546,9 +546,18 @@
             color: #ff8a80;
         }
 
-        .msg.error .msg-body::before,
-        .msg.error .msg-body::after {
+        .msg.error .msg-body::before {
+            top: -1px;
+            left: -1px;
             border-color: var(--red);
+            border-width: 2px 0 0 2px;
+        }
+
+        .msg.error .msg-body::after {
+            bottom: -1px;
+            right: -1px;
+            border-color: var(--red);
+            border-width: 0 2px 2px 0;
         }
 
         /* ═══ ACTIVITY TRAIL ═══ */
