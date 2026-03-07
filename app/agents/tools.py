@@ -29,16 +29,27 @@ def web_search(query: str) -> str:
     """Searches Wikipedia to get background information on geopolitical topics, countries, leaders, and historical events."""
     logger.debug(f"[AGENT LOG] Using web_search for: {query}")
     try:
+        # Get page to try and extract coordinates
+        try:
+            page = wikipedia.page(query, auto_suggest=False)
+            coords = page.coordinates
+            coord_str = f"Coordinates: {coords[0]}, {coords[1]}\n" if coords else ""
+        except:
+            coord_str = ""
+            
         results = wikipedia.summary(query, sentences=4)
-        return f"LIVE WEB INTELLIGENCE:\n{results}"
+        return f"LIVE WEB INTELLIGENCE:\n{coord_str}{results}"
     except wikipedia.exceptions.PageError:
         # Exact page not found — search for the best match
         matches = wikipedia.search(query, results=3)
         if not matches:
             return f"No Wikipedia article found for '{query}'."
         try:
+            page = wikipedia.page(matches[0], auto_suggest=False)
+            coords = getattr(page, 'coordinates', None)
+            coord_str = f"Coordinates: {coords[0]}, {coords[1]}\n" if coords else ""
             results = wikipedia.summary(matches[0], sentences=4)
-            return f"LIVE WEB INTELLIGENCE (closest match: {matches[0]}):\n{results}"
+            return f"LIVE WEB INTELLIGENCE (closest match: {matches[0]}):\n{coord_str}{results}"
         except Exception as inner:
             return f"Wikipedia search found matches {matches} but failed to retrieve them. Error: {inner}"
     except wikipedia.exceptions.DisambiguationError as e:
