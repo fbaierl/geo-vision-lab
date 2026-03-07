@@ -19,3 +19,5 @@ httpx
 pydantic-settings
 pytest
 pytest-asyncio
+testcontainers[postgres]
+psycopg2-binary

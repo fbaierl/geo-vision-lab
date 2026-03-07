@@ -53,7 +53,7 @@ def test_system_status_engaged(mock_get):
 @patch("app.api.routes.chat.process_query")
 def test_chat_non_streaming(mock_process_query):
     mock_process_query.return_value = "This is a mock response from the agent."
-
+    
     response = client.post(
         "/chat",
         data={
