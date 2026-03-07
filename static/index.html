@@ -303,8 +303,47 @@
 
         function renderMarkdown(bodyEl) {
             if (typeof marked !== 'undefined' && _rawStreamBuffer) {
-                bodyEl.innerHTML = marked.parse(_rawStreamBuffer);
+                let htmlStr = marked.parse(_rawStreamBuffer);
+                const mapRegex = /\[map:\s*([^,]+),\s*([-\d.]+),\s*([-\d.]+)\]/g;
+                let mapsToInit = [];
+                let mapCounter = 0;
+                
+                htmlStr = htmlStr.replace(mapRegex, (match, name, lat, lon) => {
+                    const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
+                    mapsToInit.push({ id: mapId, name: name, lat: parseFloat(lat), lon: parseFloat(lon) });
+                    return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name}</div><div id="${mapId}" class="llm-map"></div></div>`;
+                });
+
+                bodyEl.innerHTML = htmlStr;
                 bodyEl.classList.add('md-rendered');
+
+                mapsToInit.forEach(mapData => {
+                    setTimeout(() => {
+                        const mapEl = document.getElementById(mapData.id);
+                        if (mapEl) {
+                            const map = L.map(mapData.id, {
+                                zoomControl: false, 
+                                attributionControl: false 
+                            }).setView([mapData.lat, mapData.lon], 11);
+                            
+                            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                                subdomains: 'abcd',
+                                maxZoom: 20
+                            }).addTo(map);
+
+                            const icon = L.divIcon({
+                                className: 'map-ping',
+                                html: '<div style="width:12px; height:12px; background:var(--cyan); border-radius:50%; box-shadow:0 0 10px var(--cyan);"></div>',
+                                iconSize: [12, 12]
+                            });
+
+                            L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
+                                .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
+                                .openPopup();
+                        }
+                    }, 50); // delay to let DOM render
+                });
             }
             _rawStreamBuffer = '';
         }
