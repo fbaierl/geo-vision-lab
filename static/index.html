@@ -375,6 +375,12 @@
         function appendToMsg(bodyEl, text) {
             _rawStreamBuffer += text;
             bodyEl.textContent = _rawStreamBuffer;
+            if (bodyEl.classList.contains('streaming-cursor')) {
+                const cursor = document.createElement('span');
+                cursor.className = 'cursor-blink';
+                cursor.textContent = '○';
+                bodyEl.appendChild(cursor);
+            }
             elMessages.scrollTop = elMessages.scrollHeight;
         }
 
@@ -382,42 +388,103 @@
             if (typeof marked !== 'undefined' && _rawStreamBuffer) {
                 let htmlStr = marked.parse(_rawStreamBuffer);
                 const mapRegex = /\[map:\s*([^,]+),\s*([-\d.]+),\s*([-\d.]+)\]/g;
+                const mapCountryRegex = /\[map-country:\s*([^\]]+)\]/g;
                 let mapsToInit = [];
                 let mapCounter = 0;
                 
                 htmlStr = htmlStr.replace(mapRegex, (match, name, lat, lon) => {
                     const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
-                    mapsToInit.push({ id: mapId, name: name, lat: parseFloat(lat), lon: parseFloat(lon) });
-                    return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name}</div><div id="${mapId}" class="llm-map"></div></div>`;
+                    mapsToInit.push({ id: mapId, type: 'point', name: name.trim(), lat: parseFloat(lat), lon: parseFloat(lon) });
+                    return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name.trim()}</div><div id="${mapId}" class="llm-map"></div></div>`;
+                });
+
+                htmlStr = htmlStr.replace(mapCountryRegex, (match, name) => {
+                    const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
+                    mapsToInit.push({ id: mapId, type: 'country', name: name.trim() });
+                    return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name.trim()}</div><div id="${mapId}" class="llm-map"></div></div>`;
                 });
 
                 bodyEl.innerHTML = htmlStr;
                 bodyEl.classList.add('md-rendered');
 
                 mapsToInit.forEach(mapData => {
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         const mapEl = document.getElementById(mapData.id);
                         if (mapEl) {
-                            const map = L.map(mapData.id, {
-                                zoomControl: false, 
-                                attributionControl: false 
-                            }).setView([mapData.lat, mapData.lon], 11);
-                            
-                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                                subdomains: 'abc',
-                                maxZoom: 19
-                            }).addTo(map);
+                            if (mapData.type === 'point') {
+                                const map = L.map(mapData.id, {
+                                    zoomControl: false, 
+                                    attributionControl: false 
+                                }).setView([mapData.lat, mapData.lon], 11);
+                                
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                                    subdomains: 'abc',
+                                    maxZoom: 19
+                                }).addTo(map);
 
-                            const icon = L.divIcon({
-                                className: 'map-ping',
-                                html: '<div style="width:12px; height:12px; background:var(--cyan); border-radius:50%; box-shadow:0 0 10px var(--cyan);"></div>',
-                                iconSize: [12, 12]
-                            });
+                                const icon = L.divIcon({
+                                    className: 'map-ping',
+                                    html: '<div style="width:12px; height:12px; background:var(--cyan); border-radius:50%; box-shadow:0 0 10px var(--cyan);"></div>',
+                                    iconSize: [12, 12]
+                                });
 
-                            L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
-                                .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
-                                .openPopup();
+                                L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
+                                    .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
+                                    .openPopup();
+                            } else if (mapData.type === 'country') {
+                                const map = L.map(mapData.id, {
+                                    zoomControl: false, 
+                                    attributionControl: false 
+                                }).setView([0, 0], 2);
+                                
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                                    subdomains: 'abc',
+                                    maxZoom: 19
+                                }).addTo(map);
+
+                                try {
+                                    const res = await fetch(`https://nominatim.openstreetmap.org/search?country=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
+                                    const data = await res.json();
+                                    let found = false;
+                                    
+                                    if (data && data.features && data.features.length > 0) {
+                                        const feature = data.features[0];
+                                        if (feature.geometry) {
+                                            const geojsonLayer = L.geoJSON(feature, {
+                                                style: {
+                                                    color: 'var(--cyan)',
+                                                    weight: 2,
+                                                    fillOpacity: 0.2
+                                                }
+                                            }).addTo(map);
+                                            map.fitBounds(geojsonLayer.getBounds());
+                                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
+                                            found = true;
+                                        }
+                                    }
+                                    
+                                    if (!found) {
+                                        const res2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
+                                        const data2 = await res2.json();
+                                        if (data2 && data2.features && data2.features.length > 0) {
+                                            const feature = data2.features[0];
+                                            const geojsonLayer = L.geoJSON(feature, {
+                                                style: {
+                                                    color: 'var(--cyan)',
+                                                    weight: 2,
+                                                    fillOpacity: 0.2
+                                                }
+                                            }).addTo(map);
+                                            map.fitBounds(geojsonLayer.getBounds());
+                                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to load country boundary for", mapData.name, e);
+                                }
+                            }
                         }
                     }, 50); // delay to let DOM render
                 });

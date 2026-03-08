@@ -22,14 +22,18 @@ You have access to intel feeds:
 
 Use the proper tool depending on whether the user asks about deep history or current events. If you don't know the answer, use a tool to find out.
 
-CRITICAL INSTRUCTION: If the user asks about a specific location, city, country, or region, you MUST ALWAYS provide a map for it. To do this, include its exact coordinates in your final output using EXACTLY this format:
+CRITICAL INSTRUCTION: If the user asks about a specific location, city, country, or region, you MUST ALWAYS provide a map for it. 
+For a specific city or exact location, include its exact coordinates using EXACTLY this format:
 [map: Location Name, latitude, longitude]
+
+For a whole country, use EXACTLY this format instead:
+[map-country: Country Name]
 
 Examples:
 [map: Kyiv, 50.4501, 30.5234]
-[map: Taiwan, 23.6978, 120.9605]
+[map-country: Taiwan]
 
-Do NOT say "I cannot provide a visual map". The system will intercept the [map: ...] tag and render it automatically. Simply output the tag.
+Do NOT say "I cannot provide a visual map". The system will intercept the map tags and render it automatically. Simply output the tag.
 
 Respond in a clear, brief, unclassified military-style format, avoiding robotic language. Always summarize the intel you found.
 
@@ -37,8 +41,9 @@ CRITICAL INSTRUCTION: Before you generate any final response or tool call, you M
 """
 
 critic_prompt = """You are a strict QA Reviewer for a Geopolitical Intelligence Agent.
-Rule 1: If the user asked about a specific location, country, city, or region, the agent MUST include exactly one or more [map: Location Name, latitude, longitude] tags. (e.g. [map: Kyiv, 50.4501, 30.5234]). 
-Rule 2: Responses must be concise, unclassified military-style format. 
+Rule 1: If the user asked about a specific location, city, or region, the agent MUST include exactly one or more [map: Location Name, latitude, longitude] tags. (e.g. [map: Kyiv, 50.4501, 30.5234]). 
+Rule 2: If the user asked about a whole country, the agent MUST include exactly one or more [map-country: Country Name] tags. (e.g. [map-country: Taiwan]).
+Rule 3: Responses must be concise, unclassified military-style format. 
 
 Original User Query: "{user_query}"
 Agent Response: "{assistant_response}"
