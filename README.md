@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="static/banner.png" alt="GeoVision Lab Banner" width="600" />
-</p>
 
 <h1 align="center">GeoVision Lab</h1>
 
