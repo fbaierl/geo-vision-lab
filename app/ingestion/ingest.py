@@ -1,6 +1,7 @@
 import os
 import glob
 import logging
+import hashlib
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_postgres import PGVector
@@ -13,6 +14,17 @@ logger = logging.getLogger("geovision_ingestion")
 # Go up from app/ingestion/ingest.py to the root documents folder
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 PDF_DIR = os.path.join(PROJECT_ROOT, "documents", "pdf")
+HASH_FILE = os.path.join(PROJECT_ROOT, "documents", ".ingest_hash")
+
+
+def compute_files_hash(file_paths):
+    """Compute an MD5 hash of all given file contents."""
+    hasher = hashlib.md5()
+    for file_path in sorted(file_paths):
+        with open(file_path, "rb") as f:
+            while chunk := f.read(8192):
+                hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def main():
@@ -29,7 +41,20 @@ def main():
 
     logger.info(f"[SCAN] Found {len(pdf_files)} PDF file(s): {pdf_files}")
 
-    # 2. Load all PDFs and split into chunks
+    # 2. Check if files have changed
+    current_hash = compute_files_hash(pdf_files)
+    
+    if os.path.exists(HASH_FILE):
+        with open(HASH_FILE, "r") as f:
+            previous_hash = f.read().strip()
+        
+        if current_hash == previous_hash:
+            logger.info("[SKIP] PDF files have not changed since last ingestion. Skipping rebuild.")
+            return
+        else:
+            logger.info("[UPDATE] PDF files have changed. Rebuilding vector database...")
+
+    # 3. Load all PDFs and split into chunks
     all_docs = []
     for pdf_path in pdf_files:
         logger.info(f"[LOAD] Loading: {pdf_path}")
@@ -59,6 +84,10 @@ def main():
         collection_name=settings.VECTOR_COLLECTION_NAME,
         pre_delete_collection=True,
     )
+
+    # 5. Save the new hash after successful ingestion
+    with open(HASH_FILE, "w") as f:
+        f.write(current_hash)
 
     logger.info("[SUCCESS] All documents successfully ingested into GeoVision Lab.")
 

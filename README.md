@@ -13,15 +13,11 @@
 </p>
 
 <p align="center">
-  <img src="static/demo.webp" alt="GeoVision Lab Demo" width="700" />
+  <img src="static/demo.webp" alt="GeoVision Lab Demo" width="900" />
 </p>
 
 <p align="center">
-  <strong>Interactive Tactical Maps (Leaflet.js) automatically generated from location entities</strong>
-</p>
-
-<p align="center">
-  <img src="static/map_demo.webp" alt="GeoVision Map Demo" width="700" />
+  <strong>Interactive Tactical Maps (Leaflet.js) automatically rendering points and full country borders</strong>
 </p>
 
 ---
@@ -36,11 +32,13 @@ GeoVision Lab utilizes a hybrid RAG approach, maintaining conversational memory 
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **LLM** | Ollama + Qwen 3.5:9B | Local language model inference |
+| **Primary LLM** | Ollama + Qwen 3.5:9B | Core analysis, reasoning, and response generation |
+| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Dedicated "Critic" agent checking map constraints before output |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization for semantic search |
 | **Vector DB** | PostgreSQL + pgvector | Document storage with HNSW index for fast similarity search |
-| **Agent Framework** | LangGraph + MemorySaver | Agent coordination, RAG search routing (Live vs Archival), and conversation memory |
-| **Backend & Interface** | FastAPI & Vanilla JS | REST API serving a tactical terminal-inspired frontend |
+| **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination, web/vector search routing, and conversation memory |
+| **Frontend UI** | Vanilla JS, Leaflet.js | Cyber/Tactical terminal with robust markdown streaming, dynamic map rendering, and font optimizations (`Rajdhani`) |
+| **Testing/CI** | PyTest, Testcontainers, GitHub Actions | Full end-to-end integration tests & automated linter quality gates |
 | **Monitoring** | Grafana, Loki, Dozzle | Log aggregation, metrics, and real-time container log viewing |
 
 ```mermaid
@@ -62,7 +60,7 @@ graph TD
 
         subgraph App ["Application"]
             UI["Tactical UI\n(Vanilla JS)"] <--> API["FastAPI\n(app/main.py)"]
-            API <--> AGENT["LangGraph Agent"]
+            API <--> AGENT["LangGraph Agent\n(Worker + Critic)"]
             AGENT -->|"Internal Search"| PG
             AGENT -->|"LLM Tasks"| OL
             AGENT -->|"Live Info"| WEB["Wikipedia & DuckDuckGo"]
