@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # --- LLM & Embedding ---
     OLLAMA_BASE_URL: str = "http://geovision-ollama:11434"
-    LLM_MODEL_NAME: str = "qwen3.5:0.8b"
+    LLM_MODEL_NAME: str = "qwen3.5:4b"
     REVIEWER_LLM_MODEL_NAME: str = "qwen2.5:0.5b"
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
