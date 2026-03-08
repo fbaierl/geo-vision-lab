@@ -29,7 +29,7 @@ GeoVision Lab utilizes a hybrid RAG approach, maintaining conversational memory 
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Primary LLM** | Ollama + Qwen 3.5:9B | Core analysis, reasoning, and response generation |
+| **Primary LLM** | Ollama + Qwen 3.5:0.8B | Core analysis, reasoning, and response generation |
 | **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Dedicated "Critic" agent checking map constraints before output |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization for semantic search |
 | **Vector DB** | PostgreSQL + pgvector | Document storage with HNSW index for fast similarity search |
@@ -47,7 +47,7 @@ graph TD
         end
 
         subgraph LLM ["LLM Layer"]
-            OL["Ollama\n(Qwen 3.5:9B)"]
+            OL["Ollama\n(Qwen 3.5:0.8B)"]
         end
 
         subgraph Ingestion ["Ingestion Pipeline"]

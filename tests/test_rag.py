@@ -36,7 +36,7 @@ def test_system_status_engaged(mock_get):
     # Mock Ollama API response for engaged GPU
     mock_response = MagicMock()
     mock_response.json.return_value = {
-        "models": [{"name": "qwen3.5:9b", "size_vram": 5000000000}]
+        "models": [{"name": "qwen3.5:0.8b", "size_vram": 5000000000}]
     }
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
@@ -47,7 +47,7 @@ def test_system_status_engaged(mock_get):
         data = response.json()
         assert data["gpu_engaged"] is True
         assert data["reason"] == "gpu"
-        assert data["model"] == "qwen3.5:9b"
+        assert data["model"] == "qwen3.5:0.8b"
 
 
 @patch("app.api.routes.chat.process_query")
