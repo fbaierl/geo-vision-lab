@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="static/demo.webp" alt="GeoVision Lab Demo" width="900" />
+  <img src="static/demo_maps.webp" alt="GeoVision Lab Demo" width="900" />
 </p>
 
 <p align="center">
