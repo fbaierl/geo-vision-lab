@@ -29,12 +29,12 @@ GeoVision Lab utilizes a hybrid RAG approach, maintaining conversational memory 
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Primary LLM** | Ollama + Qwen 3.5:4B | Core analysis, reasoning, and response generation |
+| **Primary LLM** | Ollama + Qwen 3.5 (switchable: 9B, 4B, 0.8B) | Core analysis, reasoning, and response generation |
 | **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Dedicated "Critic" agent checking map constraints before output |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization for semantic search |
 | **Vector DB** | PostgreSQL + pgvector | Document storage with HNSW index for fast similarity search |
 | **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination, web/vector search routing, and conversation memory |
-| **Frontend UI** | Vanilla JS, Leaflet.js | Cyber/Tactical terminal with robust markdown streaming, dynamic map rendering, and font optimizations (`Rajdhani`) |
+| **Frontend UI** | Vanilla JS, Leaflet.js | Cyber/Tactical terminal with robust markdown streaming, dynamic map rendering, model switching, and font optimizations (`Rajdhani`) |
 | **Testing/CI** | PyTest, Testcontainers, GitHub Actions | Full end-to-end integration tests & automated linter quality gates |
 | **Monitoring** | Grafana, Loki, Dozzle | Log aggregation, metrics, and real-time container log viewing |
 
@@ -77,6 +77,23 @@ graph TD
 ---
 
 ## Quick Start
+
+### LLM Model Switching
+
+GeoVision Lab now supports **dynamic switching between different Qwen 3.5 LLM models** for reasoning tasks:
+
+| Model | Size | Speed | Quality | Use Case |
+|-------|------|-------|---------|----------|
+| **Qwen 3.5 9B** | 9 billion | Slower | Highest | Complex analysis, detailed reports |
+| **Qwen 3.5 4B** | 4 billion | Balanced | High | Default - general purpose queries |
+| **Qwen 3.5 0.8B** | 0.8 billion | Fastest | Basic | Quick lookups, simple queries |
+
+**To switch models:**
+1. Open the Tactical UI at [localhost:8000](http://localhost:8000)
+2. Use the model selector dropdown in the header (top-right)
+3. Select your desired model - the change takes effect immediately
+
+**Note:** The QA/Reviewer model remains fixed at Qwen 2.5:0.5b for consistent constraint checking.
 
 ### Prerequisites
 

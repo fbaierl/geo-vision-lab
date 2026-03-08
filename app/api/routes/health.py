@@ -19,6 +19,8 @@ async def system_status():
                 return {
                     "gpu_engaged": vram_bytes > 0,
                     "model": model_info.get("name", "unknown"),
+                    "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
+                    "reviewer_model": settings.REVIEWER_LLM_MODEL_NAME,
                     "vram_bytes": vram_bytes,
                     "reason": "gpu" if vram_bytes > 0 else "cpu_only",
                 }
@@ -26,8 +28,17 @@ async def system_status():
             return {
                 "gpu_engaged": False,
                 "model": None,
+                "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
+                "reviewer_model": settings.REVIEWER_LLM_MODEL_NAME,
                 "vram_bytes": 0,
                 "reason": "no_model_loaded",
             }
     except Exception as e:
-        return {"gpu_engaged": False, "model": None, "vram_bytes": 0, "reason": str(e)}
+        return {
+            "gpu_engaged": False,
+            "model": None,
+            "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
+            "reviewer_model": settings.REVIEWER_LLM_MODEL_NAME,
+            "vram_bytes": 0,
+            "reason": str(e),
+        }

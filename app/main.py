@@ -1,10 +1,10 @@
 import os
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
-from app.api.routes import chat, health
+from app.api.routes import chat, health, models
 
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
 
@@ -13,19 +13,52 @@ app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
 # Include API routes
 app.include_router(chat.router, tags=["chat"])
 app.include_router(health.router, tags=["health"])
+app.include_router(models.router, tags=["models"])
 
 # Ensure static directories exist
 os.makedirs("static", exist_ok=True)
 
-# Mount static files to serve the frontend
-app.mount("/ui", StaticFiles(directory="static"), name="static")
+# Mount static files to serve the frontend with no caching
+from fastapi.responses import Response
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class NoCacheStaticFiles(StaticFiles):
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] == "GET":
+            async def send_with_no_cache(message):
+                if message["type"] == "http.response.start":
+                    headers = list(message.get("headers", []))
+                    headers.extend([
+                        (b"cache-control", b"no-cache, no-store, must-revalidate"),
+                        (b"pragma", b"no-cache"),
+                        (b"expires", b"0"),
+                    ])
+                    message["headers"] = headers
+                await send(message)
+            await super().__call__(scope, receive, send_with_no_cache)
+        else:
+            await super().__call__(scope, receive, send)
+
+
+app.mount("/ui", NoCacheStaticFiles(directory="static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serve the main tactical interface on root."""
     try:
-        with open("static/index.html", "r", encoding="utf-8") as f:
-            return f.read()
+        return FileResponse(
+            "static/index.html",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     except Exception:
-        return "<h1>GeoVision Lab UI not found.</h1><p>Please ensure static/index.html exists.</p>"
+        return HTMLResponse(
+            content="<h1>GeoVision Lab UI not found.</h1><p>Please ensure static/index.html exists.</p>",
+            status_code=404,
+        )

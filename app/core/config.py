@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     # --- LLM & Embedding ---
     OLLAMA_BASE_URL: str = "http://geovision-ollama:11434"
     LLM_MODEL_NAME: str = "qwen3.5:4b"
-    REVIEWER_LLM_MODEL_NAME: str = "qwen2.5:0.5b"
+    REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
+    REVIEWER_LLM_MODEL_NAME: str = "qwen2.5:0.5b"  # Fixed for QA
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
+
+    # --- Available Reasoning Models ---
+    AVAILABLE_REASONING_MODELS: list = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
 
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000
@@ -39,6 +43,13 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+
+    def set_reasoning_model(self, model_name: str) -> bool:
+        """Update the reasoning model name at runtime."""
+        if model_name in self.AVAILABLE_REASONING_MODELS:
+            self.REASONING_LLM_MODEL_NAME = model_name
+            return True
+        return False
 
 
 @lru_cache()

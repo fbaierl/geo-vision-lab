@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.services.llm import get_llm, get_reviewer_llm
+from app.services.llm import get_reasoning_llm, get_reviewer_llm
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -68,7 +68,7 @@ def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
 
 def call_model(state: AgentState):
     logger.debug("[AGENT LOG] Entering 'call_model' node.")
-    llm = get_llm()
+    llm = get_reasoning_llm()
     llm_with_tools = llm.bind_tools(tools)
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -199,8 +199,8 @@ async def process_query_stream(
             else:
                 from app.core.config import settings
                 if streaming_started:
-                    yield {"type": "status", "phase": "revising", "model": settings.LLM_MODEL_NAME}
-                yield {"type": "status", "phase": "reasoning", "model": settings.LLM_MODEL_NAME}
+                    yield {"type": "status", "phase": "revising", "model": settings.REASONING_LLM_MODEL_NAME}
+                yield {"type": "status", "phase": "reasoning", "model": settings.REASONING_LLM_MODEL_NAME}
 
         elif kind == "on_tool_start":
             tool_name = event.get("name", "unknown")

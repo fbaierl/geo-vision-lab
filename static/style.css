@@ -148,6 +148,8 @@
             color: var(--muted);
         }
 
+        /* Removed old model selector */
+
         @keyframes gpu-pulse {
 
             0%,
@@ -880,29 +882,7 @@
             }
         }
 
-        /* ═══ INPUT ═══ */
-        #input-bar {
-            display: flex;
-            align-items: center;
-            height: 52px;
-            border-top: 1px solid var(--border);
-            background: rgba(2, 8, 12, 0.98);
-            padding: 0 18px;
-            gap: 10px;
-            position: relative;
-        }
 
-        /* Animated corner on input bar */
-        #input-bar::before {
-            content: '';
-            position: absolute;
-            top: -1px;
-            left: 0;
-            width: 28px;
-            height: 2px;
-            background: var(--cyan);
-            box-shadow: 0 0 8px var(--cyan);
-        }
 
         .prompt {
             color: var(--cyan);
@@ -927,41 +907,7 @@
             color: var(--muted);
         }
 
-        #send-btn {
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--cyan);
-            font-family: var(--ui);
-            font-weight: 700;
-            font-size: 1.05rem;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            padding: 5px 16px;
-            cursor: pointer;
-            transition: all 0.15s;
-            position: relative;
-        }
 
-        #send-btn::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            right: -1px;
-            width: 6px;
-            height: 6px;
-            border-bottom: 2px solid var(--cyan);
-            border-right: 2px solid var(--cyan);
-        }
-
-        #send-btn:hover:not(:disabled) {
-            background: var(--cyan-d);
-            box-shadow: 0 0 10px var(--cyan-g);
-        }
-
-        #send-btn:disabled {
-            opacity: 0.25;
-            cursor: not-allowed;
-        }
 
         /* ═══ FOOTER ═══ */
         footer {
@@ -1031,3 +977,193 @@
 .leaflet-control-attribution {
     filter: invert(1) hue-rotate(180deg) brightness(80%) contrast(120%);
 }
+
+        /* ═══ MODERN LLM CHAT INPUT ═══ */
+        #llm-input-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 18px 24px;
+            background: linear-gradient(0deg, rgba(2, 8, 12, 0.98) 50%, rgba(2, 8, 12, 0) 100%);
+            position: relative;
+            z-index: 100;
+        }
+
+        .model-dropdown-container {
+            position: relative;
+            align-self: flex-start;
+            margin-left: 2px;
+        }
+
+        .model-toggle-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(2, 10, 15, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-family: var(--ui);
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--cyan);
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+            backdrop-filter: blur(4px);
+            letter-spacing: 1px;
+        }
+
+        .model-toggle-pill:hover, .model-toggle-pill:focus {
+            background: var(--cyan-d);
+            border-color: var(--cyan);
+            box-shadow: 0 0 12px var(--cyan-g);
+            outline: none;
+        }
+        
+        .model-toggle-pill .chevron {
+            font-size: 0.7rem;
+            margin-left: 2px;
+            opacity: 0.8;
+            transition: transform 0.2s;
+        }
+
+        .model-dropdown-menu.show + .model-toggle-pill .chevron {
+            transform: rotate(180deg);
+        }
+
+        .model-dropdown-menu {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 0;
+            background: rgba(4, 14, 20, 0.96);
+            border: 1px solid var(--cyan);
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px var(--cyan-g);
+            backdrop-filter: blur(10px);
+            width: 280px;
+            opacity: 0;
+            transform: translateY(10px);
+            pointer-events: none;
+            transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+            z-index: 1000;
+            padding: 6px;
+        }
+
+        .model-dropdown-menu.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .model-option {
+            padding: 12px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border: 1px solid transparent;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .model-option:hover {
+            background: rgba(0, 229, 255, 0.08);
+            border-color: rgba(0, 229, 255, 0.2);
+        }
+
+        .model-option.active {
+            background: var(--cyan-d);
+            border-color: var(--cyan);
+        }
+        
+        .model-option .m-name {
+            font-family: var(--ui);
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--white);
+            letter-spacing: 1px;
+        }
+
+        .model-option.active .m-name {
+            color: var(--cyan);
+            text-shadow: 0 0 8px var(--cyan-g);
+        }
+
+        .model-option .m-desc {
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+        }
+
+        /* Update to existing input-bar logic */
+        #input-bar {
+            height: auto;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(4, 14, 20, 0.6);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        #input-bar:focus-within {
+            border-color: var(--cyan);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 0 16px var(--cyan-g);
+            background: rgba(4, 14, 20, 0.85);
+        }
+
+        #input-bar::before {
+            display: none; /* Hide old neon corner */
+        }
+
+        .prompt {
+            color: var(--cyan);
+            font-size: 1.6rem;
+            text-shadow: 0 0 10px var(--cyan-g);
+            display: flex;
+            align-items: center;
+        }
+
+        #query-input {
+            padding: 8px 0;
+            font-size: 1.1rem;
+            line-height: 1.4;
+        }
+
+        #send-btn {
+            background: var(--cyan);
+            border: none;
+            color: #000;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            padding: 0;
+            box-shadow: 0 0 12px var(--cyan-g);
+        }
+
+        #send-btn::after {
+            display: none;
+        }
+
+        #send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            background: #fff;
+            box-shadow: 0 0 16px var(--cyan);
+        }
+
+        #send-btn:disabled {
+            background: rgba(0, 229, 255, 0.15);
+            color: rgba(0, 229, 255, 0.4);
+            box-shadow: none;
+        }
+

@@ -31,6 +31,7 @@
                     <div class="dot"></div> Online
                 </div>
                 <div style="color:var(--muted)">UTC <span id="clock">--:--:--</span></div>
+                
             </div>
         </header>
 
@@ -99,10 +100,36 @@
                 &nbsp;Processing signal...
             </div>
 
-            <div id="input-bar">
-                <span class="prompt">▸</span>
-                <input type="text" id="query-input" placeholder="Enter tactical query..." autocomplete="off">
-                <button id="send-btn">Transmit</button>
+            <div id="llm-input-container">
+                <div class="model-dropdown-container">
+                    <div class="model-toggle-pill" id="custom-model-toggle" tabindex="0">
+                        <span class="model-icon">⬢</span> 
+                        <span id="current-model-display">Qwen 3.5 4B</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="model-dropdown-menu" id="custom-model-dropdown">
+                        <div class="model-option" data-value="qwen3.5:9b">
+                            <div class="m-name">Qwen 3.5 9B</div>
+                            <div class="m-desc">High precision, complex intelligence</div>
+                        </div>
+                        <div class="model-option active" data-value="qwen3.5:4b">
+                            <div class="m-name">Qwen 3.5 4B</div>
+                            <div class="m-desc">Balanced speed & logic</div>
+                        </div>
+                        <div class="model-option" data-value="qwen3.5:0.8b">
+                            <div class="m-name">Qwen 3.5 0.8B</div>
+                            <div class="m-desc">Fastest response, basic logic</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="input-bar">
+                    <span class="prompt">▸</span>
+                    <input type="text" id="query-input" placeholder="Message Agent..." autocomplete="off">
+                    <button id="send-btn" title="Transmit">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -204,9 +231,99 @@
                 elFGpu.style.color = 'var(--muted)';
             }
         }
-        // Fetch on page load and poll every 3 s so the indicator updates live
+        // Fetch GPU on page load and poll every 3 s so the indicator updates live
         fetchGpuStatus();
         setInterval(fetchGpuStatus, 3000);
+
+        /* ═══ CUSTOM MODEL SELECTOR ═══ */
+        const elFModel = document.getElementById('f-model');
+        const elModelToggle = document.getElementById('custom-model-toggle');
+        const elModelDropdown = document.getElementById('custom-model-dropdown');
+        const elModelDisplay = document.getElementById('current-model-display');
+        const modelOptions = document.querySelectorAll('.model-option');
+
+        // Toggle dropdown
+        elModelToggle.addEventListener('click', (e) => {
+            elModelDropdown.classList.toggle('show');
+            e.stopPropagation();
+        });
+        
+        // Close when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!elModelToggle.contains(e.target) && !elModelDropdown.contains(e.target)) {
+                elModelDropdown.classList.remove('show');
+            }
+        });
+
+        // Load current model from API
+        async function loadCurrentModel() {
+            try {
+                const res = await fetch('/models/reasoning');
+                const data = await res.json();
+                if (data.current_model) {
+                    updateUISelection(data.current_model);
+                    updateFooterModel(data.current_model);
+                }
+            } catch (e) {
+                console.warn('Failed to load current model:', e);
+            }
+        }
+
+        function updateFooterModel(modelName) {
+            if (modelName) {
+                elFModel.textContent = modelName + ' + pgvector';
+            } else {
+                elFModel.textContent = 'Awaiting Model... + pgvector';
+            }
+        }
+
+        function updateUISelection(modelValue) {
+            modelOptions.forEach(opt => {
+                if (opt.getAttribute('data-value') === modelValue) {
+                    opt.classList.add('active');
+                    elModelDisplay.textContent = opt.querySelector('.m-name').textContent;
+                } else {
+                    opt.classList.remove('active');
+                }
+            });
+        }
+
+        // Handle option click
+        modelOptions.forEach(opt => {
+            opt.addEventListener('click', async function() {
+                const selectedModel = this.getAttribute('data-value');
+                elModelDropdown.classList.remove('show');
+                
+                // Optimistic UI update
+                const previousModel = elModelDisplay.textContent;
+                updateUISelection(selectedModel);
+
+                try {
+                    const res = await fetch('/models/reasoning', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ model: selectedModel })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        updateFooterModel(selectedModel);
+                        elFStatus.textContent = '// Model Switched';
+                        setTimeout(() => { elFStatus.textContent = '// Standby'; }, 2000);
+                    } else {
+                        console.error('Failed to switch model:', data.message);
+                        loadCurrentModel(); // Revert
+                    }
+                } catch (e) {
+                    console.error('Error switching model:', e);
+                    loadCurrentModel(); // Revert
+                }
+            });
+        });
+
+        // Load model on page init
+        loadCurrentModel();
 
         function esc(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
