@@ -1,5 +1,4 @@
 from unittest.mock import patch, MagicMock, mock_open
-import sys
 
 # Mock settings before app imports to avoid Validation Error
 mock_settings = MagicMock()
