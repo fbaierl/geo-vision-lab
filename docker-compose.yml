@@ -6,13 +6,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [ gpu ]
+    # Apple Silicon (M1/M2/M3): Ollama nutzt automatisch Metal GPU-Beschleunigung
+    # Keine zusätzliche Konfiguration erforderlich
     entrypoint: >
       sh -c "ollama serve &
              sleep 5 &&

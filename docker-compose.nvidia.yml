@@ -1,0 +1,19 @@
+# Docker Compose Override für NVIDIA GPU-Unterstützung (Linux)
+# Verwendung: docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up
+#
+# Voraussetzungen:
+# 1. NVIDIA Treiber installiert
+# 2. NVIDIA Container Toolkit installiert:
+#    https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+# 3. Docker konfigurieren: sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+
+services:
+  ollama:
+    # NVIDIA GPU-Beschleunigung für LLM-Inferenz
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
