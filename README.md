@@ -90,8 +90,8 @@ GeoVision Lab now supports **dynamic switching between different Qwen 3.5 LLM mo
 
 **To switch models:**
 1. Open the Tactical UI at [localhost:8000](http://localhost:8000)
-2. Use the model selector dropdown in the header (top-right)
-3. Select your desired model - the change takes effect immediately
+2. Use the model selector dropdown located just above the chat input field
+3. Select your desired model - the change takes effect immediately (and you will see the model indicator update near the footer)
 
 **Note:** The QA/Reviewer model remains fixed at Qwen 2.5:0.5b for consistent constraint checking.
 

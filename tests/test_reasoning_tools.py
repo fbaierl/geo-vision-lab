@@ -56,7 +56,8 @@ def test_web_search_success(mock_wikipedia_summary):
 
 @patch("app.agents.tools.wikipedia.summary")
 @patch("app.agents.tools.wikipedia.search")
-def test_web_search_page_error_match_found(mock_wikipedia_search, mock_wikipedia_summary):
+@patch("app.agents.tools.wikipedia.page")
+def test_web_search_page_error_match_found(mock_wikipedia_page, mock_wikipedia_search, mock_wikipedia_summary):
     # First call raises PageError (page not found)
     # The summary inside the except block should succeed
     mock_wikipedia_summary.side_effect = [
@@ -64,6 +65,10 @@ def test_web_search_page_error_match_found(mock_wikipedia_search, mock_wikipedia
         "This is a summary of NATO.",
     ]
     mock_wikipedia_search.return_value = ["NATO"]
+    
+    mock_page = MagicMock()
+    mock_page.coordinates = [10.0, 20.0]
+    mock_wikipedia_page.return_value = mock_page
 
     result = web_search.invoke({"query": "NATO_TYPO"})
 

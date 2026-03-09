@@ -10,7 +10,7 @@ client = TestClient(app)
 
 def test_read_root():
     # Make sure we don't actually crash if index.html is missing during tests
-    with patch("builtins.open", mock_open(read_data="<html>UI</html>")):
+    with patch("builtins.open", mock_open(read_data=b"<html>UI</html>")):
         response = client.get("/")
         assert response.status_code == 200
 

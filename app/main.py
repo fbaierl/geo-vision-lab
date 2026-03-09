@@ -19,9 +19,6 @@ app.include_router(models.router, tags=["models"])
 os.makedirs("static", exist_ok=True)
 
 # Mount static files to serve the frontend with no caching
-from fastapi.responses import Response
-from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class NoCacheStaticFiles(StaticFiles):

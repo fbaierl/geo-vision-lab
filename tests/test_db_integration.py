@@ -49,6 +49,11 @@ def test_real_db_ingestion_and_search(postgres_container, monkeypatch):
     # the discovery of one PDF and the load of its text, but we let the rest
     # of app.ingestion.ingest.main() actually execute against the db.
     import app.ingestion.ingest
+    monkeypatch.setattr(app.ingestion.ingest, "settings", settings)
+    
+    import app.services.vector_store
+    monkeypatch.setattr(app.services.vector_store, "settings", settings)
+    
     from app.agents.graph import app_graph
     from langchain_core.messages import HumanMessage
     
@@ -75,7 +80,10 @@ def test_real_db_ingestion_and_search(postgres_container, monkeypatch):
     # inserted into the real test database.
     with patch("app.ingestion.ingest.glob.glob", return_value=["/mock/path/doc.pdf"]):
         with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
-            app.ingestion.ingest.main()
+            with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
+                with patch("app.ingestion.ingest.os.path.exists", return_value=False):
+                    with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
+                        app.ingestion.ingest.main()
     
     # 3. Perform a full agent query using the ACTUAL application LangGraph!
     # The agent will evaluate the question, decide to use vector_search, retrieve the chunks,
@@ -104,34 +112,40 @@ def test_real_db_ingestion_and_search(postgres_container, monkeypatch):
     
     mock_llm_with_tools.invoke.side_effect = [call_1, call_2]
     
-    with patch("app.agents.graph.get_llm", return_value=mock_llm):
-        print("\n\n" + "="*50)
-        print("🧠 BEGIN LANGGRAPH EXECUTION FLOW")
-        print("="*50)
-        
-        # We use .stream() instead of .invoke() so we can print each step as it happens
-        for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
-            for node_name, node_state in event.items():
-                print(f"\n📍 [GRAPH NODE JUMP]: Execution reached node '{node_name}'")
-                
-                if "messages" in node_state and node_state["messages"]:
-                    last_msg = node_state["messages"][-1]
+    mock_reviewer_llm = MagicMock()
+    mock_reviewer_with_structured = MagicMock()
+    mock_reviewer_llm.with_structured_output.return_value = mock_reviewer_with_structured
+    mock_reviewer_with_structured.invoke.return_value = {"is_valid": True, "feedback": "Looks good"}
+    
+    with patch("app.agents.graph.get_reasoning_llm", return_value=mock_llm):
+        with patch("app.agents.graph.get_reviewer_llm", return_value=mock_reviewer_llm):
+            print("\n\n" + "="*50)
+            print("🧠 BEGIN LANGGRAPH EXECUTION FLOW")
+            print("="*50)
+            
+            # We use .stream() instead of .invoke() so we can print each step as it happens
+            for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
+                for node_name, node_state in event.items():
+                    print(f"\n📍 [GRAPH NODE JUMP]: Execution reached node '{node_name}'")
                     
-                    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                        print(f"  ⚡ Action: LLM decided to use tools -> {[t['name'] for t in last_msg.tool_calls]}")
-                    elif last_msg.__class__.__name__ == "ToolMessage":
-                        summary = last_msg.content[:100].replace('\n', ' ') + "..."
-                        print(f"  🛠️ Action: Tool '{last_msg.name}' returned data: {summary}")
-                    else:
-                        print("  ✅ Action: LLM synthesized the final answer.")
-        
-        print("\n" + "="*50)
-        print("🏁 END LANGGRAPH EXECUTION FLOW")
-        print("="*50 + "\n")
-        
-        # After streaming is done, fetch the final state from the checkpointer
-        final_state = app_graph.get_state(config)
-        result = final_state.values
+                    if "messages" in node_state and node_state["messages"]:
+                        last_msg = node_state["messages"][-1]
+                        
+                        if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                            print(f"  ⚡ Action: LLM decided to use tools -> {[t['name'] for t in last_msg.tool_calls]}")
+                        elif last_msg.__class__.__name__ == "ToolMessage":
+                            summary = last_msg.content[:100].replace('\n', ' ') + "..."
+                            print(f"  🛠️ Action: Tool '{last_msg.name}' returned data: {summary}")
+                        else:
+                            print("  ✅ Action: LLM synthesized the final answer.")
+            
+            print("\n" + "="*50)
+            print("🏁 END LANGGRAPH EXECUTION FLOW")
+            print("="*50 + "\n")
+            
+            # After streaming is done, fetch the final state from the checkpointer
+            final_state = app_graph.get_state(config)
+            result = final_state.values
     
     # 4. Assertions
     final_message = result["messages"][-1].content

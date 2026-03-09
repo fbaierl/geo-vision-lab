@@ -20,19 +20,19 @@ def test_should_continue_without_tools():
     state = {"messages": [mock_message]}
     
     result = should_continue(state)
-    assert result == "__end__"
+    assert result == "reviewer"
 
 
 # --- call_model node tests ---
 
-@patch("app.agents.graph.get_llm")
-def test_call_model(mock_get_llm):
+@patch("app.agents.graph.get_reasoning_llm")
+def test_call_model(mock_get_reasoning_llm):
     # Mock LLM and its response
     mock_llm = MagicMock()
     mock_llm_with_tools = MagicMock()
     
     # Setup chain
-    mock_get_llm.return_value = mock_llm
+    mock_get_reasoning_llm.return_value = mock_llm
     mock_llm.bind_tools.return_value = mock_llm_with_tools
     
     # Mock response

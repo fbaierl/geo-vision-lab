@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from pydantic import BaseModel

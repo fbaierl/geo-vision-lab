@@ -34,7 +34,7 @@ def web_search(query: str) -> str:
             page = wikipedia.page(query, auto_suggest=False)
             coords = page.coordinates
             coord_str = f"Coordinates: {coords[0]}, {coords[1]}\n" if coords else ""
-        except:
+        except Exception:
             coord_str = ""
             
         results = wikipedia.summary(query, sentences=4)

@@ -1,6 +1,5 @@
 from unittest.mock import patch, MagicMock, mock_open
 import sys
-import os
 
 # Mock settings before app imports to avoid Validation Error
 mock_settings = MagicMock()
@@ -8,11 +7,9 @@ mock_settings.CHUNK_SIZE = 1000
 mock_settings.CHUNK_OVERLAP = 200
 mock_settings.DATABASE_URL = "mock-db-url"
 mock_settings.VECTOR_COLLECTION_NAME = "mock-collection"
-mock_settings.EMBEDDING_MODEL_NAME = "mock-embedding-model"
+mock_settings.EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
-# Mock the entire vector_store module before importing ingest
-# This prevents HuggingFaceEmbeddings() from executing at import-time
-sys.modules["app.services.vector_store"] = MagicMock()
+# We will patch specific components inside the test functions instead of mutating sys.modules.
 
 with patch("app.core.config.settings", mock_settings):
     from app.ingestion.ingest import main
