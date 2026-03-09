@@ -15,16 +15,20 @@ with patch("app.core.config.settings", mock_settings):
 
 @patch("app.ingestion.ingest.glob.glob")
 @patch("app.ingestion.ingest.PyPDFLoader")
+@patch("app.ingestion.ingest.TextLoader")
 @patch("app.ingestion.ingest.PGVector")
 @patch("app.ingestion.ingest.compute_files_hash")
 @patch("os.path.exists")
 @patch("builtins.open", new_callable=mock_open)
-def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_pg_vector, mock_pdf_loader, mock_glob):
-    # Setup mocks
-    mock_glob.return_value = ["/mock/path/doc.pdf"]
+def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_pg_vector, mock_md_loader, mock_pdf_loader, mock_glob):
+    # Setup mocks - glob is called twice (once for PDF, once for MD)
+    mock_glob.side_effect = [
+        ["/mock/path/doc.pdf"],  # PDF pattern
+        []  # MD pattern (empty for this test)
+    ]
     mock_hash.return_value = "new_hash_123"
     mock_exists.return_value = False  # Simulate HASH_FILE does not exist
-    
+
     # Mock PDF loader
     mock_loader_instance = MagicMock()
     mock_doc = MagicMock()
@@ -33,17 +37,19 @@ def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_pg_v
     mock_doc.metadata = {}
     mock_loader_instance.load.return_value = [mock_doc]
     mock_pdf_loader.return_value = mock_loader_instance
-    
+
     # Run pipeline
     main()
+
+    # Assertions - glob is called twice now
+    assert mock_glob.call_count == 2
     
-    # Assertions
-    mock_glob.assert_called_once()
+    # Verify PDF loader was called
     mock_pdf_loader.assert_called_once_with("/mock/path/doc.pdf")
-    
+
     # Verify vector store insertion was called
     mock_pg_vector.from_documents.assert_called_once()
-    
+
     # Check if null byte was sanitized in the splits passed to PGVector
     call_kwargs = mock_pg_vector.from_documents.call_args.kwargs
     documents = call_kwargs.get("documents", [])
@@ -51,10 +57,11 @@ def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_pg_v
     assert documents[0].page_content == "This is a  mock PDF document."
 
 @patch("app.ingestion.ingest.glob.glob")
-def test_ingestion_pipeline_no_pdfs(mock_glob):
-    mock_glob.return_value = []
-    
+def test_ingestion_pipeline_no_files(mock_glob):
+    # glob is called twice - both return empty
+    mock_glob.side_effect = [[], []]
+
     main()
-    
-    mock_glob.assert_called_once()
-    # It should exit gracefully if no PDFs are found
+
+    assert mock_glob.call_count == 2
+    # It should exit gracefully if no files are found

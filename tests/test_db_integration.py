@@ -78,12 +78,13 @@ def test_real_db_ingestion_and_search(postgres_container, monkeypatch):
     # We execute the actual application ingestion logic!
     # With CHUNK_SIZE=100 and CHUNK_OVERLAP=20, this will create multiple chunks
     # inserted into the real test database.
-    with patch("app.ingestion.ingest.glob.glob", return_value=["/mock/path/doc.pdf"]):
+    with patch("app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]):
         with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
-            with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
-                with patch("app.ingestion.ingest.os.path.exists", return_value=False):
-                    with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
-                        app.ingestion.ingest.main()
+            with patch("app.ingestion.ingest.TextLoader"):
+                with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
+                    with patch("app.ingestion.ingest.os.path.exists", return_value=False):
+                        with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
+                            app.ingestion.ingest.main()
     
     # 3. Perform a full agent query using the ACTUAL application LangGraph!
     # The agent will evaluate the question, decide to use vector_search, retrieve the chunks,

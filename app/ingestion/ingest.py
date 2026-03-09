@@ -2,7 +2,7 @@ import os
 import glob
 import logging
 import hashlib
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredMarkdownLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_postgres import PGVector
 
@@ -75,7 +75,7 @@ def main():
     md_docs = []
     for md_path in md_files:
         logger.info(f"[LOAD] Loading MD: {md_path}")
-        loader = UnstructuredMarkdownLoader(md_path)
+        loader = TextLoader(md_path)
         docs = loader.load()
         md_docs.extend(docs)
 

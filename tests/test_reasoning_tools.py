@@ -19,16 +19,13 @@ def test_vector_search_success(mock_get_vector_store):
 
     result = vector_search.invoke({"query": "Cold War"})
 
-    assert isinstance(result, dict)
-    assert "text" in result
-    assert "citations" in result
-    assert "ARCHIVAL INTELLIGENCE REPORT:" in result["text"]
-    assert "Historical event 1 details." in result["text"]
-    assert "Historical event 2 details." in result["text"]
-    assert len(result["citations"]) == 2
-    assert result["citations"][0]["type"] == "pdf"
-    assert result["citations"][0]["source"] == "report_2023.pdf"
-    assert result["citations"][0]["page"] == 12
+    assert isinstance(result, str)
+    assert "ARCHIVAL INTELLIGENCE REPORT:" in result
+    assert "Historical event 1 details." in result
+    assert "Historical event 2 details." in result
+    assert "CITATIONS_START" in result
+    assert "CITATION:pdf:report_2023.pdf:12:" in result
+    assert "CITATION:pdf:report_2023.pdf:15:" in result
     mock_store.similarity_search.assert_called_once_with("Cold War", k=3)
 
 @patch("app.agents.tools.get_vector_store")
@@ -39,9 +36,8 @@ def test_vector_search_no_results(mock_get_vector_store):
 
     result = vector_search.invoke({"query": "Nonexistent Event"})
 
-    assert isinstance(result, dict)
-    assert result["text"] == "No archival data found in historical intelligence database."
-    assert result["citations"] == []
+    assert isinstance(result, str)
+    assert result == "NO_CITATIONS\nNo archival data found in historical intelligence database."
 
 @patch("app.agents.tools.get_vector_store")
 def test_vector_search_error(mock_get_vector_store):
@@ -49,9 +45,9 @@ def test_vector_search_error(mock_get_vector_store):
 
     result = vector_search.invoke({"query": "Cold War"})
 
-    assert isinstance(result, dict)
-    assert "Error accessing vector database: DB Connection Error" in result["text"]
-    assert result["citations"] == []
+    assert isinstance(result, str)
+    assert "NO_CITATIONS" in result
+    assert "Error accessing vector database: DB Connection Error" in result
 
 
 # --- web_search tests ---
@@ -62,14 +58,11 @@ def test_web_search_success(mock_wikipedia_summary):
 
     result = web_search.invoke({"query": "NATO"})
 
-    assert isinstance(result, dict)
-    assert "text" in result
-    assert "citations" in result
-    assert "LIVE WEB INTELLIGENCE:" in result["text"]
-    assert "This is a summary of NATO." in result["text"]
-    assert len(result["citations"]) == 1
-    assert result["citations"][0]["type"] == "wikipedia"
-    assert result["citations"][0]["source"] == "NATO"
+    assert isinstance(result, str)
+    assert "LIVE WEB INTELLIGENCE:" in result
+    assert "This is a summary of NATO." in result
+    assert "CITATIONS_START" in result
+    assert "CITATION:wikipedia:NATO:" in result
     mock_wikipedia_summary.assert_called_once_with("NATO", sentences=4)
 
 
@@ -87,15 +80,16 @@ def test_web_search_page_error_match_found(mock_wikipedia_page, mock_wikipedia_s
 
     mock_page = MagicMock()
     mock_page.coordinates = [10.0, 20.0]
+    mock_page.url = "https://en.wikipedia.org/wiki/NATO"
     mock_wikipedia_page.return_value = mock_page
 
     result = web_search.invoke({"query": "NATO_TYPO"})
 
-    assert isinstance(result, dict)
-    assert "LIVE WEB INTELLIGENCE (closest match: NATO):" in result["text"]
-    assert "This is a summary of NATO." in result["text"]
-    assert len(result["citations"]) == 1
-    assert result["citations"][0]["source"] == "NATO"
+    assert isinstance(result, str)
+    assert "LIVE WEB INTELLIGENCE (closest match: NATO):" in result
+    assert "This is a summary of NATO." in result
+    assert "CITATIONS_START" in result
+    assert "CITATION:wikipedia:NATO:" in result
     mock_wikipedia_search.assert_called_once_with("NATO_TYPO", results=3)
 
 
@@ -107,9 +101,8 @@ def test_web_search_page_error_no_match(mock_wikipedia_search, mock_wikipedia_su
 
     result = web_search.invoke({"query": "Unknown_Topic_XYZ"})
 
-    assert isinstance(result, dict)
-    assert result["text"] == "No Wikipedia article found for 'Unknown_Topic_XYZ'."
-    assert result["citations"] == []
+    assert isinstance(result, str)
+    assert result == "NO_CITATIONS\nNo Wikipedia article found for 'Unknown_Topic_XYZ'."
 
 
 @patch("app.agents.tools.wikipedia.summary")
@@ -121,11 +114,11 @@ def test_web_search_disambiguation_error(mock_wikipedia_summary):
 
     result = web_search.invoke({"query": "Mercury"})
 
-    assert isinstance(result, dict)
-    assert "LIVE WEB INTELLIGENCE (resolved: Mercury (planet)):" in result["text"]
-    assert "This is a summary about Mercury the planet." in result["text"]
-    assert len(result["citations"]) == 1
-    assert result["citations"][0]["source"] == "Mercury (planet)"
+    assert isinstance(result, str)
+    assert "LIVE WEB INTELLIGENCE (resolved: Mercury (planet)):" in result
+    assert "This is a summary about Mercury the planet." in result
+    assert "CITATIONS_START" in result
+    assert "CITATION:wikipedia:Mercury (planet):" in result
 
 
 # --- duckduckgo_search tests ---
@@ -136,14 +129,11 @@ def test_duckduckgo_search_success(mock_ddg_run):
 
     result = duckduckgo_search.invoke({"query": "Space news"})
 
-    assert isinstance(result, dict)
-    assert "text" in result
-    assert "citations" in result
-    assert "LIVE WEB SEARCH RESULTS:" in result["text"]
-    assert "Recent news about space exploration." in result["text"]
-    assert len(result["citations"]) == 1
-    assert result["citations"][0]["type"] == "web"
-    assert result["citations"][0]["source"] == "DuckDuckGo"
+    assert isinstance(result, str)
+    assert "LIVE WEB SEARCH RESULTS:" in result
+    assert "Recent news about space exploration." in result
+    assert "CITATIONS_START" in result
+    assert "CITATION:web:DuckDuckGo:Space news:" in result
     mock_ddg_run.assert_called_once_with("Space news")
 
 
@@ -153,6 +143,6 @@ def test_duckduckgo_search_error(mock_ddg_run):
 
     result = duckduckgo_search.invoke({"query": "Space news"})
 
-    assert isinstance(result, dict)
-    assert "Failed to retrieve duckduckgo web information on 'Space news'. Error: Rate limit exceeded" in result["text"]
-    assert result["citations"] == []
+    assert isinstance(result, str)
+    assert "NO_CITATIONS" in result
+    assert "Failed to retrieve duckduckgo web information on 'Space news'. Error: Rate limit exceeded" in result

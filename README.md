@@ -94,7 +94,7 @@ GeoVision Lab now supports **dynamic switching between different Qwen 3.5 LLM mo
 2. Use the model selector dropdown located just above the chat input field
 3. Select your desired model - the change takes effect immediately (and you will see the model indicator update near the footer)
 
-**Note:** The QA/Reviewer model remains fixed at Qwen 2.5:0.5b for consistent constraint checking.
+**Note:** The QA/Reviewer model is fixed at Qwen 3.5:0.8B for consistent constraint checking.
 
 ### Prerequisites
 
