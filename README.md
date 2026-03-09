@@ -78,6 +78,69 @@ graph TD
 
 ## Quick Start
 
+### 🚀 Schnellstart mit automatischer Hardware-Erkennung
+
+GeoVision Lab unterstützt **automatische Hardware-Erkennung** für optimale Performance auf verschiedenen Plattformen:
+
+```bash
+# Interaktiver Modus mit Menü
+./start.sh
+
+# Oder automatisch erkennen lassen
+./start.sh auto
+```
+
+### Plattform-spezifische Anleitung
+
+#### Apple Silicon (M1/M2/M3) - macOS
+
+```bash
+# Empfohlen: Startskript verwenden
+./start.sh apple
+
+# Oder manuell mit Docker Compose
+docker compose up --build
+```
+
+**Hinweis:** Ollama nutzt automatisch die **Metal GPU-Beschleunigung** auf Apple Silicon. Keine zusätzliche Konfiguration erforderlich.
+
+#### NVIDIA GPU - Linux
+
+```bash
+# Empfohlen: Startskript verwenden
+./start.sh nvidia
+
+# Oder manuell mit Docker Compose (mit NVIDIA Override)
+docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up --build
+```
+
+**Voraussetzungen für NVIDIA:**
+1. NVIDIA Treiber installiert
+2. **NVIDIA Container Toolkit** installieren:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install -y nvidia-container-toolkit
+   sudo nvidia-ctk runtime configure --runtime=docker
+   sudo systemctl restart docker
+   ```
+3. GPU-Verfügbarkeit testen:
+   ```bash
+   docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
+   ```
+
+#### CPU-Only (Fallback)
+
+```bash
+# Funktioniert auf allen Plattformen (langsamer)
+./start.sh cpu
+
+# Oder manuell
+docker compose up --build
+```
+
+---
+
 ### LLM Model Switching
 
 GeoVision Lab now supports **dynamic switching between different Qwen 3.5 LLM models** for reasoning tasks:
@@ -97,23 +160,7 @@ GeoVision Lab now supports **dynamic switching between different Qwen 3.5 LLM mo
 
 ### Prerequisites
 
-- **Docker** and **Docker Compose**
-
-#### GPU Acceleration (optional but recommended)
-
-You can run the stack in CPU-only mode, but an NVIDIA GPU vastly accelerates LLM inference in the Ollama container.
-
-1. Ensure NVIDIA drivers are installed.
-2. Install the **NVIDIA Container Toolkit** for your OS ([Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
-3. Configure Docker to use the NVIDIA runtime:
-   ```bash
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker
-   ```
-4. Check visibility:
-   ```bash
-   docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
-   ```
+- **Docker** und **Docker Compose**
 
 ### 1. Add your documents
 
@@ -121,8 +168,10 @@ Place PDF files into the `./documents/pdf/` directory. These are your source mat
 
 ### 2. Launch the Stack
 
+See platform-specific commands above, or simply run:
+
 ```bash
-docker compose up --build
+./start.sh auto
 ```
 
 This command seamlessly orchestrates the PostgreSQL database, pulls the LLM, chunks and ingests your documents, runs database migrations to build the HNSW index, boots the core web application, and starts all observability tooling.

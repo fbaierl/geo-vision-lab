@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # --- LLM & Embedding ---
+    OLLAMA_HOST: str = "http://geovision-ollama:11434"  # For compatibility
     OLLAMA_BASE_URL: str = "http://geovision-ollama:11434"
     LLM_MODEL_NAME: str = "qwen3.5:4b"
     REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
@@ -43,6 +44,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore unknown env variables
 
     def set_reasoning_model(self, model_name: str) -> bool:
         """Update the reasoning model name at runtime."""
