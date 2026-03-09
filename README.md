@@ -101,18 +101,16 @@ GeoVision Lab now supports **dynamic switching between different Qwen 3.5 LLM mo
 
 #### GPU Acceleration (optional but recommended)
 
-You can run the stack in CPU-only mode, but an NVIDIA GPU vastly accelerates LLM inference in the Ollama container.
+You can run the stack in CPU-only mode (default), but an NVIDIA GPU vastly accelerates LLM inference in the Ollama container.
 
-1. Ensure NVIDIA drivers are installed.
-2. Install the **NVIDIA Container Toolkit** for your OS ([Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
-3. Configure Docker to use the NVIDIA runtime:
-   ```bash
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker
+1. Ensure NVIDIA drivers and the **NVIDIA Container Toolkit** are installed.
+2. To enable GPU acceleration, edit the `.env` file in the root directory:
+   ```env
+   GPU_COUNT=all
    ```
-4. Check visibility:
+3. Restart the stack:
    ```bash
-   docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
+   docker compose up --build
    ```
 
 ### 1. Add your documents

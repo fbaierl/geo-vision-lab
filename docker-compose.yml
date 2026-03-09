@@ -11,8 +11,9 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: ${GPU_COUNT:-0}
               capabilities: [ gpu ]
+
     entrypoint: >
       sh -c "ollama serve &
              sleep 5 &&
