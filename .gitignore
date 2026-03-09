@@ -27,3 +27,6 @@ htmlcov/
 
 # VSCode
 .vscode/
+
+# Ignore ingestion hash file
+.ingest_hash
