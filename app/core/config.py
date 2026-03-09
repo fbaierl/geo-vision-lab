@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://geovision-ollama:11434"
     LLM_MODEL_NAME: str = "qwen3.5:4b"
     REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
-    REVIEWER_LLM_MODEL_NAME: str = "qwen2.5:0.5b"  # Fixed for QA
+    REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:0.8b"  # Fixed for QA/Review
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
     # --- Available Reasoning Models ---

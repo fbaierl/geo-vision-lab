@@ -30,7 +30,7 @@ GeoVision Lab utilizes a hybrid RAG approach, maintaining conversational memory 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | **Primary LLM** | Ollama + Qwen 3.5 (switchable: 9B, 4B, 0.8B) | Core analysis, reasoning, and response generation |
-| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Dedicated "Critic" agent checking map constraints before output |
+| **QA/Review LLM** | Ollama + Qwen 3.5:0.8B | Dedicated "Critic" agent checking map constraints before output |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization for semantic search |
 | **Vector DB** | PostgreSQL + pgvector | Document storage with HNSW index for fast similarity search |
 | **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination, web/vector search routing, and conversation memory |
