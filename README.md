@@ -142,12 +142,51 @@ Once everything is running, access the services:
 
 ## Testing & Validation
 
+### Unit Tests
+
+GeoVision Lab includes comprehensive unit tests for the agent tools and database integration.
+
+**⚠️ Important:** If you see permission errors like `Permission denied: '.pytest_cache'`, fix them first:
+
+```bash
+# Fix cache permissions (run once if you see permission errors)
+sudo chown -R $USER:$USER .pytest_cache __pycache__ app/__pycache__ 2>/dev/null || true
+```
+
+**Run all tests:**
+```bash
+source .venv/bin/activate
+python -m pytest tests/ -v
+```
+
+**Run specific test file:**
+```bash
+source .venv/bin/activate
+python -m pytest tests/test_reasoning_tools.py -v
+```
+
+**Run tests with coverage:**
+```bash
+source .venv/bin/activate
+python -m pytest tests/ --cov=app --cov-report=term-missing
+```
+
+**Run tests in Docker (isolated environment):**
+```bash
+docker compose run --rm app python -m pytest tests/ -v
+```
+
+📖 **See [Testing Guide](docs/TESTING_GUIDE.md)** for detailed troubleshooting and advanced testing options.
+
+### Manual Verification
+
 To verify the components are working:
 
 1. **Ingestion Verification**: Add a test PDF to `./documents/pdf/`, run `docker compose up --build`, and check the Dozzle logs for `geovision-app` to confirm embedding vectorization.
 2. **Archival Vector Search**: In the Terminal UI, ask a query related to your specific PDF documentation. Watch the trail steps to see the `vector_search` tool triggered.
 3. **Live Open-Source Intel**: Ask about a current breaking news topic to verify `duckduckgo_search` tool execution.
 4. **Time Awareness**: Ask "What exact date and time is it right now?" to see dynamic context injection.
+5. **Citation Display**: After running vector or web searches, check that citation badges appear in the activity trail (e.g., `[📄 Report_2023.pdf, p.12]` or `[🌐 Wikipedia: "NATO"]`). Hover over badges to see source snippets.
 
 ---
 
@@ -177,3 +216,5 @@ To verify the components are working:
 
 - [**Database Migrations (Alembic) Guide**](docs/database_migrations.md)
 - [**Debugging Guide**](docs/debugging.md)
+- [**Testing Guide**](docs/TESTING_GUIDE.md) — How to run tests and fix permission issues
+- [**Enhanced Logging**](docs/ENHANCED_LOGGING.md) — Real-time agent reasoning visibility in Dozzle

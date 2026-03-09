@@ -1,9 +1,12 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from functools import lru_cache
 from typing import Optional
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(extra='ignore')
+    
     # --- App Info ---
     APP_NAME: str = "GeoVision Lab"
     DEBUG: bool = False
@@ -39,10 +42,6 @@ class Settings(BaseSettings):
     # --- Security ---
     SECRET_KEY: str = "changeme_in_production"
     API_KEY: Optional[str] = None
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
     def set_reasoning_model(self, model_name: str) -> bool:
         """Update the reasoning model name at runtime."""

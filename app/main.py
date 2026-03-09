@@ -1,10 +1,26 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api.routes import chat, health, models
+
+# Configure logging for visibility in Dozzle
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Set specific log levels for different components
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("geovision_api").setLevel(logging.INFO)
+logging.getLogger("agent_flow").setLevel(logging.INFO)
+
+logger = logging.getLogger("geovision_main")
+logger.info("▸ GeoVision Lab starting...")
 
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
 

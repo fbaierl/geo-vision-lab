@@ -58,9 +58,8 @@ logger = logging.getLogger("agent_flow")
 def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
     last_message = state["messages"][-1]
     if getattr(last_message, "tool_calls", None):
-        logger.debug(
-            f"[AGENT LOG] Transitioning to 'tools' node. Tools requested: {last_message.tool_calls}"
-        )
+        tool_names = [tc.get("name", "unknown") for tc in last_message.tool_calls]
+        logger.debug(f"[AGENT LOG] Transitioning to 'tools' node. Tools requested: {tool_names}")
         return "tools"
     logger.debug("[AGENT LOG] Transitioning to 'reviewer'.")
     return "reviewer"
@@ -79,6 +78,14 @@ def call_model(state: AgentState):
     )
     logger.debug(f"[AGENT LOG] Invoking LLM with {len(messages)} messages.")
     response = llm_with_tools.invoke(messages)
+    
+    # Log what the agent decided to do
+    if hasattr(response, "tool_calls") and response.tool_calls:
+        tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+        logger.info(f"  ┝━ [AGENT DECISION] Using tools: {', '.join(tool_names)}")
+    else:
+        logger.info("  ┝━ [AGENT DECISION] Generating final response")
+    
     logger.debug("[AGENT LOG] LLM responded.")
     return {"messages": [response]}
 
@@ -86,22 +93,24 @@ def call_model(state: AgentState):
 def review_response(state: AgentState, config: RunnableConfig):
     logger.debug("[AGENT LOG] Entering 'review_response' node.")
     llm = get_reviewer_llm()
-    
+
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
-    
+
     last_message = state["messages"][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else str(last_message)
-    
+
 
     formatted_prompt = critic_prompt.format(user_query=user_query, assistant_response=assistant_response)
     response = llm.with_config({"tags": ["reviewer"]}).invoke([SystemMessage(content=formatted_prompt)], config=config)
     content = response.content.strip() if hasattr(response, "content") else str(response).strip()
-    
+
     if content.startswith("VALID"):
+        logger.info("  ┝━ [QA REVIEW] ✓ Response validated successfully")
         logger.debug("[AGENT LOG] Validation passed.")
         return {"is_valid": True, "validation_attempts": 1}
     else:
+        logger.info(f"  ┝━ [QA REVIEW] ✗ Response rejected: {content[:100]}{'...' if len(content) > 100 else ''}")
         logger.debug(f"[AGENT LOG] Validation failed: {content}")
         return {
             "is_valid": False,
@@ -155,21 +164,72 @@ def _format_blocks(text: str) -> list[str]:
     clean_text = re.sub(r"^ARCHIVAL INTELLIGENCE REPORT:\n*", "", text, flags=re.IGNORECASE)
     clean_text = re.sub(r"^LIVE WEB INTELLIGENCE(?: \(.*?\))?:\n*", "", clean_text, flags=re.IGNORECASE)
     clean_text = re.sub(r"^LIVE WEB SEARCH RESULTS:\n*", "", clean_text, flags=re.IGNORECASE)
-    
+
     if "\n\n" in clean_text:
         blocks = [b.strip() for b in clean_text.split("\n\n") if b.strip()]
     else:
         blocks = [b.strip() for b in clean_text.split("\n") if b.strip()]
-        
+
     return blocks if blocks else [text]
 
-def _summarise_tool_output(output) -> str:
-    """Create a short summary of tool output for the activity trail."""
-    text = output.content if hasattr(output, "content") else str(output)
-    if not text or "Error" in text:
-        return "No results found"
+
+def _parse_citations(text: str) -> tuple[str, list[dict]]:
+    """
+    Parse citation markers from tool output text.
+    Returns (cleaned_text, citations_list)
     
-    blocks = _format_blocks(text)
+    Format: CITATIONS_START
+            CITATION:type:source:details:snippet
+            CITATIONS_END
+    """
+    citations = []
+    clean_text = text
+    
+    # Check if we have citations
+    if "CITATIONS_START" in text and "CITATIONS_END" in text:
+        # Extract citations block
+        start_idx = text.find("CITATIONS_START") + len("CITATIONS_START")
+        end_idx = text.find("CITATIONS_END")
+        citations_block = text[start_idx:end_idx].strip()
+        
+        # Remove citations block from text
+        clean_text = text.replace(f"CITATIONS_START\n{citations_block}\nCITATIONS_END\n", "")
+        clean_text = clean_text.replace("CITATIONS_START\nNO_CITATIONS\n", "")
+        clean_text = re.sub(r"^NO_CITATIONS\n", "", clean_text)
+        
+        # Parse each citation line
+        for line in citations_block.split("\n"):
+            if line.startswith("CITATION:"):
+                parts = line.split(":", 4)
+                if len(parts) >= 4:
+                    cit_type = parts[1]
+                    source = parts[2]
+                    details = parts[3]
+                    snippet = parts[4] if len(parts) > 4 else ""
+                    
+                    citation = {
+                        "type": cit_type,
+                        "source": source,
+                        "snippet": snippet
+                    }
+                    
+                    if cit_type == "pdf":
+                        citation["page"] = details
+                    elif cit_type == "wikipedia" and details != "N/A":
+                        citation["url"] = details
+                    elif cit_type == "web":
+                        citation["query"] = details
+                    
+                    citations.append(citation)
+    
+    return clean_text, citations
+
+def _summarise_tool_output(text) -> str:
+    """Create a short summary of tool output for the activity trail."""
+    if not text or "Error" in str(text):
+        return "No results found"
+
+    blocks = _format_blocks(str(text))
     return f"Retrieved {len(blocks)} text block{'s' if len(blocks) != 1 else ''}"
 
 
@@ -177,9 +237,10 @@ async def process_query_stream(
     user_query: str, thread_id: str = "default"
 ) -> AsyncGenerator[dict, None]:
     """Yields dicts with type: 'status'|'tool_result'|'token'|'done'|'error'"""
-    logger.info(
-        f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'"
-    )
+    logger.info(f"\n{'='*60}")
+    logger.info(f"▸ NEW QUERY: '{user_query[:100]}{'...' if len(user_query) > 100 else ''}' [thread={thread_id}]")
+    logger.info(f"{'='*60}")
+    
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False
@@ -217,12 +278,23 @@ async def process_query_stream(
         elif kind == "on_tool_end":
             tool_name = event.get("name", "unknown")
             output = event.get("data", {}).get("output", "")
-            text = output.content if hasattr(output, "content") else str(output)
+            
+            # Get text from output
+            text = ""
+            if hasattr(output, "content"):
+                text = str(output.content)
+            else:
+                text = str(output)
+            
+            # Parse citations from text
+            clean_text, citations = _parse_citations(text)
+            
             yield {
                 "type": "tool_result",
                 "tool": tool_name,
-                "summary": _summarise_tool_output(output),
-                "content": text,
+                "summary": _summarise_tool_output(clean_text),
+                "content": clean_text,
+                "citations": citations,
             }
 
         elif kind == "on_chat_model_end":

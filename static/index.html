@@ -407,52 +407,79 @@
 
         let modalBlocks = [];
         let modalCurrentIndex = 0;
+        let modalCitations = [];
 
-        function openModal(title, content) {
+        function openModal(title, content, citations = []) {
             elModalTitle.textContent = title;
-            
+
+            // Handle case where content might be an object
+            let contentStr = content;
+            if (typeof content === 'object') {
+                contentStr = JSON.stringify(content, null, 2);
+            }
+
+            // Store citations for display
+            modalCitations = citations || [];
+
             // Format and split content into blocks, ONLY if it is an intel report.
-            let isIntel = content.match(/^(?:ARCHIVAL INTELLIGENCE REPORT|LIVE WEB INTELLIGENCE|LIVE WEB SEARCH RESULTS)/i) 
+            let isIntel = contentStr.match(/^(?:ARCHIVAL INTELLIGENCE REPORT|LIVE WEB INTELLIGENCE|LIVE WEB SEARCH RESULTS)/i)
                           || title.toLowerCase().includes("text block");
-            
+
             if (isIntel) {
-                let cleanContent = content.replace(/^ARCHIVAL INTELLIGENCE REPORT:\n*/i, '')
+                let cleanContent = contentStr.replace(/^ARCHIVAL INTELLIGENCE REPORT:\n*/i, '')
                                           .replace(/^LIVE WEB INTELLIGENCE(?: \(.*?\))?:\n*/i, '')
                                           .replace(/^LIVE WEB SEARCH RESULTS:\n*/i, '');
-                                          
+
                 if (cleanContent.includes('\n\n')) {
                     modalBlocks = cleanContent.split('\n\n').map(b => b.trim()).filter(b => b);
                 } else {
                     modalBlocks = cleanContent.split('\n').map(b => b.trim()).filter(b => b);
                 }
-                if (modalBlocks.length === 0) modalBlocks = [content];
+                if (modalBlocks.length === 0) modalBlocks = [contentStr];
             } else {
-                modalBlocks = [content];
+                modalBlocks = [contentStr];
             }
-            
+
             modalCurrentIndex = 0;
             renderModalBlock();
-            
+
             elModal.classList.add('open');
             elModalBody.scrollTop = 0;
         }
         
         function renderModalBlock() {
+            // Build citations HTML if we have any
+            let citationsHtml = '';
+            if (modalCitations && modalCitations.length > 0 && modalCurrentIndex === 0) {
+                citationsHtml = '<div class="modal-citations-section"><div class="modal-section-title">▸ SOURCES & CITATIONS</div><table class="modal-citations-table"><thead><tr><th>Type</th><th>Source</th><th>Details</th></tr></thead><tbody>';
+                modalCitations.forEach(cit => {
+                    const icon = cit.type === 'pdf' ? '📄' : cit.type === 'wikipedia' ? '🌐' : '🔍';
+                    const typeLabel = cit.type.toUpperCase();
+                    const source = cit.source || 'Unknown';
+                    const details = [];
+                    if (cit.page) details.push(`Page ${cit.page}`);
+                    if (cit.url) details.push(`<a href="${cit.url}" target="_blank" style="color:var(--cyan);">Link</a>`);
+                    if (cit.query) details.push(`Query: ${cit.query}`);
+                    citationsHtml += `<tr><td>${icon} ${typeLabel}</td><td>${esc(source)}</td><td>${details.join(' • ') || '—'}</td></tr>`;
+                });
+                citationsHtml += '</tbody></table></div>';
+            }
+
             if (modalBlocks.length <= 1) {
-                elModalBody.innerHTML = `<div style="white-space: pre-wrap; font-family: inherit;">${esc(modalBlocks[0])}</div>`;
+                elModalBody.innerHTML = citationsHtml + `<div class="modal-content-block"><div style="white-space: pre-wrap; font-family: inherit; line-height: 1.6;">${esc(modalBlocks[0])}</div></div>`;
             } else {
                 const btnPrevStyle = `background:var(--bg-panel); color:var(--cyan); border:1px solid var(--cyan); padding:4px 10px; font-family:'Share Tech Mono', monospace; cursor:${modalCurrentIndex === 0 ? 'not-allowed' : 'pointer'}; opacity: ${modalCurrentIndex === 0 ? '0.4' : '1'}; transition: opacity 0.2s;`;
                 const btnNextStyle = `background:var(--bg-panel); color:var(--cyan); border:1px solid var(--cyan); padding:4px 10px; font-family:'Share Tech Mono', monospace; cursor:${modalCurrentIndex === modalBlocks.length - 1 ? 'not-allowed' : 'pointer'}; opacity: ${modalCurrentIndex === modalBlocks.length - 1 ? '0.4' : '1'}; transition: opacity 0.2s;`;
-                
-                elModalBody.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
+
+                elModalBody.innerHTML = citationsHtml + `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 15px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
                         <button id="car-prev" style="${btnPrevStyle}" ${modalCurrentIndex === 0 ? 'disabled' : ''}>◀ Prev</button>
                         <span style="font-family: 'Share Tech Mono', monospace; font-size: 0.9em; color: var(--cyan);">BLOCK ${modalCurrentIndex + 1} OF ${modalBlocks.length}</span>
                         <button id="car-next" style="${btnNextStyle}" ${modalCurrentIndex === modalBlocks.length - 1 ? 'disabled' : ''}>Next ▶</button>
                     </div>
-                    <div style="white-space: pre-wrap; font-family: inherit; line-height: 1.5; color: var(--text-color);">${esc(modalBlocks[modalCurrentIndex])}</div>
+                    <div class="modal-content-block" style="white-space: pre-wrap; font-family: inherit; line-height: 1.6; color: var(--text-color);">${esc(modalBlocks[modalCurrentIndex])}</div>
                 `;
-                
+
                 const btnPrev = document.getElementById('car-prev');
                 const btnNext = document.getElementById('car-next');
                 if (btnPrev) btnPrev.addEventListener('click', () => {
@@ -483,6 +510,54 @@
                 (content ? ' <span class="trail-expand">[view]</span>' : '');
             if (content) {
                 res.addEventListener('click', () => openModal('Intel Report — ' + esc(summary), content));
+            }
+            return res;
+        }
+
+        function createTrailResultWithCitations(summary, content, citations) {
+            const res = document.createElement('div');
+            res.className = 'trail-result citations-available' + (content ? ' has-content' : '');
+
+            let html = `<span>↳</span> <span>${esc(summary)}</span>`;
+
+            if (content) {
+                html += ' <span class="trail-expand">[view]</span>';
+            }
+
+            // Add citation badges
+            if (citations && citations.length > 0) {
+                html += '<div class="trail-result-citations">';
+                citations.forEach(cit => {
+                    const icon = cit.type === 'pdf' ? '📄' : cit.type === 'wikipedia' ? '🌐' : '🔍';
+                    const typeClass = `type-${cit.type}`;
+                    const sourceText = cit.type === 'pdf' ? `${cit.source}, p.${cit.page}` : cit.source;
+
+                    html += `
+                        <div class="citation-badge ${typeClass}">
+                            <span class="citation-icon">${icon}</span>
+                            <span class="citation-text">${esc(sourceText)}</span>
+                            <div class="citation-tooltip">
+                                <div class="citation-tooltip-header">
+                                    <span class="citation-tooltip-icon">${icon}</span>
+                                    <span class="citation-tooltip-title">${esc(cit.type.toUpperCase())} SOURCE</span>
+                                </div>
+                                <div class="citation-tooltip-snippet">${esc(cit.snippet || 'No snippet available')}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+
+            res.innerHTML = html;
+
+            if (content) {
+                res.addEventListener('click', (e) => {
+                    // Don't open modal if clicking on citation badges
+                    if (!e.target.closest('.citation-badge')) {
+                        openModal('Intel Report — ' + esc(summary), content, citations);
+                    }
+                });
             }
             return res;
         }
@@ -716,7 +791,12 @@
 
                             } else if (evt.type === 'tool_result') {
                                 if (msgWrapper && msgWrapper.trailBody) {
-                                    msgWrapper.trailBody.appendChild(createTrailResult(evt.summary, evt.content || null));
+                                    const citations = evt.citations || [];
+                                    if (citations.length > 0) {
+                                        msgWrapper.trailBody.appendChild(createTrailResultWithCitations(evt.summary, evt.content || null, citations));
+                                    } else {
+                                        msgWrapper.trailBody.appendChild(createTrailResult(evt.summary, evt.content || null));
+                                    }
                                     elMessages.scrollTop = elMessages.scrollHeight;
                                 }
                             } else if (evt.type === 'token') {
