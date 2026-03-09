@@ -21,7 +21,7 @@
 
 ## Overview
 
-GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for geopolitical analysis. It ingests PDF documents, vectorizes them, and lets you query them through an AI-powered chat interface — all running entirely within Docker without cloud dependencies.
+GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for geopolitical analysis. It ingests PDF and Markdown documents, vectorizes them, and lets you query them through an AI-powered chat interface — all running entirely within Docker without cloud dependencies.
 
 ### Tech Stack & Architecture
 
@@ -52,6 +52,7 @@ graph TD
 
         subgraph Ingestion ["Ingestion Pipeline"]
             PDF["PDF Documents\n(./documents/pdf/)"] --> ING["ingest.py"]
+            MD["Markdown Documents\n(./documents/md/)"] --> ING
             ING -->|"Vector Embeddings"| PG
         end
 
@@ -117,7 +118,11 @@ You can run the stack in CPU-only mode, but an NVIDIA GPU vastly accelerates LLM
 
 ### 1. Add your documents
 
-Place PDF files into the `./documents/pdf/` directory. These are your source materials for the RAG archival pipeline.
+Place PDF files into the `./documents/pdf/` directory and/or Markdown files into `./documents/md/`. These are your source materials for the RAG archival pipeline.
+
+**Supported formats:**
+- **PDF** (`.pdf`) - Academic papers, reports, official documents
+- **Markdown** (`.md`) - Notes, articles, documentation, structured content
 
 ### 2. Launch the Stack
 
@@ -187,6 +192,9 @@ To verify the components are working:
 3. **Live Open-Source Intel**: Ask about a current breaking news topic to verify `duckduckgo_search` tool execution.
 4. **Time Awareness**: Ask "What exact date and time is it right now?" to see dynamic context injection.
 5. **Citation Display**: After running vector or web searches, check that citation badges appear in the activity trail (e.g., `[📄 Report_2023.pdf, p.12]` or `[🌐 Wikipedia: "NATO"]`). Hover over badges to see source snippets.
+6. **Markdown Files**: The included `documents/md/fantasy.md` contains sample content. Try: *"compare the battle strength of FrogyFrogs and the DuckyDucks"*
+
+![Markdown Vector Search Demo](static/fantasy_showcase.png)
 
 ---
 
@@ -201,7 +209,9 @@ To verify the components are working:
 │   ├── ingestion/         #   RAG data processing pipeline
 │   └── services/          #   LLM integration & vector storage connectors
 ├── static/                # Vanilla JS / CSS Tactical UI
-├── documents/pdf/         # Local stash for your source PDFs
+├── documents/             # Source documents for ingestion
+│   ├── pdf/               # PDF documents (reports, papers)
+│   └── md/                # Markdown documents (notes, articles)
 ├── migrations/            # Alembic schema definitions
 ├── monitoring/            # Configuration for Loki, Promtail, Grafana
 ├── docs/                  # Additional documentation

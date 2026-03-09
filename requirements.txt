@@ -11,6 +11,8 @@ alembic
 wikipedia
 ddgs
 pypdf
+unstructured
+markdown
 sentence-transformers
 numpy
 fastapi

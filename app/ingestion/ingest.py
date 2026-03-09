@@ -2,7 +2,7 @@ import os
 import glob
 import logging
 import hashlib
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_postgres import PGVector
 
@@ -14,6 +14,7 @@ logger = logging.getLogger("geovision_ingestion")
 # Go up from app/ingestion/ingest.py to the root documents folder
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 PDF_DIR = os.path.join(PROJECT_ROOT, "documents", "pdf")
+MD_DIR = os.path.join(PROJECT_ROOT, "documents", "md")
 HASH_FILE = os.path.join(PROJECT_ROOT, "documents", ".ingest_hash")
 
 
@@ -35,34 +36,51 @@ def main():
     pdf_pattern = os.path.join(PDF_DIR, "**", "*.pdf")
     pdf_files = glob.glob(pdf_pattern, recursive=True)
 
-    if not pdf_files:
-        logger.warning(f"[WARN] No PDF files found in {PDF_DIR}. Skipping ingestion.")
+    # Discover all markdown files in documents/md/
+    md_pattern = os.path.join(MD_DIR, "**", "*.md")
+    md_files = glob.glob(md_pattern, recursive=True)
+
+    if not pdf_files and not md_files:
+        logger.warning(f"[WARN] No PDF or MD files found in {PDF_DIR} or {MD_DIR}. Skipping ingestion.")
         return
 
     logger.info(f"[SCAN] Found {len(pdf_files)} PDF file(s): {pdf_files}")
+    logger.info(f"[SCAN] Found {len(md_files)} MD file(s): {md_files}")
 
     # 2. Check if files have changed
-    current_hash = compute_files_hash(pdf_files)
-    
+    all_files = pdf_files + md_files
+    current_hash = compute_files_hash(all_files)
+
     if os.path.exists(HASH_FILE):
         with open(HASH_FILE, "r") as f:
             previous_hash = f.read().strip()
-        
+
         if current_hash == previous_hash:
-            logger.info("[SKIP] PDF files have not changed since last ingestion. Skipping rebuild.")
+            logger.info("[SKIP] Files have not changed since last ingestion. Skipping rebuild.")
             return
         else:
-            logger.info("[UPDATE] PDF files have changed. Rebuilding vector database...")
+            logger.info("[UPDATE] Files have changed. Rebuilding vector database...")
 
     # 3. Load all PDFs and split into chunks
     all_docs = []
     for pdf_path in pdf_files:
-        logger.info(f"[LOAD] Loading: {pdf_path}")
+        logger.info(f"[LOAD] Loading PDF: {pdf_path}")
         loader = PyPDFLoader(pdf_path)
         docs = loader.load()
         all_docs.extend(docs)
 
     logger.info(f"[PROCESS] Loaded {len(all_docs)} page(s) from PDFs.")
+
+    # Load all markdown files and split into chunks
+    md_docs = []
+    for md_path in md_files:
+        logger.info(f"[LOAD] Loading MD: {md_path}")
+        loader = UnstructuredMarkdownLoader(md_path)
+        docs = loader.load()
+        md_docs.extend(docs)
+
+    logger.info(f"[PROCESS] Loaded {len(md_docs)} document(s) from MD files.")
+    all_docs.extend(md_docs)
 
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP
