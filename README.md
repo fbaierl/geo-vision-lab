@@ -21,7 +21,9 @@
 
 ## Overview
 
-GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for geopolitical analysis. It ingests PDF documents, vectorizes them, and lets you query them through an AI-powered chat interface — all running entirely within Docker without cloud dependencies.
+GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for geopolitical intelligence analysis. It ingests documents (PDF, Markdown), vectorizes them using semantic embeddings, and lets you query them through an AI-powered chat interface — all running entirely within Docker without cloud dependencies.
+
+**Test Data Included**: The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrogs** of Quackswamp — a rich test dataset for validating vector search capabilities.
 
 ### Tech Stack & Architecture
 
@@ -32,7 +34,8 @@ GeoVision Lab utilizes a hybrid RAG approach, maintaining conversational memory 
 | **Primary LLM** | Ollama + Qwen 3.5 (switchable: 9B, 4B, 0.8B) | Core analysis, reasoning, and response generation |
 | **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Dedicated "Critic" agent checking map constraints before output |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization for semantic search |
-| **Vector DB** | PostgreSQL + pgvector | Document storage with HNSW index for fast similarity search |
+| **Vector DB** | MongoDB 8.2+ Vector Search | Document storage with native vector search using mongot |
+| **Database GUI** | Mongo Express | Web interface to browse and manage MongoDB |
 | **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination, web/vector search routing, and conversation memory |
 | **Frontend UI** | Vanilla JS, Leaflet.js | Cyber/Tactical terminal with robust markdown streaming, dynamic map rendering, model switching, and font optimizations (`Rajdhani`) |
 | **Testing/CI** | PyTest, Testcontainers, GitHub Actions | Full end-to-end integration tests & automated linter quality gates |
@@ -43,7 +46,7 @@ GeoVision Lab utilizes a hybrid RAG approach, maintaining conversational memory 
 graph TD
     subgraph Docker ["Container Environment"]
         subgraph Data ["Data Layer"]
-            PG[("PostgreSQL + pgvector\n(HNSW indexed)")]
+            MDB[("MongoDB 8.2+\n(Vector Search indexed)")]
         end
 
         subgraph LLM ["LLM Layer"]
@@ -52,13 +55,13 @@ graph TD
 
         subgraph Ingestion ["Ingestion Pipeline"]
             PDF["PDF Documents\n(./documents/pdf/)"] --> ING["ingest.py"]
-            ING -->|"Vector Embeddings"| PG
+            ING -->|"Vector Embeddings"| MDB
         end
 
         subgraph App ["Application"]
             UI["Tactical UI\n(Vanilla JS)"] <--> API["FastAPI\n(app/main.py)"]
             API <--> AGENT["LangGraph Agent\n(Worker + Critic)"]
-            AGENT -->|"Internal Search"| PG
+            AGENT -->|"Internal Search"| MDB
             AGENT -->|"LLM Tasks"| OL
             AGENT -->|"Live Info"| WEB["Wikipedia & DuckDuckGo"]
         end
@@ -66,13 +69,81 @@ graph TD
         subgraph Ops ["Observability"]
             DZ["Dozzle (Container Logs)"]
             GF["Grafana + Loki (Log Aggregation)"]
-            PA["pgAdmin (DB Explorer)"]
         end
     end
 
     API -.->|"logs"| GF
     ING -.->|"logs"| GF
 ```
+
+---
+
+## Technology Choices & Rationale
+
+### Why MongoDB for Vector Search?
+
+We migrated from PostgreSQL/pgvector to **MongoDB 8.2+ Vector Search** for several compelling reasons:
+
+| Factor | PostgreSQL + pgvector | MongoDB 8.2+ Vector Search |
+|--------|----------------------|---------------------------|
+| **Setup Complexity** | Requires extension installation, HNSW index tuning | Native vector search with automatic index management |
+| **Schema Flexibility** | Rigid schema, migrations needed for changes | Document-based, schemaless design |
+| **Horizontal Scaling** | Complex sharding setup | Built-in sharding and replica sets |
+| **Developer Experience** | SQL-based, requires ORM layer | JSON-native, intuitive for JavaScript/Python developers |
+| **Vector Search Performance** | Good with HNSW, but requires manual tuning | Optimized `mongot` service with automatic candidate selection |
+| **Cloud-Native** | Traditional RDBMS architecture | Designed for distributed, cloud-native deployments |
+
+**Key Decision Factors:**
+1. **Simplified Operations**: MongoDB's vector search is built-in and managed through the same interface as regular queries
+2. **No Migration Overhead**: Document structure adapts naturally to varying document lengths and metadata
+3. **Future-Proof**: MongoDB's rapid iteration on AI/ML features ensures continued improvements
+4. **Unified Data Model**: Store structured metadata alongside vectors without complex joins
+
+### Why Ollama for LLM Inference?
+
+**Ollama** was chosen as our LLM runtime for these reasons:
+
+1. **Local-First Philosophy**: Complete offline operation with no API keys or cloud dependencies
+2. **Model Flexibility**: Easy switching between models (Qwen 3.5 9B/4B/0.8B) without code changes
+3. **Resource Efficiency**: Automatic GPU acceleration with fallback to CPU
+4. **Simple Deployment**: Single container with built-in model management
+5. **Open Source**: Full transparency and control over the inference stack
+
+### Why LangGraph for Agent Architecture?
+
+**LangGraph** provides the orchestration layer for our multi-agent system:
+
+1. **Stateful Execution**: Built-in conversation memory through `MemorySaver`
+2. **Graph-Based Flow**: Visual, predictable agent behavior with explicit state transitions
+3. **Tool Integration**: Seamless binding of custom tools (vector search, web search)
+4. **Human-in-the-Loop**: Support for review/approval steps (our QA Reviewer agent)
+5. **Streaming Support**: Real-time token streaming for responsive UX
+
+### Why all-MiniLM-L6-v2 for Embeddings?
+
+The **sentence-transformers/all-MiniLM-L6-v2** model offers:
+
+1. **Compact Size**: 384 dimensions vs. 768+ for larger models
+2. **Speed**: Fast embedding generation (~2800 tokens/second)
+3. **Quality**: Strong semantic understanding for RAG applications
+4. **Local Execution**: No API calls, runs entirely within Docker
+5. **Proven Track Record**: Widely adopted in production RAG systems
+
+### Why Vanilla JS + Leaflet for Frontend?
+
+1. **Zero Build Step**: No webpack, Vite, or npm complexity
+2. **Lightweight**: ~50KB total vs. MBs for React/Vue bundles
+3. **Leaflet Integration**: Best-in-class open-source mapping library
+4. **Direct DOM Control**: Precise control over streaming updates
+5. **Educational Value**: Clear, readable code for learning purposes
+
+### Why Grafana + Loki for Observability?
+
+1. **Log Aggregation**: Centralized logging across all containers
+2. **Real-Time Debugging**: Live tailing of container logs via Dozzle
+3. **Cost-Effective**: Open-source alternative to Datadog/Splunk
+4. **Query Language**: LogQL enables powerful log analysis
+5. **Visual Dashboards**: Grafana provides professional visualization
 
 ---
 
@@ -125,7 +196,7 @@ Place PDF files into the `./documents/pdf/` directory. These are your source mat
 docker compose up --build
 ```
 
-This command seamlessly orchestrates the PostgreSQL database, pulls the LLM, chunks and ingests your documents, runs database migrations to build the HNSW index, boots the core web application, and starts all observability tooling.
+This command seamlessly orchestrates the MongoDB database with vector search, pulls the LLM, chunks and ingests your documents, creates the vector search index, boots the core web application, and starts all observability tooling.
 
 ### 3. Open the Dashboards
 
@@ -134,20 +205,39 @@ Once everything is running, access the services:
 | Service | Access | Default Credentials |
 |---------|-----|-------------|
 | **Intelligence Terminal** | [localhost:8000](http://localhost:8000) | - |
+| **MongoDB Browser** | [localhost:8081](http://localhost:8081) | `admin` / `geovision` |
 | **Container Logs (Dozzle)** | [localhost:9999](http://localhost:9999) | - |
 | **Grafana Logs** | [localhost:3000](http://localhost:3000) | `admin` / `geovision` |
-| **pgAdmin Explorer** | [localhost:8082](http://localhost:8082) | `admin@geovision.lab` / `geovision` |
 
 ---
 
 ## Testing & Validation
 
-To verify the components are working:
+### Quick Test with Included Fantasy Data
 
-1. **Ingestion Verification**: Add a test PDF to `./documents/pdf/`, run `docker compose up --build`, and check the Dozzle logs for `geovision-app` to confirm embedding vectorization.
-2. **Archival Vector Search**: In the Terminal UI, ask a query related to your specific PDF documentation. Watch the trail steps to see the `vector_search` tool triggered.
+The platform includes a sample document (`documents/fantasy.md`) about the **DuckyDucks and FrogyFrogs** of Quackswamp. Use these test queries to validate the system:
+
+| Test Query | Expected Behavior |
+|------------|-------------------|
+| *"Where is the secret base of the DuckyDucks located?"* | Should retrieve Antarctica reference from the document |
+| *"Tell me about the War of Ripples"* | Should return details about the 6-year war (1247-1253) |
+| *"What are the characteristics of FrogyFrogs?"* | Should list emerald skin, leaping ability, water magic |
+| *"Who signed the Treaty of Ripples?"* | Should mention the peace treaty signed on a lily pad |
+| *"What is the Prophecy of the Golden Tadpole?"* | Should retrieve the prophecy about DuckyDuck-FrogyFrog unity |
+
+### Full Validation Checklist
+
+1. **Ingestion Verification**: Run `docker compose up --build` and check the Dozzle logs for `geovision-ingest` to confirm document loading and chunking.
+
+2. **Archival Vector Search**: In the Terminal UI at [localhost:8000](http://localhost:8000), ask a query about the DuckyDucks or FrogyFrogs. Watch the trail steps to see the `vector_search` tool triggered.
+
 3. **Live Open-Source Intel**: Ask about a current breaking news topic to verify `duckduckgo_search` tool execution.
+
 4. **Time Awareness**: Ask "What exact date and time is it right now?" to see dynamic context injection.
+
+5. **Map Rendering**: Ask "Show me Lake Featherside" to verify the map tag parsing and Leaflet rendering.
+
+6. **Model Switching**: Use the model selector to switch between Qwen 3.5 variants and observe response quality/speed differences.
 
 ---
 
@@ -160,10 +250,11 @@ To verify the components are working:
 │   ├── api/routes/        #   FastAPI REST endpoints
 │   ├── core/              #   Global settings
 │   ├── ingestion/         #   RAG data processing pipeline
-│   └── services/          #   LLM integration & vector storage connectors
+│   └── services/          #   LLM integration & MongoDB vector store connectors
 ├── static/                # Vanilla JS / CSS Tactical UI
-├── documents/pdf/         # Local stash for your source PDFs
-├── migrations/            # Alembic schema definitions
+├── documents/
+│   ├── pdf/               # Local stash for your source PDFs
+│   └── fantasy.md         # Sample test data (DuckyDucks & FrogyFrogs)
 ├── monitoring/            # Configuration for Loki, Promtail, Grafana
 ├── docs/                  # Additional documentation
 ├── docker-compose.yml
@@ -175,5 +266,5 @@ To verify the components are working:
 
 ## Additional Documentation
 
-- [**Database Migrations (Alembic) Guide**](docs/database_migrations.md)
+- [**Agent Graph & Tool Calling Logic**](learnings.md)
 - [**Debugging Guide**](docs/debugging.md)
