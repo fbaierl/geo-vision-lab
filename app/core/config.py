@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
     # --- Available Reasoning Models ---
-    AVAILABLE_REASONING_MODELS: list = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
+    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
 
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000

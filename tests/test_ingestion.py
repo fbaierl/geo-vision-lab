@@ -13,7 +13,7 @@ mock_settings.VECTOR_INDEX_NAME = "vector_index"
 # We will patch specific components inside the test functions instead of mutating sys.modules.
 
 with patch("app.core.config.settings", mock_settings):
-    from app.ingestion.ingest import main
+     from app.ingestion.ingest import main
 
 @patch("app.ingestion.ingest.glob.glob")
 @patch("app.ingestion.ingest.PyPDFLoader")
@@ -23,7 +23,7 @@ with patch("app.core.config.settings", mock_settings):
 @patch("builtins.open", new_callable=mock_open)
 def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_insert, mock_pdf_loader, mock_glob):
     # Setup mocks
-    mock_glob.return_value = ["/mock/path/doc.pdf"]
+    mock_glob.side_effect = [["/mock/path/doc.pdf"], []] # pdf_files, md_files
     mock_hash.return_value = "new_hash_123"
     mock_exists.return_value = False  # Simulate HASH_FILE does not exist
 
@@ -40,7 +40,7 @@ def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_inse
     main()
 
     # Assertions
-    mock_glob.assert_called_once()
+    assert mock_glob.call_count == 2
     mock_pdf_loader.assert_called_once_with("/mock/path/doc.pdf")
 
     # Verify document insertion was called
@@ -58,5 +58,5 @@ def test_ingestion_pipeline_no_pdfs(mock_glob):
 
     main()
 
-    mock_glob.assert_called_once()
+    assert mock_glob.call_count == 2
     # It should exit gracefully if no PDFs are found
