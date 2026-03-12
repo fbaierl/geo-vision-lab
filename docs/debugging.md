@@ -16,7 +16,7 @@ env -u DEBUG pytest tests/test_reasoning_tools.py -v
 # Test the LangGraph transitions (`should_continue`, `call_model`)
 env -u DEBUG pytest tests/test_reasoning_graph.py -v
 
-# Run the live Database Integration Test (automatically spins up Ephemeral Postgres DB via Docker)
+# Run the live Database Integration Test (automatically spins up Ephemeral MongoDB via Docker)
 env -u DEBUG pytest tests/test_db_integration.py -v -s
 ```
 

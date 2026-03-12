@@ -7,18 +7,16 @@ class Settings(BaseSettings):
     # --- App Info ---
     APP_NAME: str = "GeoVision Lab"
     DEBUG: bool = False
-    VERSION: str = "0.2.0"
+    VERSION: str = "0.3.0"
 
     # --- Database ---
-    POSTGRES_USER: str = "geovision"
-    POSTGRES_PASSWORD: str = "geovision"
-    POSTGRES_SERVER: str = "geovision-postgres"  # Docker service name
-    POSTGRES_PORT: str = "5432"
-    POSTGRES_DB: str = "geovision"
+    MONGODB_SERVER: str = "geovision-mongodb"  # Docker service name
+    MONGODB_PORT: str = "27017"
+    MONGODB_DB: str = "geovision"
 
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return f"mongodb://{self.MONGODB_SERVER}:{self.MONGODB_PORT}/{self.MONGODB_DB}"
 
     # --- LLM & Embedding ---
     OLLAMA_BASE_URL: str = "http://geovision-ollama:11434"
@@ -28,13 +26,15 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
     # --- Available Reasoning Models ---
-    AVAILABLE_REASONING_MODELS: list = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
+    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
 
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     VECTOR_COLLECTION_NAME: str = "historical_reports"
     SEARCH_K: int = 3  # Number of docs to retrieve
+    VECTOR_INDEX_NAME: str = "vector_index"
+    EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 produces 384-dim vectors
 
     # --- Security ---
     SECRET_KEY: str = "changeme_in_production"
@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
     def set_reasoning_model(self, model_name: str) -> bool:
         """Update the reasoning model name at runtime."""

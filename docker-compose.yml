@@ -27,37 +27,35 @@ services:
       retries: 20
       start_period: 600s
 
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: geovision-postgres
-    environment:
-      - POSTGRES_USER=geovision
-      - POSTGRES_PASSWORD=geovision
-      - POSTGRES_DB=geovision
+  mongodb:
+    image: mongodb/mongodb-atlas-local:8.2
+    container_name: geovision-mongodb
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongodb_data:/data/db
+      - mongodb_configdb:/data/configdb
+      - mongodb_mongot:/data/mongot
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U geovision" ]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: geovision-pgadmin
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@geovision.lab
-      - PGADMIN_DEFAULT_PASSWORD=geovision
+  mongo-express:
+    image: mongo-express:latest
+    container_name: geovision-mongo-express
     ports:
-      - "8082:80"
-    volumes:
-      - ./monitoring/pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://geovision-mongodb:27017/
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=geovision
     depends_on:
-      postgres:
+      mongodb:
         condition: service_healthy
-    restart: unless-stopped
+
 
   ingest:
     build: .
@@ -65,10 +63,10 @@ services:
     volumes:
       - ./documents:/app/documents
     environment:
-      - POSTGRES_URI=postgresql+psycopg://geovision:geovision@geovision-postgres:5432/geovision
+      - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision
       - OLLAMA_HOST=http://geovision-ollama:11434
     depends_on:
-      postgres:
+      mongodb:
         condition: service_healthy
       ollama:
         condition: service_healthy
@@ -82,9 +80,9 @@ services:
       - .:/app
     environment:
       - OLLAMA_HOST=http://geovision-ollama:11434
-      - POSTGRES_URI=postgresql+psycopg://geovision:geovision@geovision-postgres:5432/geovision
+      - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision
     depends_on:
-      postgres:
+      mongodb:
         condition: service_healthy
       ollama:
         condition: service_healthy
@@ -93,7 +91,7 @@ services:
     ports:
       - "8000:8000"
     command: >
-      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      sh -c "python -m app.services.setup_mongodb && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   # --- Monitoring Stack ---
 
@@ -141,7 +139,9 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  mongodb_data:
+  mongodb_configdb:
+  mongodb_mongot:
   ollama_data:
   loki_data:
   grafana_data:
