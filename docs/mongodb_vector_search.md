@@ -1,5 +1,12 @@
 # MongoDB Vector Search Setup
 
+> **Related Documentation:**
+> - [Technology Choices](../TECHNOLOGY.md) — Why MongoDB for vector search
+> - [Agent Workflow](../AGENT_WORKFLOW.md) — How vector search is used by agents
+> - [README](../README.md) — Quick start guide
+
+---
+
 GeoVision Lab uses **MongoDB 8.2+ Vector Search** for semantic document retrieval. This guide explains how the vector search index is created and managed.
 
 ## How it works

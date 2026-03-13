@@ -1,5 +1,12 @@
 # Debugging the GeoVision Lab RAG Chain
 
+> **Related Documentation:**
+> - [Agent Workflow](../AGENT_WORKFLOW.md) — Detailed agent orchestration guide
+> - [Technology Choices](../TECHNOLOGY.md) — Tech stack rationale
+> - [README](../README.md) — Quick start guide
+
+---
+
 The intelligence agent (RAG chain) operates using LangGraph. This involves passing a state object (messages) between reasoning nodes and tool-execution nodes. Here is a guide on how to debug this pipeline end-to-end.
 
 ## 1. Running Unit Tests
