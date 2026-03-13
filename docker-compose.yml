@@ -30,6 +30,7 @@ services:
   mongodb:
     image: mongodb/mongodb-atlas-local:8.2
     container_name: geovision-mongodb
+    hostname: geovision-mongodb
     ports:
       - "27017:27017"
     volumes:
@@ -49,7 +50,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - ME_CONFIG_MONGODB_URL=mongodb://geovision-mongodb:27017/
+      - ME_CONFIG_MONGODB_URL=mongodb://geovision-mongodb:27017/?directConnection=true
       - ME_CONFIG_BASICAUTH_USERNAME=admin
       - ME_CONFIG_BASICAUTH_PASSWORD=geovision
     depends_on:
@@ -63,7 +64,7 @@ services:
     volumes:
       - ./documents:/app/documents
     environment:
-      - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision
+      - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
       - OLLAMA_HOST=http://geovision-ollama:11434
     depends_on:
       mongodb:
@@ -80,7 +81,7 @@ services:
       - .:/app
     environment:
       - OLLAMA_HOST=http://geovision-ollama:11434
-      - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision
+      - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
     depends_on:
       mongodb:
         condition: service_healthy
