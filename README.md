@@ -188,9 +188,9 @@ geo-vision-lab/
 
 | Document | Description |
 |----------|-------------|
-| [Technology Choices](TECHNOLOGY.md) | Detailed rationale for each technology decision |
-| [Agent Workflow](AGENT_WORKFLOW.md) | Deep dive into multi-agent orchestration |
-| [Agent Learnings](learnings.md) | Technical insights on reasoning LLMs |
+| [Technology Choices](docs/technology.md) | Detailed rationale for each technology decision |
+| [Agent Workflow](docs/agent_workflow.md) | Deep dive into multi-agent orchestration |
+| [Agent Learnings](docs/learnings.md) | Technical insights on reasoning LLMs |
 | [Debugging Guide](docs/debugging.md) | Troubleshooting common issues |
 | [MongoDB Vector Search](docs/mongodb_vector_search.md) | Vector search implementation details |
 
