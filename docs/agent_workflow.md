@@ -11,6 +11,33 @@ GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The syste
 1. **Worker Agent** — The primary reasoning engine that handles user queries, performs tool calls, and synthesizes responses
 2. **Critic Agent** — A QA reviewer that validates outputs against formatting constraints before delivery
 
+## Mandatory Vector Search First Protocol
+
+**CRITICAL**: For every user query, without exception, an offline vector search is **automatically executed** as the first step in the workflow.
+
+### Why Vector Search First?
+
+1. **Comprehensive Intelligence**: Ensures all locally archived documents, reports, and historical data are checked before seeking external sources
+2. **Data Privacy**: Prioritizes internal/custom data over public web searches
+3. **Context Awareness**: Prevents redundant searches for information already in the knowledge base
+4. **Performance**: Vector search (50-200ms) is faster than web searches (1-3s)
+5. **Structural Enforcement**: The workflow **guarantees** vector search executes first — not dependent on LLM decision
+
+### Execution Flow
+
+```
+User Query → [Vector Search Node] → Agent (with results injected) → [Optional: Additional Tools] → Reviewer → Response
+```
+
+### Decision Tree
+
+- **Step 1 (Automatic)**: `vector_search_node` executes for every query
+- **Step 2**: Results stored in AgentState and injected into agent context
+- **Step 3**: Agent reviews archival results, decides if additional tools needed
+- **Step 4**: If additional intel needed → execute web search tools
+- **Step 5**: Submit draft to Critic Agent for validation
+
+
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TB
@@ -18,8 +45,12 @@ graph TB
         UQ[("User Query<br/>(Chat Interface)")]
     end
 
+    subgraph Mandatory["Mandatory First Step"]
+        VS["Vector Search Node<br/>(MongoDB)<br/>**AUTOMATIC**"]
+    end
+
     subgraph Worker["Worker Agent"]
-        REASON["Reasoning Engine<br/>(Qwen 3.5 4B)"]
+        REASON["Reasoning Engine<br/>(Qwen 3.5 4B)<br/>+ Injected Results"]
         TOOLS["Tool Executor<br/>(ToolNode)"]
     end
 
@@ -29,7 +60,6 @@ graph TB
     end
 
     subgraph Tools["Available Tools"]
-        VS["Vector Search<br/>(MongoDB)"]
         DDG["DuckDuckGo Search<br/>(Live Web)"]
         TIME["Time Tool<br/>(Current Timestamp)"]
         MAP["Map Renderer<br/>(Leaflet.js)"]
@@ -39,14 +69,14 @@ graph TB
         RESP[("Streaming Response<br/>(Markdown + Maps)")]
     end
 
-    UQ --> REASON
-    REASON --> DECIDE{Needs Tools?}
-    DECIDE -->|Yes| TOOLS
+    UQ --> VS
+    VS --> REASON
+    REASON --> DECIDE{Needs More Data?}
+    DECIDE -->|Yes - Live| DDG
+    DECIDE -->|Yes - Background| TIME
     DECIDE -->|No| REVIEW
-    TOOLS --> VS
-    TOOLS --> DDG
-    TOOLS --> TIME
-    TOOLS --> REASON
+    DDG --> REASON
+    TIME --> REASON
     REASON -->|Final Draft| REVIEW
     REVIEW --> VALIDATE{Passes QA?}
     VALIDATE -->|Yes| RESP
@@ -63,8 +93,9 @@ The agent maintains state throughout the conversation using LangGraph's `AgentSt
 class AgentState(TypedDict):
     """State schema for the agent graph."""
     messages: Annotated[List[BaseMessage], add_messages]
-    model: str  # Current LLM model selection
-    metadata: dict  # Additional context (time, etc.)
+    validation_attempts: Annotated[int, operator.add]
+    is_valid: bool
+    vector_search_results: Optional[str]  # Results from mandatory first step
 ```
 
 ### Message Annotation
@@ -78,32 +109,32 @@ The `add_messages` reducer ensures that:
 
 ## Workflow Stages
 
-### Stage 1: Query Reception
+### Stage 1: Mandatory Vector Search (Automatic)
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
-sequenceDiagram
-    participant User
-    participant API as FastAPI
-    participant Agent as LangGraph
-    participant Memory as MemorySaver
-
-    User->>API: POST /api/chat
-    API->>Agent: Invoke with query + config
-    Agent->>Memory: Load conversation history
-    Memory-->>Agent: Previous messages
-    Agent->>Agent: Inject metadata (timestamp, model)
+flowchart LR
+    subgraph VS["Vector Search Node"]
+        Q[User Query] --> E[Extract Query Text]
+        E --> S[similarity_search]
+        S --> R[Store Results in State]
+    end
+    
+    R --> AGENT["Passes to Agent Node"]
 ```
 
 **What happens:**
-1. User submits a query through the chat interface
-2. FastAPI receives the request and invokes the LangGraph agent
-3. Agent loads previous conversation history from `MemorySaver`
-4. Current timestamp and selected model are injected into state
+1. `vector_search_node` is invoked as the **entry point** for every query
+2. Extracts the user's query from the first HumanMessage
+3. Calls `similarity_search(query)` against MongoDB vector index
+4. Stores results in `state["vector_search_results"]`
+5. Workflow automatically transitions to agent node
+
+**Key Point:** This step is **structurally enforced** by the LangGraph workflow — the agent cannot bypass it.
 
 ---
 
-### Stage 2: Reasoning & Tool Decision
+### Stage 2: Agent Reasoning with Injected Context
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
@@ -111,31 +142,31 @@ flowchart LR
     subgraph LLM["LLM Processing"]
         SYS[System Prompt<br/>Rules + Constraints]
         CTX[Conversation History<br/>+ Metadata]
-        Q[User Query]
+        VEC[Vector Search Results<br/>**INJECTED**]
     end
 
     LLM --> REASON["Reasoning Process"]
 
     subgraph REASON["Reasoning Process"]
-        A[Analyze Intent] --> B{Archival or Live?}
-        B -->|Historical| C[Vector Search Needed]
-        B -->|Current Events| D[Web Search Needed]
-        B -->|Simple Query| E[Direct Response]
-        C --> F[Prepare Tool Call]
-        D --> F
-        E --> G[Generate Response]
+        A[Review Archival Intelligence] --> B{Sufficient?}
+        B -->|Yes| C[Synthesize Response]
+        B -->|No - Need Live| D[Call Web Search Tools]
+        B -->|No - Need Background| E[Call Wikipedia Tool]
+        D --> C
+        E --> C
     end
 
     SYS --> REASON
     CTX --> REASON
-    Q --> REASON
+    VEC --> REASON
 ```
 
 **System Prompt Rules:**
-- Rule 40: Must wrap thought process in `<think>...</think>` tags
-- Rule 41: Must use appropriate tools based on query type
-- Rule 42: Must format responses in military intelligence style
-- Rule 43: Must include map tags when referencing geographic locations
+- **Rule 1**: Review injected vector search results first
+- **Rule 2**: Use additional tools only if archival data is insufficient
+- **Rule 3**: MUST wrap thought process in `<think>...</think>` tags
+- **Rule 4**: MUST format responses in military intelligence style
+- **Rule 5**: MUST include map tags when referencing geographic locations
 
 ---
 
@@ -162,10 +193,12 @@ stateDiagram-v2
 
 | Tool | Function | Trigger Condition |
 |------|----------|-------------------|
-| **vector_search** | Query MongoDB for archival documents | Historical queries, document-specific questions |
-| **duckduckgo_search** | Search live web for current events | Breaking news, recent developments |
+| **duckduckgo_search** | Search live web for current events | When agent needs breaking news or recent developments |
+| **web_search** | Wikipedia summaries | When agent needs background on active geopolitics |
 | **get_current_time** | Return exact timestamp | Time-aware queries |
 | **render_map** | Generate Leaflet.js map code | Geographic location references |
+
+**Note:** Vector search is **not** in this table because it's automatically executed as a workflow node before the agent begins reasoning — the agent does not call it as a tool.
 
 **Tool Call Example:**
 ```json
@@ -177,8 +210,8 @@ stateDiagram-v2
       "id": "call_abc123",
       "type": "function",
       "function": {
-        "name": "vector_search",
-        "arguments": "{\"query\": \"DuckyDucks secret base\"}"
+        "name": "duckduckgo_search",
+        "arguments": "{\"query\": \"Ukraine conflict latest developments\"}"
       }
     }
   ]

@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -10,16 +11,32 @@ class Settings(BaseSettings):
     VERSION: str = "0.3.0"
 
     # --- Database ---
-    MONGODB_SERVER: str = "geovision-mongodb"  # Docker service name
+    # Support both MONGODB_URI (docker-compose) and MONGODB_SERVER (direct)
+    MONGODB_URI: Optional[str] = None  # Full MongoDB URI from docker-compose
+    MONGODB_SERVER: str = "localhost"  # Fallback for direct connection
     MONGODB_PORT: str = "27017"
     MONGODB_DB: str = "geovision"
 
     @property
     def DATABASE_URL(self) -> str:
+        # Use MONGODB_URI if provided (docker-compose), otherwise build from components
+        if self.MONGODB_URI:
+            return self.MONGODB_URI
         return f"mongodb://{self.MONGODB_SERVER}:{self.MONGODB_PORT}/{self.MONGODB_DB}"
 
     # --- LLM & Embedding ---
-    OLLAMA_BASE_URL: str = "http://geovision-ollama:11434"
+    # Support both OLLAMA_HOST (docker-compose) and OLLAMA_BASE_URL (direct)
+    OLLAMA_HOST: Optional[str] = None  # From docker-compose
+    OLLAMA_BASE_URL: str = "http://localhost:11434"  # Fallback for direct connection
+
+    @property
+    def OLLAMA_URL(self) -> str:
+        # Use OLLAMA_HOST if provided (docker-compose), otherwise use OLLAMA_BASE_URL
+        if self.OLLAMA_HOST:
+            return self.OLLAMA_HOST
+        return self.OLLAMA_BASE_URL
+
+    # --- LLM Models ---
     LLM_MODEL_NAME: str = "qwen3.5:4b"
     REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
     REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:0.8b"  # Fixed for QA

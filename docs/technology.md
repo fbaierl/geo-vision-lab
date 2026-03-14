@@ -142,7 +142,7 @@ stateDiagram-v2
     Response --> [*]
 ```
 
-See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for detailed workflow documentation.
+**Vector Search First (Structurally Enforced)**: The LangGraph workflow is configured with `vector_search_node` as the **entry point**. Every query automatically executes vector search before reaching the agent. Results are injected into the agent's context. This is enforced at the workflow level, not reliant on prompt instructions. See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for detailed workflow documentation.
 
 ---
 

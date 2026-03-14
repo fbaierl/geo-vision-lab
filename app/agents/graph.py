@@ -11,18 +11,19 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.agents.state import AgentState
 from app.agents.tools import tools
 from app.services.llm import get_reasoning_llm, get_reviewer_llm
+from app.services.vector_store import similarity_search
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
 
 You have access to intel feeds:
-1. `vector_search`: For retrieving information from ANY locally uploaded documents, reports, custom data, or historical intelligence. Use this tool FIRST if the user asks about specific entities, places, or events that might be detailed in their custom data.
+1. `vector_search`: For retrieving information from ANY locally uploaded documents, reports, custom data, or historical intelligence. (Automatically executed before you begin reasoning)
 2. `web_search`: For Wikipedia summaries of background information on active geopolitics.
 3. `duckduckgo_search`: For live web search results regarding current events and general queries.
 
-Use the proper tool depending on whether the user asks about deep history or current events. If you don't know the answer, use a tool to find out.
+The archival intelligence from vector search is automatically injected into your context. Review it first, then use additional tools if you need live or updated information.
 
-CRITICAL INSTRUCTION: If the user asks about a specific location, city, country, or region, you MUST ALWAYS provide a map for it. 
+CRITICAL INSTRUCTION: If the user asks about a specific location, city, country, or region, you MUST ALWAYS provide a map for it.
 For a specific city or exact location, include its exact coordinates using EXACTLY this format:
 [map: Location Name, latitude, longitude]
 
@@ -41,16 +42,22 @@ CRITICAL INSTRUCTION: Before you generate any final response or tool call, you M
 """
 
 critic_prompt = """You are a strict QA Reviewer for a Geopolitical Intelligence Agent.
-Rule 1: If the user asked about a specific location, city, or region, the agent MUST include exactly one or more [map: Location Name, latitude, longitude] tags. (e.g. [map: Kyiv, 50.4501, 30.5234]). 
-Rule 2: If the user asked about a whole country, the agent MUST include exactly one or more [map-country: Country Name] tags. (e.g. [map-country: Taiwan]).
-Rule 3: Responses must be concise, unclassified military-style format. 
+
+Your task is to validate the agent's response against these rules:
+Rule 1: If the user asked about a specific location, city, or region, the agent MUST include [map: Location Name, latitude, longitude] tags.
+Rule 2: If the user asked about a whole country, the agent MUST include [map-country: Country Name] tags.
+Rule 3: Responses must be concise, unclassified military-style format.
+
+IMPORTANT: Only flag violations for location/map rules if the query is actually about a geographic location. For general queries (like "who are the duckyducks"), map tags are NOT required.
 
 Original User Query: "{user_query}"
 Agent Response: "{assistant_response}"
 
-If the agent properly followed the rules, output exactly the word: VALID
-If the agent failed (e.g., missed a map tag for a location, or hallucinated the tag formatting), output: INVALID: <reason and instructions for the agent to fix it>
-"""
+Respond with EXACTLY one of these two formats:
+- If all applicable rules are followed: VALID
+- If a rule is violated: INVALID: <brief reason>
+
+Do not add any other text. Start your response with either VALID or INVALID."""
 
 logger = logging.getLogger("agent_flow")
 
@@ -66,6 +73,35 @@ def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
     return "reviewer"
 
 
+def vector_search_node(state: AgentState):
+    """Mandatory first step: execute vector search for every query."""
+    logger.debug("[AGENT LOG] Entering 'vector_search_node' - mandatory first step.")
+    
+    # Extract user query from the first HumanMessage
+    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    if not user_msgs:
+        logger.warning("[AGENT LOG] No user message found for vector search.")
+        return {"vector_search_results": "No query provided."}
+    
+    query = user_msgs[0].content
+    logger.debug(f"[AGENT LOG] Executing mandatory vector search for query: '{query}'")
+    
+    try:
+        results = similarity_search(query, k=3)
+        if not results:
+            logger.debug("[AGENT LOG] No vector search results found.")
+            return {"vector_search_results": "No archival data found in historical intelligence database."}
+        
+        # Format results like the vector_search tool does
+        results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
+        formatted_results = f"ARCHIVAL INTELLIGENCE REPORT:\n{results_text}"
+        logger.debug(f"[AGENT LOG] Vector search completed. Found {len(results)} result(s).")
+        return {"vector_search_results": formatted_results}
+    except Exception as e:
+        logger.error(f"[AGENT LOG] Vector search failed: {e}")
+        return {"vector_search_results": f"Vector search error: {str(e)}"}
+
+
 def call_model(state: AgentState):
     logger.debug("[AGENT LOG] Entering 'call_model' node.")
     llm = get_reasoning_llm()
@@ -74,7 +110,13 @@ def call_model(state: AgentState):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     time_prompt = f"\n\nCURRENT SYSTEM TIME: {current_time}. Keep this in mind for time-sensitive queries."
 
-    messages = [SystemMessage(content=system_msg + time_prompt)] + list(
+    # Inject vector search results into the context
+    vector_results = state.get("vector_search_results", "")
+    vector_context = ""
+    if vector_results:
+        vector_context = f"\n\n---\nARCHIVAL INTELLIGENCE (from vector search):\n{vector_results}\n---\n\n"
+
+    messages = [SystemMessage(content=system_msg + vector_context + time_prompt)] + list(
         state["messages"]
     )
     logger.debug(f"[AGENT LOG] Invoking LLM with {len(messages)} messages.")
@@ -86,26 +128,33 @@ def call_model(state: AgentState):
 def review_response(state: AgentState, config: RunnableConfig):
     logger.debug("[AGENT LOG] Entering 'review_response' node.")
     llm = get_reviewer_llm()
-    
+
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
-    
+
     last_message = state["messages"][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else str(last_message)
-    
 
     formatted_prompt = critic_prompt.format(user_query=user_query, assistant_response=assistant_response)
-    response = llm.with_config({"tags": ["reviewer"]}).invoke([SystemMessage(content=formatted_prompt)], config=config)
-    content = response.content.strip() if hasattr(response, "content") else str(response).strip()
     
-    if content.startswith("VALID"):
-        logger.debug("[AGENT LOG] Validation passed.")
+    try:
+        response = llm.with_config({"tags": ["reviewer"]}).invoke([SystemMessage(content=formatted_prompt)], config=config)
+        content = response.content.strip() if hasattr(response, "content") else str(response).strip()
+    except Exception as e:
+        logger.error(f"[AGENT LOG] Reviewer LLM error: {e}")
+        # If reviewer fails, pass the response through
         return {"is_valid": True, "validation_attempts": 1}
+
+    logger.debug(f"[AGENT LOG] Reviewer response: {content[:100]}...")
+
+    if content.startswith("VALID"):
+        logger.debug(f"[AGENT LOG] Validation passed (attempt {state.get('validation_attempts', 0) + 1}).")
+        return {"is_valid": True, "validation_attempts": 1}  # Adds 1 to counter
     else:
-        logger.debug(f"[AGENT LOG] Validation failed: {content}")
+        logger.debug(f"[AGENT LOG] Validation failed (attempt {state.get('validation_attempts', 0) + 1}): {content}")
         return {
             "is_valid": False,
-            "validation_attempts": 1,
+            "validation_attempts": 1,  # Adds 1 to counter
             "messages": [SystemMessage(content=f"CRITICAL FEEDBACK FROM QA REVIEWER: {content}. You MUST fix this in your next response. NEVER apologize, just output the corrected intelligence report.", additional_kwargs={"role": "system"})]
         }
 
@@ -128,13 +177,28 @@ def check_validation(state: AgentState) -> Literal["agent", "__end__"]:
 def get_graph():
     checkpointer = MemorySaver()
     workflow = StateGraph(AgentState)
+    
+    # Add nodes
+    workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_node("reviewer", review_response)
-    workflow.set_entry_point("agent")
+    
+    # Set entry point to vector_search (mandatory first step)
+    workflow.set_entry_point("vector_search")
+    
+    # Vector search always flows to agent
+    workflow.add_edge("vector_search", "agent")
+    
+    # Agent decides whether to use tools or go to reviewer
     workflow.add_conditional_edges("agent", should_continue)
+    
+    # Tools loop back to agent for further reasoning
     workflow.add_edge("tools", "agent")
+    
+    # Reviewer validates or sends back for revision
     workflow.add_conditional_edges("reviewer", check_validation)
+    
     return workflow.compile(checkpointer=checkpointer)
 
 
@@ -148,6 +212,13 @@ def process_query(user_query: str, thread_id: str = "default") -> str:
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     result = app_graph.invoke(inputs, config=config)
+    
+    # Find the last assistant message (not system feedback)
+    for msg in reversed(result["messages"]):
+        if hasattr(msg, "type") and msg.type == "ai":
+            return msg.content
+    
+    # Fallback to last message if no AI message found
     return result["messages"][-1].content
 
 
@@ -183,7 +254,16 @@ async def process_query_stream(
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False
-    
+
+    # Emit vector search status immediately (mandatory first step)
+    from app.core.config import settings
+    yield {
+        "type": "status",
+        "phase": "vector_search",
+        "tool": "vector_search",
+        "query": user_query,
+    }
+
     buffer = ""
     in_think = False
     think_buffer = ""
