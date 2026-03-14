@@ -70,6 +70,24 @@ docker exec geovision-app pytest --cov=app tests/
 
 ---
 
+## Code Quality & Linting
+
+### Run Ruff After Each Task
+
+**IMPORTANT**: After completing each coding task, always run ruff to lint and auto-fix issues:
+
+```bash
+# Auto-fix all fixable issues
+.venv/bin/ruff check app/ --fix
+
+# Verify no remaining issues
+.venv/bin/ruff check app/
+```
+
+This ensures code quality and consistency across the project.
+
+---
+
 ## Development Tips
 
 1. **Model Switching**: You can change the reasoning model at runtime using the `set_reasoning_model` method in `app/core/config.py` or by updating the `REASONING_LLM_MODEL_NAME` environment variable.

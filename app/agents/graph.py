@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.services.llm import get_reasoning_llm, get_reviewer_llm
+from app.services.llm import get_reasoning_llm
 from app.services.vector_store import similarity_search
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
@@ -166,11 +166,11 @@ def review_response(state: AgentState, config: RunnableConfig):
         reviewer_result = "INVALID: Missing map tag for geographic query"
         logger.warning(f"[QA_REVIEWER] {reviewer_result}")
     else:
-        logger.info(f"[QA_REVIEWER] Validation PASSED")
+        logger.info("[QA_REVIEWER] Validation PASSED")
     
-    logger.info(f"[QA_REVIEWER] === VALIDATION RESULT ===")
+    logger.info("[QA_REVIEWER] === VALIDATION RESULT ===")
     logger.info(reviewer_result)
-    logger.info(f"[QA_REVIEWER] === END ===")
+    logger.info("[QA_REVIEWER] === END ===")
     
     if is_valid:
         return {"is_valid": True, "validation_attempts": 1, "reviewer_result": reviewer_result}
@@ -291,12 +291,10 @@ async def process_query_stream(
     buffer = ""
     in_think = False
     think_buffer = ""
-    vector_search_done = False
 
     async for event in app_graph.astream_events(inputs, config=config, version="v2"):
         kind = event.get("event")
         tags = event.get("tags", [])
-        metadata = event.get("metadata", {})
 
         if kind == "on_chat_model_start":
             if "reviewer" in tags:
