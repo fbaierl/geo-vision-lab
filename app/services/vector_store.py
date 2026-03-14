@@ -19,7 +19,8 @@ def get_mongo_client() -> MongoClient:
     """Get or create MongoDB client singleton."""
     global _client
     if _client is None:
-        _client = MongoClient(settings.DATABASE_URL)
+        # Use directConnection for non-Docker environments
+        _client = MongoClient(settings.DATABASE_URL, directConnection=True)
     return _client
 
 
@@ -142,10 +143,10 @@ def insert_documents(documents: List[Dict[str, Any]]) -> None:
 def similarity_search(query: str, k: int = 3) -> List[Dict[str, Any]]:
     """Perform vector similarity search using MongoDB vector search."""
     collection = get_collection()
-    
+
     # Embed the query
     query_embedding = embed_query(query)
-    
+
     # Perform vector search using MongoDB's $vectorSearch aggregation
     pipeline = [
         {
@@ -158,12 +159,9 @@ def similarity_search(query: str, k: int = 3) -> List[Dict[str, Any]]:
             }
         },
         {
-            "$project": {
-                "embedding": 0,  # Exclude embedding from results
-                "_id": 0
-            }
+            "$unset": ["embedding", "_id"]  # Remove embedding and _id from results
         }
     ]
-    
+
     results = list(collection.aggregate(pipeline))
     return results

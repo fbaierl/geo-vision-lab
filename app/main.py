@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -6,7 +7,16 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import chat, health, models
 
+# Configure logging for Dozzle visibility
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("geovision_app")
+logger.info("[APP] Starting GeoVision Lab API server...")
+
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
+logger.info(f"[APP] App initialized: {settings.APP_NAME} v{settings.VERSION}")
 
 # Enable CORS or other middlewares if needed in the future
 
