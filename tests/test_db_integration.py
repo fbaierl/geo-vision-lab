@@ -120,45 +120,44 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
         tool_calls=[{"name": "vector_search", "args": {"query": "secret base"}, "id": "call_123"}]
     )
     # 2. LLM receives the real vector database response and synthesizes it
-    call_2 = AIMessage(content="Based on the intelligence, the secret base is located in Antarctica.")
+    call_2 = AIMessage(content="Based on the intelligence, the secret base is located in Antarctica. [map: Antarctica, -82.8628, 135.0000]")
+    # 3. Reviewer validates (returns VALID)
+    mock_reviewer_response = MagicMock()
+    mock_reviewer_response.content = "VALID"
 
+    # Agent LLM returns call_1, then call_2; Reviewer LLM returns VALID
     mock_llm_with_tools.invoke.side_effect = [call_1, call_2]
-
-    mock_reviewer_llm = MagicMock()
-    mock_reviewer_with_structured = MagicMock()
-    mock_reviewer_llm.with_structured_output.return_value = mock_reviewer_with_structured
-    mock_reviewer_with_structured.invoke.return_value = {"is_valid": True, "feedback": "Looks good"}
+    mock_llm.invoke.return_value = mock_reviewer_response
 
     with patch("app.agents.graph.get_reasoning_llm", return_value=mock_llm):
-        with patch("app.agents.graph.get_reviewer_llm", return_value=mock_reviewer_llm):
-            with patch("app.agents.tools.similarity_search", side_effect=mock_similarity_search):
-                print("\n\n" + "="*50)
-                print("🧠 BEGIN LANGGRAPH EXECUTION FLOW")
-                print("="*50)
+        with patch("app.agents.tools.similarity_search", side_effect=mock_similarity_search):
+            print("\n\n" + "="*50)
+            print("🧠 BEGIN LANGGRAPH EXECUTION FLOW")
+            print("="*50)
 
-                # We use .stream() instead of .invoke() so we can print each step as it happens
-                for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
-                    for node_name, node_state in event.items():
-                        print(f"\n📍 [GRAPH NODE JUMP]: Execution reached node '{node_name}'")
+            # We use .stream() instead of .invoke() so we can print each step as it happens
+            for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
+                for node_name, node_state in event.items():
+                    print(f"\n📍 [GRAPH NODE JUMP]: Execution reached node '{node_name}'")
 
-                        if "messages" in node_state and node_state["messages"]:
-                            last_msg = node_state["messages"][-1]
+                    if "messages" in node_state and node_state["messages"]:
+                        last_msg = node_state["messages"][-1]
 
-                            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                                print(f"  ⚡ Action: LLM decided to use tools -> {[t['name'] for t in last_msg.tool_calls]}")
-                            elif last_msg.__class__.__name__ == "ToolMessage":
-                                summary = last_msg.content[:100].replace('\n', ' ') + "..."
-                                print(f"  🛠️ Action: Tool '{last_msg.name}' returned data: {summary}")
-                            else:
-                                print("  ✅ Action: LLM synthesized the final answer.")
+                        if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                            print(f"  ⚡ Action: LLM decided to use tools -> {[t['name'] for t in last_msg.tool_calls]}")
+                        elif last_msg.__class__.__name__ == "ToolMessage":
+                            summary = last_msg.content[:100].replace('\n', ' ') + "..."
+                            print(f"  🛠️ Action: Tool '{last_msg.name}' returned data: {summary}")
+                        else:
+                            print("  ✅ Action: LLM synthesized the final answer.")
 
-                print("\n" + "="*50)
-                print("🏁 END LANGGRAPH EXECUTION FLOW")
-                print("="*50 + "\n")
+            print("\n" + "="*50)
+            print("🏁 END LANGGRAPH EXECUTION FLOW")
+            print("="*50 + "\n")
 
-                # After streaming is done, fetch the final state from the checkpointer
-                final_state = app_graph.get_state(config)
-                result = final_state.values
+            # After streaming is done, fetch the final state from the checkpointer
+            final_state = app_graph.get_state(config)
+            result = final_state.values
 
     # 4. Assertions
     final_message = result["messages"][-1].content

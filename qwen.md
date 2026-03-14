@@ -78,13 +78,34 @@ docker exec geovision-app pytest --cov=app tests/
 
 ```bash
 # Auto-fix all fixable issues
-.venv/bin/ruff check app/ --fix
+.venv/bin/ruff check app/ tests/ --fix
 
 # Verify no remaining issues
-.venv/bin/ruff check app/
+.venv/bin/ruff check app/ tests/
 ```
 
 This ensures code quality and consistency across the project.
+
+---
+
+## Testing
+
+### Run Tests After Each Task
+
+**IMPORTANT**: After completing each coding task (and running ruff), always run the test suite to ensure nothing is broken:
+
+```bash
+# Run all tests
+.venv/bin/pytest tests/ -v
+
+# Run specific test file
+.venv/bin/pytest tests/test_db_integration.py -v
+
+# Run with coverage
+.venv/bin/pytest tests/ --cov=app
+```
+
+**Expected outcome**: All tests should pass. If any test fails, fix the issue before committing.
 
 ---
 
