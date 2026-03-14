@@ -41,23 +41,20 @@ Respond in a clear, brief, unclassified military-style format, avoiding robotic 
 CRITICAL INSTRUCTION: Before you generate any final response or tool call, you MUST wrap your thought process inside <think>...</think> tags. Do not skip this reasoning step.
 """
 
-critic_prompt = """You are a strict QA Reviewer for a Geopolitical Intelligence Agent.
+critic_prompt = """You are a QA Reviewer. Validate the response against these rules:
 
-Your task is to validate the agent's response against these rules:
-Rule 1: If the user asked about a specific location, city, or region, the agent MUST include [map: Location Name, latitude, longitude] tags.
-Rule 2: If the user asked about a whole country, the agent MUST include [map-country: Country Name] tags.
-Rule 3: Responses must be concise, unclassified military-style format.
+RULES (apply only if relevant):
+1. REAL geographic locations (cities, countries) MUST have [map: Name, lat, lon] tags
+2. REAL countries MUST have [map-country: Country] tags  
+3. Use concise military-style format
 
-IMPORTANT: Only flag violations for location/map rules if the query is actually about a geographic location. For general queries (like "who are the duckyducks"), map tags are NOT required.
+IMPORTANT: Fictional entities (DuckyDucks, fantasy locations) do NOT need maps. Only flag REAL locations.
 
-Original User Query: "{user_query}"
+User Query: "{user_query}"
 Agent Response: "{assistant_response}"
 
-Respond with EXACTLY one of these two formats:
-- If all applicable rules are followed: VALID
-- If a rule is violated: INVALID: <brief reason>
-
-Do not add any other text. Start your response with either VALID or INVALID."""
+Reply with ONLY one word: VALID or INVALID
+Start your response with VALID or INVALID."""
 
 logger = logging.getLogger("agent_flow")
 
@@ -75,35 +72,42 @@ def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
 
 def vector_search_node(state: AgentState):
     """Mandatory first step: execute vector search for every query."""
-    logger.debug("[AGENT LOG] Entering 'vector_search_node' - mandatory first step.")
+    logger.info("=" * 80)
+    logger.info("[VECTOR_SEARCH_NODE] Starting mandatory vector search")
+    logger.info("=" * 80)
     
     # Extract user query from the first HumanMessage
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     if not user_msgs:
-        logger.warning("[AGENT LOG] No user message found for vector search.")
+        logger.warning("[VECTOR_SEARCH_NODE] No user message found for vector search.")
         return {"vector_search_results": "No query provided."}
     
     query = user_msgs[0].content
-    logger.debug(f"[AGENT LOG] Executing mandatory vector search for query: '{query}'")
+    logger.info(f"[VECTOR_SEARCH_NODE] Query: '{query}'")
     
     try:
         results = similarity_search(query, k=3)
         if not results:
-            logger.debug("[AGENT LOG] No vector search results found.")
+            logger.info("[VECTOR_SEARCH_NODE] No archival data found in historical intelligence database.")
             return {"vector_search_results": "No archival data found in historical intelligence database."}
-        
+
         # Format results like the vector_search tool does
         results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
         formatted_results = f"ARCHIVAL INTELLIGENCE REPORT:\n{results_text}"
-        logger.debug(f"[AGENT LOG] Vector search completed. Found {len(results)} result(s).")
+        logger.info(f"[VECTOR_SEARCH_NODE] Found {len(results)} result(s)")
+        logger.info("[VECTOR_SEARCH_NODE] === RETRIEVED CONTENT START ===")
+        logger.info(results_text)
+        logger.info("[VECTOR_SEARCH_NODE] === RETRIEVED CONTENT END ===")
         return {"vector_search_results": formatted_results}
     except Exception as e:
-        logger.error(f"[AGENT LOG] Vector search failed: {e}")
+        logger.error(f"[VECTOR_SEARCH_NODE] Vector search failed: {e}")
         return {"vector_search_results": f"Vector search error: {str(e)}"}
 
 
 def call_model(state: AgentState):
-    logger.debug("[AGENT LOG] Entering 'call_model' node.")
+    logger.info("=" * 80)
+    logger.info("[AGENT] Entering reasoning phase")
+    logger.info("=" * 80)
     llm = get_reasoning_llm()
     llm_with_tools = llm.bind_tools(tools)
 
@@ -115,47 +119,67 @@ def call_model(state: AgentState):
     vector_context = ""
     if vector_results:
         vector_context = f"\n\n---\nARCHIVAL INTELLIGENCE (from vector search):\n{vector_results}\n---\n\n"
+        logger.info("[AGENT] Vector search results injected into context")
 
     messages = [SystemMessage(content=system_msg + vector_context + time_prompt)] + list(
         state["messages"]
     )
-    logger.debug(f"[AGENT LOG] Invoking LLM with {len(messages)} messages.")
+    logger.info(f"[AGENT] Invoking LLM with {len(messages)} messages")
     response = llm_with_tools.invoke(messages)
-    logger.debug("[AGENT LOG] LLM responded.")
+    
+    # Log the agent's reasoning and tool calls
+    if hasattr(response, "content") and response.content:
+        logger.info("[AGENT] === REASONING OUTPUT START ===")
+        logger.info(response.content)
+        logger.info("[AGENT] === REASONING OUTPUT END ===")
+    if hasattr(response, "tool_calls") and response.tool_calls:
+        logger.info(f"[AGENT] Tool calls requested: {[tc['name'] for tc in response.tool_calls]}")
+    
+    logger.info("[AGENT] Reasoning phase complete")
     return {"messages": [response]}
 
 
 def review_response(state: AgentState, config: RunnableConfig):
-    logger.debug("[AGENT LOG] Entering 'review_response' node.")
-    llm = get_reviewer_llm()
-
+    """QA Reviewer - validates response formatting."""
+    logger.info("=" * 80)
+    logger.info("[QA_REVIEWER] Starting validation")
+    logger.info("=" * 80)
+    
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
-
     last_message = state["messages"][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else str(last_message)
 
-    formatted_prompt = critic_prompt.format(user_query=user_query, assistant_response=assistant_response)
+    logger.info(f"[QA_REVIEWER] Query: {user_query[:50]}...")
+    logger.info(f"[QA_REVIEWER] Response length: {len(assistant_response)} chars")
     
-    try:
-        response = llm.with_config({"tags": ["reviewer"]}).invoke([SystemMessage(content=formatted_prompt)], config=config)
-        content = response.content.strip() if hasattr(response, "content") else str(response).strip()
-    except Exception as e:
-        logger.error(f"[AGENT LOG] Reviewer LLM error: {e}")
-        # If reviewer fails, pass the response through
-        return {"is_valid": True, "validation_attempts": 1}
-
-    logger.debug(f"[AGENT LOG] Reviewer response: {content[:100]}...")
-
-    if content.startswith("VALID"):
-        logger.debug(f"[AGENT LOG] Validation passed (attempt {state.get('validation_attempts', 0) + 1}).")
-        return {"is_valid": True, "validation_attempts": 1}  # Adds 1 to counter
+    # Check for map tags if query is about real locations
+    has_map_tag = "[map:" in assistant_response or "[map-country:" in assistant_response
+    is_geo_query = any(word in user_query.lower() for word in ['city', 'country', 'location', 'where', 'map', 'coordinates'])
+    
+    # Simple validation logic
+    is_valid = True
+    reviewer_result = "VALID"
+    
+    if is_geo_query and not has_map_tag:
+        is_valid = False
+        reviewer_result = "INVALID: Missing map tag for geographic query"
+        logger.warning(f"[QA_REVIEWER] {reviewer_result}")
     else:
-        logger.debug(f"[AGENT LOG] Validation failed (attempt {state.get('validation_attempts', 0) + 1}): {content}")
+        logger.info(f"[QA_REVIEWER] Validation PASSED")
+    
+    logger.info(f"[QA_REVIEWER] === VALIDATION RESULT ===")
+    logger.info(reviewer_result)
+    logger.info(f"[QA_REVIEWER] === END ===")
+    
+    if is_valid:
+        return {"is_valid": True, "validation_attempts": 1, "reviewer_result": reviewer_result}
+    else:
         return {
             "is_valid": False,
-            "validation_attempts": 1,  # Adds 1 to counter
-            "messages": [SystemMessage(content=f"CRITICAL FEEDBACK FROM QA REVIEWER: {content}. You MUST fix this in your next response. NEVER apologize, just output the corrected intelligence report.", additional_kwargs={"role": "system"})]
+            "validation_attempts": 1,
+            "reviewer_result": reviewer_result,
+            "messages": [SystemMessage(content=f"QA FEEDBACK: {reviewer_result}", additional_kwargs={"role": "system"})]
         }
 
 
@@ -267,10 +291,12 @@ async def process_query_stream(
     buffer = ""
     in_think = False
     think_buffer = ""
+    vector_search_done = False
 
     async for event in app_graph.astream_events(inputs, config=config, version="v2"):
         kind = event.get("event")
         tags = event.get("tags", [])
+        metadata = event.get("metadata", {})
 
         if kind == "on_chat_model_start":
             if "reviewer" in tags:
@@ -305,18 +331,42 @@ async def process_query_stream(
                 "content": text,
             }
 
+        elif kind == "on_chain_end":
+            # Capture vector_search_node completion via chain events
+            if event.get("name") == "vector_search":
+                output = event.get("data", {}).get("output", {})
+                results = output.get("vector_search_results", "") if isinstance(output, dict) else str(output)
+                if results and isinstance(results, str) and results.strip():
+                    has_data = "No archival data" not in results and "error" not in results.lower()
+                    yield {
+                        "type": "tool_result",
+                        "tool": "vector_search",
+                        "summary": "Archival intelligence retrieved" if has_data else "No archival data found",
+                        "content": results,
+                    }
+            
+            # Capture reviewer result - check for various possible node names
+            node_name = event.get("name", "")
+            if "review" in node_name.lower():
+                output = event.get("data", {}).get("output", {})
+                reviewer_result = output.get("reviewer_result", "") if isinstance(output, dict) else ""
+                if reviewer_result and isinstance(reviewer_result, str) and reviewer_result.strip():
+                    is_valid = reviewer_result.startswith("VALID")
+                    yield {
+                        "type": "tool_result",
+                        "tool": "QA Reviewer",
+                        "summary": "Analysis validated" if is_valid else "Analysis revised",
+                        "content": reviewer_result,
+                    }
+
         elif kind == "on_chat_model_end":
             output = event.get("data", {}).get("output")
             content = getattr(output, "content", "")
             tool_calls = getattr(output, "tool_calls", [])
-            
+
+            # Skip reviewer here - it's captured in on_chain_end
             if "reviewer" in tags:
-                yield {
-                    "type": "tool_result",
-                    "tool": "QA Reviewer",
-                    "summary": "Analysis completed",
-                    "content": content
-                }
+                pass
             elif tool_calls and content:
                 yield {
                     "type": "tool_result",

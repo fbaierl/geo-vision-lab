@@ -16,6 +16,6 @@ def get_reviewer_llm() -> ChatOllama:
     return ChatOllama(
         model=settings.REVIEWER_LLM_MODEL_NAME,
         base_url=settings.OLLAMA_URL,
-        num_predict=50,  # Limit response length for reviewer
-        timeout=30  # 30 second timeout
+        num_predict=20,  # Short responses for reviewer
+        timeout=60  # 60 second timeout
     )
