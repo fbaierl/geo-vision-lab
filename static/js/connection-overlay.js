@@ -99,24 +99,35 @@ class ConnectionOverlay {
         return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     }
 
-    /** Arrow SVG marker at destination */
+    /** Arrow SVG marker at the middle of the line */
     _arrowMarker(from, to, color, intensity) {
-        const angle = this._bearing(from, to);
+        const curve = this._bezierPoints(from, to);
+        // Find middle point (index approx middle)
+        const midIdx = Math.floor(curve.length / 2);
+        const midPoint = curve[midIdx];
+        const nextPoint = curve[midIdx + 1] || curve[curve.length - 1];
+        
+        // Calculate tangent at the middle
+        const angle = this._bearing(midPoint, nextPoint);
+        
         const sz = intensity === 'high' ? 28 : intensity === 'low' ? 18 : 22;
+        
         const icon = L.divIcon({
             className: 'palantir-arrow-wrapper',
             html: `
                 <svg width="${sz}" height="${sz}" viewBox="0 0 24 24"
-                     style="transform:rotate(${angle}deg);
+                     style="transform:rotate(${angle - 90}deg);
+                            transform-origin: center center;
                             filter:drop-shadow(0 0 6px ${color}) drop-shadow(0 0 12px ${color}40);
-                            animation:palantirArrowPulse 1.5s ease-in-out infinite;">
-                    <polygon points="2,2 22,12 2,22 8,12" fill="${color}" opacity="0.95"/>
+                            animation:palantirArrowPulse 1.5s ease-in-out infinite;
+                            display: block;">
+                    <polygon points="12,2 22,22 12,18 2,22" fill="${color}" opacity="0.95"/>
                 </svg>
             `,
             iconSize: [sz, sz],
             iconAnchor: [sz / 2, sz / 2],
         });
-        return L.marker(to, { icon, interactive: false });
+        return L.marker(midPoint, { icon, interactive: false });
     }
 
     // ─────────────────────────────────────────────

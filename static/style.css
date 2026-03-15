@@ -347,8 +347,14 @@
             display: flex;
             flex-direction: column;
             gap: 3px;
-            max-width: 80%;
+            max-width: 90%;
             animation: pop 0.18s ease-out;
+        }
+
+        .msg.agent {
+            align-self: flex-start;
+            max-width: 100%;
+            width: 100%;
         }
 
         @keyframes pop {
@@ -661,6 +667,8 @@
             border-bottom: 1px solid var(--border);
             padding: 0 10px;
             background: rgba(0, 0, 0, 0.2);
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .tab-btn {
@@ -693,6 +701,8 @@
             display: none;
             padding: 10px;
             animation: tab-fade 0.3s ease-out;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .tab-content.active {

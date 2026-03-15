@@ -63,7 +63,7 @@ class MapController {
                 <span>${headerText}</span>
                 <span class="map-status-dot"></span>
             </div>
-            <div id="${mapId}" class="llm-map palantir-map" style="height:420px; width:100%;"></div>
+            <div id="${mapId}" class="llm-map palantir-map" style="height:600px; width:100%;"></div>
             <div class="palantir-map-legend" id="legend-${mapId}"></div>
         `;
         if (!anchorEl) {
@@ -116,7 +116,7 @@ class MapController {
             const [lat, lng] = loc.coordinates;
             if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
 
-            const color = this._roleColor(loc.role);
+            const color = this._entityColor(loc);
             const icon = this._pulseIcon(color, loc.type);
             const marker = L.marker([lat, lng], { icon }).addTo(map);
             marker.bindPopup(this._locationPopup(loc), { className: 'palantir-popup' });
@@ -153,7 +153,7 @@ class MapController {
         }
 
         // ── Legend ──
-        this._buildLegend('legend-' + mapId, connections);
+        this._buildLegend('legend-' + mapId, locations, connections);
 
         // ── Status bar update ──
         const statusEl = document.getElementById('f-status');
@@ -169,15 +169,37 @@ class MapController {
     // Helpers
     // ─────────────────────────────────────────────
 
-    _roleColor(role) {
-        const COLORS = {
+    /** Get a distinct color for an entity based on its name/role */
+    _entityColor(loc) {
+        // Core situational roles get priority colors
+        const ROLE_COLORS = {
             aggressor:  '#ff3030',
             target:     '#ff9900',
             ally:       '#00ff88',
-            neutral:    '#00d4ff',
             staging:    '#cc44ff',
         };
-        return COLORS[role] || COLORS.neutral;
+
+        if (ROLE_COLORS[loc.role]) return ROLE_COLORS[loc.role];
+
+        // Entity palette for "neutral" or variety
+        const PALETTE = [
+            '#00d4ff', // Cyan
+            '#00ff88', // Neo-green
+            '#ff00ff', // Magenta
+            '#7700ff', // Indigo
+            '#ffff00', // Yellow
+            '#ff5500', // Bright Orange
+            '#00ffcc', // Mint
+            '#ffcc00', // Gold
+        ];
+
+        // Hash name to index
+        const name = loc.name || 'unknown';
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return PALETTE[Math.abs(hash) % PALETTE.length];
     }
 
     _pulseIcon(color, type) {
@@ -185,32 +207,46 @@ class MapController {
         return L.divIcon({
             className: 'palantir-marker-wrapper',
             html: `
-                <div class="palantir-pulse" style="
-                    width:${size}px; height:${size}px;
-                    background:${color};
-                    border-radius:50%;
-                    box-shadow: 0 0 12px ${color}, 0 0 24px ${color}60;
-                    animation: palantirPulse 2s ease-in-out infinite;
-                "></div>
-                <div class="palantir-pulse-ring" style="
-                    position:absolute; top:50%; left:50%;
-                    width:${size * 2.5}px; height:${size * 2.5}px;
-                    margin-left:-${size * 1.25}px; margin-top:-${size * 1.25}px;
-                    border:2px solid ${color};
-                    border-radius:50%;
-                    animation: palantirRing 2s ease-out infinite;
-                    opacity:0.6;
-                "></div>
+                <div style="
+                    position: relative;
+                    width: ${size * 2.5}px;
+                    height: ${size * 2.5}px;
+                    pointer-events: none;
+                ">
+                    <!-- Core Pulse Dot -->
+                    <div class="palantir-pulse" style="
+                        position:absolute;
+                        top: 50%; left: 50%;
+                        transform: translate(-50%, -50%);
+                        width:${size}px; height:${size}px;
+                        background:${color};
+                        border-radius:50%;
+                        box-shadow: 0 0 12px ${color}, 0 0 24px ${color}60;
+                        animation: palantirPulse 2s ease-in-out infinite;
+                        z-index: 2;
+                    "></div>
+                    <!-- Outer Ring -->
+                    <div class="palantir-pulse-ring" style="
+                        position:absolute;
+                        top: 50%; left: 50%;
+                        width:${size * 2.5}px; height:${size * 2.5}px;
+                        border:2px solid ${color};
+                        border-radius:50%;
+                        animation: palantirRing 2s ease-out infinite;
+                        opacity:0.6;
+                        z-index: 1;
+                    "></div>
+                </div>
             `,
-            iconSize: [size, size],
-            iconAnchor: [size / 2, size / 2],
+            iconSize: [size * 2.5, size * 2.5],
+            iconAnchor: [size * 1.25, size * 1.25],
         });
     }
 
     _locationPopup(loc) {
         const [lat, lng] = loc.coordinates;
         const roleLabel = (loc.role || 'neutral').toUpperCase();
-        const color = this._roleColor(loc.role);
+        const color = this._entityColor(loc);
         return `
             <div class="palantir-popup-inner">
                 <div class="popup-title" style="color:${color}">${loc.name}</div>
@@ -221,11 +257,11 @@ class MapController {
         `;
     }
 
-    _buildLegend(legendId, connections) {
+    _buildLegend(legendId, locations, connections) {
         const el = document.getElementById(legendId);
-        if (!el || !connections || connections.length === 0) return;
+        if (!el) return;
 
-        const types = [...new Set(connections.map(c => c.type || 'threat'))];
+        const types = [...new Set((connections || []).map(c => c.type || 'threat'))];
         const COLOR_MAP = {
             attack:   '#ff0000',
             threat:   '#ff0066',
@@ -241,20 +277,41 @@ class MapController {
             blockade: 'Blockade/Containment',
         };
 
-        el.innerHTML = `
-            <div class="legend-title">▸ VECTOR LEGEND</div>
-            ${types.map(t => `
+        let html = '';
+
+        // Locations section
+        if (locations && locations.length > 0) {
+            html += `<div class="legend-title" style="margin-top:0">▸ POINTS OF INTEREST</div>`;
+            html += `<div class="legend-poi-container" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; padding:5px 0;">`;
+            locations.forEach(loc => {
+                const color = this._entityColor(loc);
+                html += `
+                    <div class="legend-poi" style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:var(--white);">
+                        <div style="width:8px; height:8px; border-radius:50%; background:${color}; box-shadow:0 0 5px ${color}"></div>
+                        <span style="border-bottom:1px solid ${color}40">${loc.name}</span>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        }
+
+        // Vectors section
+        if (types.length > 0) {
+            html += `<div class="legend-title">▸ VECTOR LEGEND</div>`;
+            html += types.map(t => `
                 <div class="legend-row">
                     <svg width="28" height="6" style="vertical-align:middle; margin-right:6px;">
                         <line x1="0" y1="3" x2="24" y2="3"
-                              stroke="${COLOR_MAP[t] || '#ffff00'}" stroke-width="2"
-                              stroke-dasharray="5,3"/>
+                               stroke="${COLOR_MAP[t] || '#ffff00'}" stroke-width="2"
+                               stroke-dasharray="5,3"/>
                         <polygon points="24,0 28,3 24,6" fill="${COLOR_MAP[t] || '#ffff00'}"/>
                     </svg>
                     <span>${LABEL_MAP[t] || t.toUpperCase()}</span>
                 </div>
-            `).join('')}
-        `;
+            `).join('');
+        }
+
+        el.innerHTML = html;
     }
 
     clearMarkers() {
