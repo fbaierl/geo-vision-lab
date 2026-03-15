@@ -381,41 +381,56 @@
             turnCount++;
             const turnNum = turnCount;
             const timestamp = utcNow();
-            
+
             // Create turn containers for all lanes
             const reasoningTurn = document.createElement('div');
             reasoningTurn.className = 'conversation-turn';
             reasoningTurn.id = `reasoning-turn-${turnNum}`;
-            reasoningTurn.innerHTML = `
-                <div class="turn-header">
-                    <span class="turn-number">▸ TURN ${turnNum}</span>
-                    <span class="turn-time">${timestamp}</span>
-                </div>
-                <div class="turn-content" id="reasoning-turn-content-${turnNum}"></div>
+
+            const reasoningHeader = document.createElement('div');
+            reasoningHeader.className = 'turn-header';
+            reasoningHeader.innerHTML = `
+                <span class="turn-number">▸ TURN ${turnNum}</span>
+                <span class="turn-time">${timestamp}</span>
             `;
-            
+            const reasoningContent = document.createElement('div');
+            reasoningContent.className = 'turn-content';
+            reasoningContent.id = `reasoning-turn-content-${turnNum}`;
+            reasoningTurn.appendChild(reasoningHeader);
+            reasoningTurn.appendChild(reasoningContent);
+
             const textTurn = document.createElement('div');
             textTurn.className = 'conversation-turn';
             textTurn.id = `text-turn-${turnNum}`;
-            textTurn.innerHTML = `
-                <div class="turn-header">
-                    <span class="turn-number">▸ TURN ${turnNum}</span>
-                    <span class="turn-time">${timestamp}</span>
-                </div>
-                <div class="turn-content" id="text-turn-content-${turnNum}"></div>
+
+            const textHeader = document.createElement('div');
+            textHeader.className = 'turn-header';
+            textHeader.innerHTML = `
+                <span class="turn-number">▸ TURN ${turnNum}</span>
+                <span class="turn-time">${timestamp}</span>
             `;
-            
+            const textContent = document.createElement('div');
+            textContent.className = 'turn-content';
+            textContent.id = `text-turn-content-${turnNum}`;
+            textTurn.appendChild(textHeader);
+            textTurn.appendChild(textContent);
+
             const mapsTurn = document.createElement('div');
             mapsTurn.className = 'conversation-turn';
             mapsTurn.id = `maps-turn-${turnNum}`;
-            mapsTurn.innerHTML = `
-                <div class="turn-header">
-                    <span class="turn-number">▸ TURN ${turnNum}</span>
-                    <span class="turn-time">${timestamp}</span>
-                </div>
-                <div class="turn-content" id="maps-turn-content-${turnNum}"></div>
+
+            const mapsHeader = document.createElement('div');
+            mapsHeader.className = 'turn-header';
+            mapsHeader.innerHTML = `
+                <span class="turn-number">▸ TURN ${turnNum}</span>
+                <span class="turn-time">${timestamp}</span>
             `;
-            
+            const mapsContent = document.createElement('div');
+            mapsContent.className = 'turn-content';
+            mapsContent.id = `maps-turn-content-${turnNum}`;
+            mapsTurn.appendChild(mapsHeader);
+            mapsTurn.appendChild(mapsContent);
+
             // Remove placeholders on first turn
             if (turnCount === 1) {
                 document.getElementById('reasoning-placeholder')?.remove();
@@ -426,25 +441,25 @@
                 const divider1 = document.createElement('div');
                 divider1.className = 'turn-divider';
                 elReasoningTurns.appendChild(divider1);
-                
+
                 const divider2 = document.createElement('div');
                 divider2.className = 'turn-divider';
                 elTextTurns.appendChild(divider2);
-                
+
                 const divider3 = document.createElement('div');
                 divider3.className = 'turn-divider';
                 elMapsTurns.appendChild(divider3);
             }
-            
+
             // Add turns to containers
             elReasoningTurns.appendChild(reasoningTurn);
             elTextTurns.appendChild(textTurn);
             elMapsTurns.appendChild(mapsTurn);
-            
+
             return {
-                reasoning: document.getElementById(`reasoning-turn-content-${turnNum}`),
-                text: document.getElementById(`text-turn-content-${turnNum}`),
-                maps: document.getElementById(`maps-turn-content-${turnNum}`)
+                reasoning: reasoningContent,
+                text: textContent,
+                maps: mapsContent
             };
         }
 
@@ -489,6 +504,11 @@
                 labelColor = '#00e676';
             } else if (phase === 'streaming') {
                 desc = 'Delivering response';
+            } else if (phase === 'extracting_locations') {
+                label = 'LOCATION EXTRACTION' + modelTag;
+                desc = 'Extracting geographic locations from response...';
+                borderColor = '#9c27b0';
+                labelColor = '#9c27b0';
             }
 
             step.className = `reasoning-step phase-${phase}`;
@@ -539,6 +559,10 @@
         }
 
         function createTextWrapper(textEl) {
+            if (!textEl) {
+                console.error('createTextWrapper: textEl is null');
+                return null;
+            }
             const wrap = document.createElement('div');
             wrap.className = 'text-wrapper streaming-cursor';
             wrap.innerHTML = '';
@@ -563,38 +587,10 @@
         function renderMarkdown(textEl) {
             if (typeof marked !== 'undefined' && _rawStreamBuffer) {
                 let htmlStr = marked.parse(_rawStreamBuffer);
-                const mapRegex = /\[map:\s*([^,]+),\s*([-\d.]+),\s*([-\d.]+)\]/g;
-                const mapCountryRegex = /\[map-country:\s*([^\]]+)\]/g;
-                let mapsToInit = [];
-                let mapCounter = 0;
-
-                // Extract maps and remove from text
-                htmlStr = htmlStr.replace(mapRegex, (match, name, lat, lon) => {
-                    const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
-                    mapsToInit.push({ id: mapId, type: 'point', name: name.trim(), lat: parseFloat(lat), lon: parseFloat(lon) });
-                    return '';
-                });
-
-                htmlStr = htmlStr.replace(mapCountryRegex, (match, name) => {
-                    const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
-                    mapsToInit.push({ id: mapId, type: 'country', name: name.trim() });
-                    return '';
-                });
 
                 textEl.innerHTML = htmlStr;
                 textEl.classList.add('md-rendered');
                 textEl.classList.remove('streaming-cursor');
-
-                // Initialize maps in maps lane
-                if (mapsToInit.length > 0) {
-                    elMapsStatus.textContent = `${mapsToInit.length} Map(s)`;
-                    document.getElementById('maps-placeholder')?.remove();
-                    mapsToInit.forEach(mapData => {
-                        setTimeout(async () => {
-                            await initMap(mapData, currentTurn.maps);
-                        }, 50);
-                    });
-                }
 
                 // Remove cursor span
                 const cursor = textEl.querySelector('.cursor-blink');
@@ -784,6 +780,11 @@
                                     elTyping.style.display = 'flex';
                                     elFStatus.textContent = '// QA Review';
                                     elReasoningStatus.textContent = 'QA Review';
+                                } else if (evt.phase === 'extracting_locations') {
+                                    elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;Extracting locations...';
+                                    elTyping.style.display = 'flex';
+                                    elFStatus.textContent = '// Location Extraction';
+                                    elReasoningStatus.textContent = 'Extracting Locations';
                                 } else {
                                     elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;Processing signal...';
                                     elTyping.style.display = 'flex';
@@ -792,6 +793,24 @@
 
                             } else if (evt.type === 'tool_result') {
                                 addReasoningResult(evt.summary, evt.content || null);
+                            } else if (evt.type === 'locations_found') {
+                                // Handle extracted locations - render maps
+                                elMapsStatus.textContent = evt.summary;
+                                document.getElementById('maps-placeholder')?.remove();
+                                if (evt.locations && evt.locations.length > 0) {
+                                    evt.locations.forEach(loc => {
+                                        const mapData = {
+                                            id: 'llm-map-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                                            type: loc.type === 'country' ? 'country' : 'point',
+                                            name: loc.name,
+                                            lat: loc.lat,
+                                            lon: loc.lon
+                                        };
+                                        setTimeout(async () => {
+                                            await initMap(mapData, currentTurn.maps);
+                                        }, 50);
+                                    });
+                                }
                             } else if (evt.type === 'token') {
                                 elTyping.style.display = 'none';
                                 elFStatus.textContent = '// Receiving';

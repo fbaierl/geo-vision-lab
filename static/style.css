@@ -618,6 +618,15 @@
             border-color: var(--muted);
         }
 
+        .phase-extracting_locations {
+            border-color: #9c27b0;
+        }
+
+        .phase-extracting_locations .phase-label {
+            color: #9c27b0;
+            text-shadow: 0 0 5px rgba(156, 39, 176, 0.4);
+        }
+
         /* ═══ TEXT LANE ═══ */
         #text-lane {
             border-right: 1px solid var(--border);

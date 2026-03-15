@@ -6,10 +6,11 @@ This document provides a detailed breakdown of the LangGraph agent architecture 
 
 ## High-Level Overview
 
-GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The system consists of two primary agents working in concert:
+GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The system consists of three primary agents working in concert:
 
 1. **Worker Agent** — The primary reasoning engine that handles user queries, performs tool calls, and synthesizes responses
-2. **Critic Agent** — A QA reviewer that validates outputs against formatting constraints before delivery
+2. **Critic Agent** — A QA reviewer that validates outputs before delivery
+3. **Location Extractor** — Automatic geographic entity recognition using spaCy NER + Nominatim geocoding
 
 ## Mandatory Vector Search First Protocol
 
@@ -26,16 +27,17 @@ GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The syste
 ### Execution Flow
 
 ```
-User Query → [Vector Search Node] → Agent (with results injected) → [Optional: Additional Tools] → Reviewer → Response
+User Query → [Vector Search] → Worker Agent → Critic Agent → Location Extractor → Response + Maps
 ```
 
 ### Decision Tree
 
 - **Step 1 (Automatic)**: `vector_search_node` executes for every query
 - **Step 2**: Results stored in AgentState and injected into agent context
-- **Step 3**: Agent reviews archival results, decides if additional tools needed
+- **Step 3**: Worker Agent reviews archival results, decides if additional tools needed
 - **Step 4**: If additional intel needed → execute web search tools
 - **Step 5**: Submit draft to Critic Agent for validation
+- **Step 6 (Automatic)**: Location Extractor identifies geographic entities and renders maps
 
 
 ```mermaid
@@ -56,31 +58,34 @@ graph TB
 
     subgraph Critic["Critic Agent"]
         REVIEW["QA Reviewer<br/>(Qwen 2.5 0.5B)"]
-        VALIDATE["Constraint Validator"]
+    end
+
+    subgraph Location["Location Extractor"]
+        NER["spaCy NER<br/>(en_core_web_sm)"]
+        GEO["Nominatim<br/>Geocoding"]
     end
 
     subgraph Tools["Available Tools"]
         DDG["DuckDuckGo Search<br/>(Live Web)"]
-        TIME["Time Tool<br/>(Current Timestamp)"]
-        MAP["Map Renderer<br/>(Leaflet.js)"]
+        WIKI["Wikipedia API<br/>(Background Info)"]
     end
 
     subgraph Output["Output Layer"]
-        RESP[("Streaming Response<br/>(Markdown + Maps)")]
+        RESP[("Streaming Response<br/>3-Lane UI: Reasoning | Text | Maps)")]
     end
 
     UQ --> VS
     VS --> REASON
     REASON --> DECIDE{Needs More Data?}
     DECIDE -->|Yes - Live| DDG
-    DECIDE -->|Yes - Background| TIME
+    DECIDE -->|Yes - Background| WIKI
     DECIDE -->|No| REVIEW
     DDG --> REASON
-    TIME --> REASON
+    WIKI --> REASON
     REASON -->|Final Draft| REVIEW
-    REVIEW --> VALIDATE{Passes QA?}
-    VALIDATE -->|Yes| RESP
-    VALIDATE -->|No| REASON
+    REVIEW -->|Validated| NER
+    NER --> GEO
+    GEO --> RESP
 ```
 
 ---
@@ -235,16 +240,14 @@ graph TD
     RULES --> CHECK
 
     subgraph CHECK["Validation Checks"]
-        C1{Map Tags Present?<br/>if locations mentioned}
-        C2{Markdown Format<br/>Valid?}
-        C3{Reasoning Tags<br/>Properly Closed?}
-        C4{Sensitive Data<br/>Redacted?}
+        C1{Concise<br/>Military Style?}
+        C2{Factual<br/>Information?}
+        C3{Sources<br/>Cited?}
     end
 
     C1 --> PASS{All Pass?}
     C2 --> PASS
     C3 --> PASS
-    C4 --> PASS
 
     PASS -->|Yes| OUTPUT["Approved Response"]
     PASS -->|No| REVISE["Revision Request<br/>to Worker"]
@@ -256,18 +259,57 @@ graph TD
 You are a QA Reviewer for a geopolitical intelligence platform.
 Your task is to validate that the Worker's response meets all constraints:
 
-1. If geographic locations are mentioned, map tags MUST be present
-2. Response must be in proper markdown format
-3. Reasoning tags must be properly opened and closed
-4. No sensitive or classified information should be exposed
+1. Use concise military-style format
+2. Provide clear, factual information
+3. Cite sources when available
 
-If all constraints are met, respond with: APPROVED
+If all constraints are met, respond with: VALID
 If any constraint is violated, explain the issue and request revision.
 ```
 
 ---
 
-### Stage 5: Response Streaming
+### Stage 5: Location Extraction (Automatic)
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+flowchart LR
+    subgraph NER["spaCy NER Pipeline"]
+        TEXT[Response Text] --> MODEL["en_core_web_sm<br/>NER Model"]
+        MODEL --> ENTITIES["Extract Entities<br/>GPE/LOC/FAC"]
+    end
+
+    subgraph GEO["Nominatim Geocoding"]
+        ENTITIES --> GEOCODE["Geocode Each<br/>Location"]
+        GEOCODE --> COORDS["Return lat/lon<br/>+ Type"]
+    end
+
+    COORDS --> MAPS["Render Maps<br/>in UI"]
+```
+
+**What happens:**
+1. `extract_locations_node` receives the approved response text
+2. spaCy's `en_core_web_sm` model identifies named entities:
+   - **GPE** (Geopolitical Entity): Countries, cities, states
+   - **LOC** (Location): Mountains, bodies of water, regions
+   - **FAC** (Facility): Airports, buildings, landmarks
+3. Each extracted location is geocoded via Nominatim (OpenStreetMap)
+4. Results include: name, type, latitude, longitude, display_name
+5. Locations are streamed to frontend for automatic map rendering
+
+**Key Point:** This step is **fully automatic** — the Worker Agent does NOT need to request maps or provide coordinates. The Location Extractor handles everything.
+
+**Example Extraction:**
+```
+Input: "The conflict in Kyiv has escalated..."
+
+Extracted:
+- GPE: "Kyiv" → geocode → (50.4501, 30.5234) → type: city
+```
+
+---
+
+### Stage 6: Response Streaming
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%

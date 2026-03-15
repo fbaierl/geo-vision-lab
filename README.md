@@ -19,9 +19,10 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 
 ### Key Features
 
-- **Multi-Agent AI** — Worker + Critic architecture with autonomous tool selection
+- **Multi-Agent AI** — Worker + Critic + Location Extractor architecture with autonomous tool selection
 - **Hybrid Search** — Vector search (archival) + Web search (live events)
-- **Dynamic Maps** — Auto-rendered Leaflet.js maps for geographic references
+- **Automatic Map Rendering** — spaCy NER + Nominatim geocoding for geographic visualizations
+- **3-Lane UI** — Reasoning Chain | Text Result | Maps Result with resizable panels
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
 - **Privacy-First** — All inference runs locally — no data leaves your machine
 - **Observability** — Grafana + Loki logging, Dozzle real-time monitoring
@@ -39,12 +40,13 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 %%{init: {'theme': 'dark'}}%%
 graph TB
     subgraph User["User Interface"]
-        UI["Tactical Terminal<br/>(Vanilla JS + Leaflet)"]
+        UI["Tactical Terminal<br/>(3-Lane UI + Leaflet)"]
     end
 
     subgraph Backend["Backend Services"]
         API["FastAPI<br/>(REST + Streaming)"]
         AGENT["LangGraph Agent<br/>(Worker + Critic)"]
+        LOC["Location Extractor<br/>(spaCy NER + Nominatim)"]
     end
 
     subgraph Data["Data Layer"]
@@ -55,6 +57,7 @@ graph TB
     subgraph Tools["External Tools"]
         WEB["DuckDuckGo<br/>(Live Search)"]
         WIKI["Wikipedia API"]
+        NOM["Nominatim<br/>(Geocoding)"]
     end
 
     UI --> API
@@ -63,6 +66,8 @@ graph TB
     AGENT --> OL
     AGENT --> WEB
     AGENT --> WIKI
+    AGENT --> LOC
+    LOC --> NOM
 ```
 
 For detailed technology decisions, see [Technology Choices](TECHNOLOGY.md).
@@ -155,8 +160,10 @@ The platform includes a sample document (`documents/fantasy.md`) about the **Duc
 2. **Vector Search** — Ask about DuckyDucks; watch `vector_search` tool trigger
 3. **Live Search** — Ask about breaking news; verify `duckduckgo_search` execution
 4. **Time Awareness** — Ask "What exact date and time is it right now?"
-5. **Map Rendering** — Ask "Show me Lake Featherside" to verify Leaflet integration
+5. **Map Rendering** — Ask about any real location (e.g., "Tell me about Paris"); verify automatic map appears in Maps lane
 6. **Model Switching** — Switch between Qwen variants; observe quality/speed differences
+7. **3-Lane UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Maps Result shows geocoded locations
+8. **Resizable Panels** — Drag the vertical handles between lanes to adjust widths
 
 ---
 
@@ -202,11 +209,12 @@ geo-vision-lab/
 |-------|------------|
 | **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) |
 | **QA/Review LLM** | Ollama + Qwen 2.5:0.5b |
+| **NER/Location** | spaCy (en_core_web_sm) + Nominatim |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
 | **Agent Framework** | LangGraph + MemorySaver |
 | **Backend API** | FastAPI + uvicorn |
-| **Frontend UI** | Vanilla JS + Leaflet.js |
+| **Frontend UI** | Vanilla JS + Leaflet.js (3-Lane) |
 | **Testing** | PyTest + Testcontainers |
 | **CI/CD** | GitHub Actions |
 | **Observability** | Grafana + Loki + Dozzle |
