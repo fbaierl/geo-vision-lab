@@ -22,10 +22,11 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 - **Multi-Agent AI** — Worker + Critic architecture with autonomous tool selection
 - **Hybrid Search** — Vector search (archival) + Web search (live events)
 - **Dynamic Maps** — Auto-rendered Leaflet.js maps for geographic references
+- **Geospatial Heat Maps** — Palantir-style intensity visualization with GLiNER NER
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
 - **Privacy-First** — All inference runs locally — no data leaves your machine
 - **Observability** — Grafana + Loki logging, Dozzle real-time monitoring
-- **Model Switching** — Dynamic Qwen 3.5 selection (9B/4B) at runtime
+- **Model Switching** — Dynamic Qwen 3.5 selection (9B/4B/0.8B) at runtime
 
 ### Test Data Included
 
@@ -39,12 +40,12 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 %%{init: {'theme': 'dark'}}%%
 graph TB
     subgraph User["User Interface"]
-        UI["Tactical Terminal<br/>(Vanilla JS + Leaflet)"]
+        UI["Tactical Terminal<br/>(Vanilla JS + Leaflet + Heatmaps)"]
     end
 
     subgraph Backend["Backend Services"]
         API["FastAPI<br/>(REST + Streaming)"]
-        AGENT["LangGraph Agent<br/>(Worker + Critic)"]
+        AGENT["LangGraph Agent<br/>(Worker + Critic + GLiNER)"]
     end
 
     subgraph Data["Data Layer"]
@@ -55,6 +56,7 @@ graph TB
     subgraph Tools["External Tools"]
         WEB["DuckDuckGo<br/>(Live Search)"]
         WIKI["Wikipedia API"]
+        GEO["GLiNER NER<br/>(Location Extraction)"]
     end
 
     UI --> API
@@ -63,6 +65,7 @@ graph TB
     AGENT --> OL
     AGENT --> WEB
     AGENT --> WIKI
+    AGENT --> GEO
 ```
 
 For detailed technology decisions, see [Technology Choices](TECHNOLOGY.md).
@@ -200,13 +203,15 @@ geo-vision-lab/
 
 | Layer | Technology |
 |-------|------------|
-| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) |
-| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b |
+| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B/0.8B) |
+| **QA/Review LLM** | Ollama + Qwen 3.5:0.8b (fast validation) |
+| **NER (Location Extraction)** | GLiNER (50M param specialized NER) |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
 | **Agent Framework** | LangGraph + MemorySaver |
 | **Backend API** | FastAPI + uvicorn |
-| **Frontend UI** | Vanilla JS + Leaflet.js |
+| **Frontend UI** | Vanilla JS + Leaflet.js + Heatmap layers |
+| **Geospatial** | GLiNER + geopy (Nominatim) |
 | **Testing** | PyTest + Testcontainers |
 | **CI/CD** | GitHub Actions |
 | **Observability** | Grafana + Loki + Dozzle |

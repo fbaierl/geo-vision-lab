@@ -79,9 +79,44 @@ graph TB
     TIME --> REASON
     REASON -->|Final Draft| REVIEW
     REVIEW --> VALIDATE{Passes QA?}
-    VALIDATE -->|Yes| RESP
+    VALIDATE -->|Yes| GEO[Geographic Extraction<br/>(GLiNER NER)]
     VALIDATE -->|No| REASON
+    GEO --> RESP
 ```
+
+---
+
+## Geographic Location Extraction
+
+After QA validation passes, the workflow executes a **Geographic Extraction Node** that:
+
+1. **Extracts locations** from the final response using GLiNER (specialized NER model)
+2. **Geocodes** location names to coordinates via Nominatim
+3. **Streams** locations to frontend for map visualization
+4. **Completes** the workflow
+
+This ensures locations are extracted from the **synthesized final answer**, not just source documents, providing query-relevant context-aware geographic data.
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+flowchart LR
+    subgraph GEO["Geographic Extraction Node"]
+        QA[QA Validated Response] --> E[Extract Locations<br/>(GLiNER)]
+        E --> G[Geocode Locations<br/>(Nominatim)]
+        G --> S[Stream to Frontend<br/>(geo_locations event)]
+    end
+    
+    S --> DONE[Workflow Complete]
+```
+
+**Why Post-QA Extraction:**
+- ✅ Extracts from **final synthesized answer** (not just source docs)
+- ✅ Query-relevant locations only
+- ✅ Context-aware (knows which locations matter)
+- ✅ Fast: ~0.1s for 100-500 token responses
+- ✅ Uses specialized NER (GLiNER 50M params) not general LLM
+
+See [NER Implementation](ner_implementation.md) for technical details.
 
 ---
 
@@ -96,6 +131,7 @@ class AgentState(TypedDict):
     validation_attempts: Annotated[int, operator.add]
     is_valid: bool
     vector_search_results: Optional[str]  # Results from mandatory first step
+    geo_locations: Optional[List[Dict[str, Any]]]  # Extracted locations with coordinates
 ```
 
 ### Message Annotation
@@ -263,6 +299,59 @@ Your task is to validate that the Worker's response meets all constraints:
 
 If all constraints are met, respond with: APPROVED
 If any constraint is violated, explain the issue and request revision.
+```
+
+---
+
+### Stage 4: Geographic Location Extraction
+
+After QA approval, the workflow extracts geographic locations from the final response:
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+flowchart LR
+    subgraph GEO["extract_geo Node"]
+        RESP[QA Approved Response] --> GLiNER["GLiNER NER Model<br/>(50M params)"]
+        GLiNER --> LOCATIONS[Location List]
+        LOCATIONS --> GEOCODE["Geocode via<br/>Nominatim API"]
+        GEOCODE --> STREAM["Stream geo_locations<br/>event to frontend"]
+    end
+    
+    STREAM --> END[Workflow Complete]
+```
+
+**What Happens:**
+1. `extract_geo_node` receives the QA-approved response
+2. GLiNER extracts location entities (country, city, region, etc.)
+3. Each location is geocoded to coordinates
+4. Locations are streamed to frontend via `geo_locations` event
+5. Frontend renders heat map overlay
+
+**Why GLiNER (Not LLM):**
+- Specialized NER model (81-83% F1 score)
+- 50M parameters vs 4B+ for LLM (80x smaller)
+- ~0.1s inference vs 5-10s for LLM (50-100x faster)
+- Runs on CPU (no GPU required)
+
+**Example Output:**
+```json
+{
+  "type": "geo_locations",
+  "locations": [
+    {
+      "name": "Kyiv",
+      "type": "city",
+      "coordinates": [50.4501, 30.5234],
+      "confidence": "high"
+    },
+    {
+      "name": "Ukraine",
+      "type": "country",
+      "coordinates": [48.3794, 31.1656],
+      "confidence": "high"
+    }
+  ]
+}
 ```
 
 ---

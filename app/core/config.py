@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # --- LLM Models ---
     LLM_MODEL_NAME: str = "qwen3.5:4b"
     REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
-    REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Using 4B for more reliable validation
+    REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:0.8b"  # Fast validation with 0.8B
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
     # --- Available Reasoning Models ---

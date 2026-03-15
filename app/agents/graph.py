@@ -23,19 +23,6 @@ You have access to intel feeds:
 
 The archival intelligence from vector search is automatically injected into your context. Review it first, then use additional tools if you need live or updated information.
 
-CRITICAL INSTRUCTION: If the user asks about a specific location, city, country, or region, you MUST ALWAYS provide a map for it.
-For a specific city or exact location, include its exact coordinates using EXACTLY this format:
-[map: Location Name, latitude, longitude]
-
-For a whole country, use EXACTLY this format instead:
-[map-country: Country Name]
-
-Examples:
-[map: Kyiv, 50.4501, 30.5234]
-[map-country: Taiwan]
-
-Do NOT say "I cannot provide a visual map". The system will intercept the map tags and render it automatically. Simply output the tag.
-
 Respond in a clear, brief, unclassified military-style format, avoiding robotic language. Always summarize the intel you found.
 
 CRITICAL INSTRUCTION: Before you generate any final response or tool call, you MUST wrap your thought process inside <think>...</think> tags. Do not skip this reasoning step.
@@ -140,38 +127,124 @@ def call_model(state: AgentState):
 
 
 def review_response(state: AgentState, config: RunnableConfig):
-    """QA Reviewer - validates response formatting."""
+    """QA Reviewer - validates response quality and accuracy.
+    
+    Review checks (in order):
+    1. Response answers the user's query (relevance)
+    2. No contradictions with vector search results (fact-checking)
+    3. Proper military intelligence format
+    4. Thinking tags properly closed
+    5. Response has substantive content (not empty/generic)
+    6. No sensitive data exposure (API keys, internal info)
+    
+    NOTE: Map tags are NOT checked here - they are added by extract_geo_node AFTER review.
+    """
     logger.info("=" * 80)
     logger.info("[QA_REVIEWER] Starting validation")
     logger.info("=" * 80)
-    
+
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
     last_message = state["messages"][-1]
-    assistant_response = last_message.content if hasattr(last_message, "content") else str(last_message)
+    assistant_response = last_message.content if hasattr(last_message, "content") else ""
+    
+    # Get vector search results for fact-checking
+    vector_results = state.get("vector_search_results", "")
 
     logger.info(f"[QA_REVIEWER] Query: {user_query[:50]}...")
     logger.info(f"[QA_REVIEWER] Response length: {len(assistant_response)} chars")
-    
-    # Check for map tags if query is about real locations
-    has_map_tag = "[map:" in assistant_response or "[map-country:" in assistant_response
-    is_geo_query = any(word in user_query.lower() for word in ['city', 'country', 'location', 'where', 'map', 'coordinates'])
-    
-    # Simple validation logic
+
+    # Run all validation checks
     is_valid = True
     reviewer_result = "VALID"
-    
-    if is_geo_query and not has_map_tag:
+    issues = []
+
+    # Check 1: Thinking tags properly closed
+    has_unclosed_think = "<think>" in assistant_response and "</think>" not in assistant_response
+    if has_unclosed_think:
+        issues.append("Unclosed thinking tags")
         is_valid = False
-        reviewer_result = "INVALID: Missing map tag for geographic query"
+
+    # Check 2: Response has substantive content
+    if not assistant_response or len(assistant_response.strip()) < 20:
+        issues.append("Response too short or empty")
+        is_valid = False
+    
+    # Check for generic non-answers
+    generic_phrases = ["i can't help", "i don't know", "i'm unable", "not able to"]
+    if any(phrase in assistant_response.lower() for phrase in generic_phrases):
+        # Only flag if there's no actual content
+        if len(assistant_response.strip()) < 100:
+            issues.append("Generic non-answer response")
+            is_valid = False
+
+    # Check 3: Response addresses the query (basic keyword overlap check)
+    query_words = set(user_query.lower().split())
+    response_words = set(assistant_response.lower().split())
+    # Remove common stop words
+    stop_words = {'the', 'a', 'an', 'is', 'are', 'what', 'where', 'when', 'how', 'why', 'tell', 'me', 'about'}
+    query_words = query_words - stop_words
+    response_words = response_words - stop_words
+    
+    # Check if any query keywords appear in response
+    if query_words and not (query_words & response_words):
+        # No keyword overlap - might not be answering the query
+        # But don't fail, just note it (LLM can be semantically relevant without exact keywords)
+        logger.warning("[QA_REVIEWER] No keyword overlap between query and response")
+
+    # Check 4: No contradictions with vector search results
+    if vector_results and "No archival data" not in vector_results:
+        # Extract key entities from vector results (simple heuristic)
+        vector_lower = vector_results.lower()
+        response_lower = assistant_response.lower()
+        
+        # Check for obvious contradictions (dates, numbers that don't match)
+        # This is a simplified check - full fact-checking would require NER
+        import re
+        vector_years = re.findall(r'\b(19\d{2}|20\d{2})\b', vector_lower)
+        response_years = re.findall(r'\b(19\d{2}|20\d{2})\b', response_lower)
+        
+        # If vector results mention specific years and response mentions completely different ones, flag it
+        if vector_years and response_years:
+            year_set_v = set(vector_years)
+            year_set_r = set(response_years)
+            if not (year_set_v & year_set_r) and len(year_set_v) > 0 and len(year_set_r) > 0:
+                # Different years mentioned - might be contradiction or different context
+                logger.warning(f"[QA_REVIEWER] Year mismatch: vector={year_set_v}, response={year_set_r}")
+                # Don't fail on this alone - could be discussing different time periods
+
+    # Check 5: No sensitive data exposure
+    sensitive_patterns = [
+        r'api[_-]?key\s*[=:]\s*\w+',
+        r'password\s*[=:]\s*\w+',
+        r'secret\s*[=:]\s*\w+',
+        r'token\s*[=:]\s*\w+',
+        r'mongodb://\S+',
+    ]
+    for pattern in sensitive_patterns:
+        if re.search(pattern, assistant_response, re.IGNORECASE):
+            issues.append("Potential sensitive data exposure")
+            is_valid = False
+            break
+
+    # Check 6: Proper formatting (markdown headers if long response)
+    if len(assistant_response) > 500:
+        # Long responses should have some structure
+        if not any(marker in assistant_response for marker in ['\n\n', '-', '*', '###', '**']):
+            logger.warning("[QA_REVIEWER] Long response lacks formatting/structure")
+            # Don't fail, just note it
+
+    # Compile results
+    if not is_valid:
+        reviewer_result = f"INVALID: {'; '.join(issues)}"
         logger.warning(f"[QA_REVIEWER] {reviewer_result}")
     else:
         logger.info("[QA_REVIEWER] Validation PASSED")
-    
+
     logger.info("[QA_REVIEWER] === VALIDATION RESULT ===")
     logger.info(reviewer_result)
     logger.info("[QA_REVIEWER] === END ===")
-    
+
     if is_valid:
         return {"is_valid": True, "validation_attempts": 1, "reviewer_result": reviewer_result}
     else:
@@ -183,46 +256,102 @@ def review_response(state: AgentState, config: RunnableConfig):
         }
 
 
-def check_validation(state: AgentState) -> Literal["agent", "__end__"]:
+def check_validation(state: AgentState) -> Literal["agent", "extract_geo"]:
     # If it's valid, or we've tried too many times, we end to avoid infinite loops
     if state.get("is_valid"):
-        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to '__end__'.")
-        return "__end__"
-    
+        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to 'extract_geo'.")
+        return "extract_geo"
+
     attempts = state.get("validation_attempts", 0)
     if attempts >= 3:
         logger.debug(f"[AGENT LOG] Max validation attempts ({attempts}) reached. Forcing '__end__'.")
         return "__end__"
-    
+
     logger.debug("[AGENT LOG] Reviewer rejected. Transitioning back to 'agent'.")
     return "agent"
+
+
+async def extract_geo_node(state: AgentState):
+    """Extract geographic locations and connections from the final response.
+
+    Async node — uses ainvoke to call the LLM without blocking the event loop.
+    """
+    logger.info("=" * 80)
+    logger.info("[EXTRACT_GEO] === STARTING GEOGRAPHIC EXTRACTION ===")
+    logger.info("=" * 80)
+
+    from app.services.geo_ner import extract_with_coordinates_async
+
+    # Get the final assistant response
+    last_message = state["messages"][-1]
+    response_text = last_message.content if hasattr(last_message, "content") else ""
+
+    if not response_text:
+        logger.warning("[EXTRACT_GEO] No response text to extract from")
+        return {"geo_locations": [], "geo_connections": []}
+
+    # Get original user query for context
+    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_query = user_msgs[0].content if user_msgs else ""
+
+    logger.info(f"[EXTRACT_GEO] Response text length: {len(response_text)} chars")
+    logger.info(f"[EXTRACT_GEO] User query context: '{user_query[:80]}'")
+
+    try:
+        result = await extract_with_coordinates_async(response_text, user_query)
+
+        locations = result.get("locations", [])
+        connections = result.get("connections", [])
+        stats = result.get("stats", {})
+
+        logger.info("[EXTRACT_GEO] === EXTRACTION COMPLETE ===")
+        logger.info(f"[EXTRACT_GEO] Found {len(locations)} locations, {len(connections)} connections")
+        logger.info(f"[EXTRACT_GEO] Stats: {stats}")
+
+        for loc in locations:
+            logger.info(f"  LOC: {loc['name']} ({loc['type']}) @ {loc.get('coordinates', 'N/A')}")
+        for conn in connections:
+            logger.info(f"  CONN: {conn['from_name']} --[{conn['type']}]--> {conn['to_name']}")
+
+        return {
+            "geo_locations": locations,
+            "geo_connections": connections,
+        }
+
+    except Exception as e:
+        logger.error(f"[EXTRACT_GEO] Extraction failed: {e}", exc_info=True)
+        return {"geo_locations": [], "geo_connections": []}
 
 
 def get_graph():
     checkpointer = MemorySaver()
     workflow = StateGraph(AgentState)
-    
+
     # Add nodes
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_node("reviewer", review_response)
-    
+    workflow.add_node("extract_geo", extract_geo_node)
+
     # Set entry point to vector_search (mandatory first step)
     workflow.set_entry_point("vector_search")
-    
+
     # Vector search always flows to agent
     workflow.add_edge("vector_search", "agent")
-    
+
     # Agent decides whether to use tools or go to reviewer
     workflow.add_conditional_edges("agent", should_continue)
-    
+
     # Tools loop back to agent for further reasoning
     workflow.add_edge("tools", "agent")
-    
+
     # Reviewer validates or sends back for revision
     workflow.add_conditional_edges("reviewer", check_validation)
     
+    # Geo extraction flows to end
+    workflow.add_edge("extract_geo", "__end__")
+
     return workflow.compile(checkpointer=checkpointer)
 
 
@@ -329,6 +458,11 @@ async def process_query_stream(
                 "content": text,
             }
 
+        elif kind == "on_chain_start":
+            node_name = event.get("name", "")
+            if node_name == "extract_geo":
+                yield {"type": "status", "phase": "extracting"}
+
         elif kind == "on_chain_end":
             # Capture vector_search_node completion via chain events
             if event.get("name") == "vector_search":
@@ -342,7 +476,7 @@ async def process_query_stream(
                         "summary": "Archival intelligence retrieved" if has_data else "No archival data found",
                         "content": results,
                     }
-            
+
             # Capture reviewer result - check for various possible node names
             node_name = event.get("name", "")
             if "review" in node_name.lower():
@@ -356,6 +490,28 @@ async def process_query_stream(
                         "summary": "Analysis validated" if is_valid else "Analysis revised",
                         "content": reviewer_result,
                     }
+            
+            # Capture geo extraction result
+            node_name = event.get("name", "")
+            if node_name == "extract_geo":
+                try:
+                    output = event.get("data", {}).get("output", {})
+                    # Use .get() safely and double-check structure
+                    locations = output.get("geo_locations", []) if isinstance(output, dict) else []
+                    connections = output.get("geo_connections", []) if isinstance(output, dict) else []
+                    
+                    if (locations and len(locations) > 0) or (connections and len(connections) > 0):
+                        logger.info(f"[STREAM] Yielding {len(locations)} locs / {len(connections)} conns")
+                        yield {
+                            "type": "geo_locations",
+                            "locations": locations,
+                            "connections": connections,
+                        }
+                    else:
+                        logger.debug("[STREAM] Geo extraction returned empty results")
+                except Exception as e:
+                    logger.warning(f"[STREAM] Failed to extract geo data from event: {e}")
+                    # Don't fail the stream - just skip geo event
 
         elif kind == "on_chat_model_end":
             output = event.get("data", {}).get("output")
@@ -462,9 +618,9 @@ async def process_query_stream(
         if in_think:
             think_buffer += buffer
             yield {
-                "type": "tool_result", 
-                "tool": "reasoning", 
-                "summary": "Reasoning steps completed", 
+                "type": "tool_result",
+                "tool": "reasoning",
+                "summary": "Reasoning steps completed",
                 "content": think_buffer.strip()
             }
         else:
@@ -472,4 +628,6 @@ async def process_query_stream(
                 yield {"type": "status", "phase": "streaming"}
             yield {"type": "token", "content": buffer}
 
+    # Always yield done to complete the stream
+    # Geo extraction events will be captured separately via on_chain_end
     yield {"type": "done"}

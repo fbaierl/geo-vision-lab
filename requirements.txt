@@ -21,3 +21,6 @@ pydantic-settings
 pytest
 pytest-asyncio
 testcontainers[mongodb]
+
+# Geospatial analysis
+geopy>=2.4.0

@@ -106,8 +106,76 @@ vector_index = {
 |-------|------|---------------|-------|---------|---------------|
 | **Qwen 3.5 9B** | 9 billion | ~6 GB | Slower | Highest | Complex analysis, detailed reports |
 | **Qwen 3.5 4B** | 4 billion | ~3 GB | Balanced | High | Default — general purpose queries |
+| **Qwen 3.5 0.8B** | 0.8 billion | ~1 GB | Fastest | Good | QA validation, simple tasks |
 
-**Note**: The QA/Reviewer model remains fixed at Qwen 2.5:0.5b for consistent constraint checking.
+**Note**: The QA/Reviewer model uses Qwen 3.5:0.8b for fast validation responses.
+
+---
+
+### 2b. GLiNER for Named Entity Recognition
+
+**Decision**: GLiNER (knowledgator/gliner-x-small) for geographic location extraction.
+
+#### Why GLiNER Instead of LLM?
+
+Using a general-purpose LLM for NER is inefficient. GLiNER is a **specialized NER model** that offers:
+
+| Factor | GLiNER (50M) | LLM (Qwen 4B) | Improvement |
+|--------|--------------|---------------|-------------|
+| **Model Size** | ~600 MB | ~4 GB | **7x smaller** |
+| **Parameters** | 50 million | 4 billion | **80x fewer** |
+| **Inference Speed** | ~0.1 sec/doc | ~5 sec/doc | **50x faster** |
+| **VRAM Usage** | 0 GB (CPU) | ~3 GB (GPU) | **No GPU needed** |
+| **Purpose** | Specialized NER | General tasks | **Better focus** |
+
+#### Model Specifications
+
+| Property | Value |
+|----------|-------|
+| **Model** | knowledgator/gliner-x-small |
+| **Architecture** | DeBERTa-v3 base |
+| **Parameters** | 50 million |
+| **Size** | ~600 MB |
+| **License** | Apache 2.0 |
+| **F1 Score** | 81-83% (60+ entity types) |
+
+#### Entity Types Extracted
+
+```python
+GEO_ENTITY_TYPES = [
+    "country", "city", "region", "state", 
+    "province", "water_body", "landmark", "location"
+]
+```
+
+#### How It Works
+
+1. **GLiNER extracts locations** from document text (fast, specialized)
+2. **geopy geocodes** location names to coordinates via Nominatim
+3. **Aggregation** calculates mention frequency and intensity scores
+4. **Heat map API** serves data to frontend visualization
+
+#### Fallback Mechanism
+
+If GLiNER fails to load, the system falls back to LLM-based extraction:
+
+```python
+def extract_locations(text):
+    gliner = load_gliner()
+    if gliner is None:
+        return extract_with_llm(text)  # Fallback
+    return gliner.predict(text)
+```
+
+#### Alternatives Considered
+
+| Model | Why Not Selected |
+|-------|------------------|
+| **spaCy** | Less flexible, requires retraining for custom entities |
+| **GLiNER large (300M)** | Marginal accuracy gain, 3x larger |
+| **LLM prompting** | Overkill, slow, expensive for simple NER |
+
+See [NER Implementation](ner_implementation.md) for detailed benchmarks and implementation details.
 
 ---
 

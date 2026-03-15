@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
-from app.api.routes import chat, health, models
+from app.api.routes import chat, health, models, geo
 
 # Configure logging for Dozzle visibility
 logging.basicConfig(
@@ -24,6 +24,7 @@ logger.info(f"[APP] App initialized: {settings.APP_NAME} v{settings.VERSION}")
 app.include_router(chat.router, tags=["chat"])
 app.include_router(health.router, tags=["health"])
 app.include_router(models.router, tags=["models"])
+app.include_router(geo.router, tags=["geospatial"])
 
 # Ensure static directories exist
 os.makedirs("static", exist_ok=True)

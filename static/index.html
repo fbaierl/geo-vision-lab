@@ -9,8 +9,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@600;700&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Leaflet Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <link rel="stylesheet" href="/ui/style.css">
 </head>
 
@@ -348,21 +351,75 @@
         function addAgentResponseWrapper() {
             const wrap = document.createElement('div');
             wrap.className = 'msg agent';
-            wrap.innerHTML =
-                '<div class="msg-meta">Agent // ' + utcNow() + '</div>' +
-                '<div class="trail-container" style="display:none">' +
-                '<div class="trail-header">▸ <span class="step-count">0</span> steps executed</div>' +
-                '<div class="trail-body"></div>' +
-                '</div>' +
-                '<div class="msg-body streaming-cursor" style="display:none"></div>';
+            
+            const wrapperId = 'wrap-' + Date.now();
+            wrap.id = wrapperId;
+
+            wrap.innerHTML = `
+                <div class="msg-meta">Agent // ${utcNow()}</div>
+                <div class="agent-tabs">
+                    <button class="tab-btn active" onclick="switchTab('${wrapperId}', 'reasoning')">Reasoning</button>
+                    <button class="tab-btn" onclick="switchTab('${wrapperId}', 'result')">Result</button>
+                    <button class="tab-btn" onclick="switchTab('${wrapperId}', 'map')">Tactical Map</button>
+                </div>
+                
+                <div class="tab-content reasoning-tab active">
+                    <div class="trail-container">
+                        <div class="trail-header">▸ <span class="step-count">0</span> steps executed</div>
+                        <div class="trail-body"></div>
+                    </div>
+                </div>
+                
+                <div class="tab-content result-tab">
+                    <div class="msg-body streaming-cursor" style="display:none"></div>
+                </div>
+                
+                <div class="tab-content map-tab">
+                    <div class="map-placeholder" style="padding:40px; text-align:center; color:var(--muted); font-family:var(--mono);">
+                        <div class="scanline-box" style="border:1px dashed var(--border); padding:20px;">
+                            NO TACTICAL DATA EXTRACTED YET
+                        </div>
+                    </div>
+                </div>
+            `;
+
             elMessages.appendChild(wrap);
             elMessages.scrollTop = elMessages.scrollHeight;
+            
             return {
+                wrapper: wrap,
                 trailContainer: wrap.querySelector('.trail-container'),
                 trailBody: wrap.querySelector('.trail-body'),
                 trailHeader: wrap.querySelector('.trail-header'),
-                msgBody: wrap.querySelector('.msg-body')
+                msgBody: wrap.querySelector('.msg-body'),
+                mapBody: wrap.querySelector('.map-tab'),
+                id: wrapperId
             };
+        }
+
+        function switchTab(wrapperId, tabName) {
+            const wrap = document.getElementById(wrapperId);
+            if (!wrap) return;
+
+            // Update buttons
+            const btns = wrap.querySelectorAll('.tab-btn');
+            btns.forEach(btn => {
+                const text = btn.textContent.toLowerCase();
+                if (text.includes(tabName)) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+
+            // Update content blocks
+            const contents = wrap.querySelectorAll('.tab-content');
+            contents.forEach(content => {
+                if (content.classList.contains(tabName + '-tab')) content.classList.add('active');
+                else content.classList.remove('active');
+            });
+            
+            // If switching to map, trigger map resize if needed
+            if (tabName === 'map' && window.geoMapController && window.geoMapController.currentMap) {
+                setTimeout(() => window.geoMapController.currentMap.invalidateSize(), 100);
+            }
         }
 
         function createTrailStep(phase, tool, query, model) {
@@ -389,6 +446,9 @@
                 desc = `Querying live sources for "${query}"`;
             } else if (phase === 'streaming') {
                 desc = 'Delivering response';
+            } else if (phase === 'extracting') {
+                label = 'EXTRACTING GEOSPATIAL DATA';
+                desc = 'Identifying locations and tactical vectors...';
             }
 
             step.className = `trail-step phase-${phase}`;
@@ -506,20 +566,57 @@
                 let htmlStr = marked.parse(_rawStreamBuffer);
                 const mapRegex = /\[map:\s*([^,]+),\s*([-\d.]+),\s*([-\d.]+)\]/g;
                 const mapCountryRegex = /\[map-country:\s*([^\]]+)\]/g;
+                const heatmapRegex = /\[heatmap:\s*([^,\]]+)(?:,\s*intensity=(high|medium|low))?\]/g;
+                const connectionRegex = /\[connection:\s*from=([^,]+),\s*to=([^,]+),\s*type=(attack|threat|support|movement),\s*intensity=(high|medium|low)\]/g;
                 let mapsToInit = [];
+                let connectionsToInit = [];
                 let mapCounter = 0;
-                
+
+                // Parse [map: Name, lat, lon] tags
                 htmlStr = htmlStr.replace(mapRegex, (match, name, lat, lon) => {
                     const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
                     mapsToInit.push({ id: mapId, type: 'point', name: name.trim(), lat: parseFloat(lat), lon: parseFloat(lon) });
                     return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name.trim()}</div><div id="${mapId}" class="llm-map"></div></div>`;
                 });
 
+                // Parse [map-country: Name] tags
                 htmlStr = htmlStr.replace(mapCountryRegex, (match, name) => {
                     const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
                     mapsToInit.push({ id: mapId, type: 'country', name: name.trim() });
                     return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name.trim()}</div><div id="${mapId}" class="llm-map"></div></div>`;
                 });
+
+                // Parse [heatmap: Name, intensity=high] tags - convert to map markers
+                htmlStr = htmlStr.replace(heatmapRegex, (match, name, intensity) => {
+                    const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
+                    mapsToInit.push({
+                        id: mapId,
+                        type: 'heatmap',
+                        name: name.trim(),
+                        intensity: intensity || 'medium'
+                    });
+                    return `<div class="llm-map-container"><div class="llm-map-header">▸ HEAT ZONE // ${name.trim()} (${intensity || 'medium'} intensity)</div><div id="${mapId}" class="llm-map"></div></div>`;
+                });
+
+                // Parse [connection: from=X, to=Y, type=Z, intensity=W] tags
+                htmlStr = htmlStr.replace(connectionRegex, (match, from, to, type, intensity) => {
+                    const connId = 'conn-' + Date.now() + '-' + mapCounter++;
+                    connectionsToInit.push({
+                        id: connId,
+                        fromName: from.trim(),
+                        toName: to.trim(),
+                        type: type,
+                        intensity: intensity
+                    });
+                    return `<div class="llm-map-container"><div class="llm-map-header">▸ CONNECTION: ${from.trim()} → ${to.trim()} (${type})</div><div id="${connId}" class="llm-map"></div></div>`;
+                });
+
+                // Remove any remaining visualization tags from displayed text
+                // These are appended by extract_geo_node for frontend processing
+                htmlStr = htmlStr.replace(/\n\n\[map:[^\]]+\]/g, '');
+                htmlStr = htmlStr.replace(/\n\n\[map-country:[^\]]+\]/g, '');
+                htmlStr = htmlStr.replace(/\n\n\[heatmap:[^\]]+\]/g, '');
+                htmlStr = htmlStr.replace(/\n\n\[connection:[^\]]+\]/g, '');
 
                 bodyEl.innerHTML = htmlStr;
                 bodyEl.classList.add('md-rendered');
@@ -530,10 +627,10 @@
                         if (mapEl) {
                             if (mapData.type === 'point') {
                                 const map = L.map(mapData.id, {
-                                    zoomControl: false, 
-                                    attributionControl: false 
+                                    zoomControl: false,
+                                    attributionControl: false
                                 }).setView([mapData.lat, mapData.lon], 11);
-                                
+
                                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                                     subdomains: 'abc',
@@ -601,6 +698,98 @@
                                 } catch (e) {
                                     console.error("Failed to load country boundary for", mapData.name, e);
                                 }
+                            } else if (mapData.type === 'heatmap') {
+                                // Heatmap zone - geocode the location name and show marker
+                                const map = L.map(mapData.id, {
+                                    zoomControl: false,
+                                    attributionControl: false
+                                }).setView([0, 0], 2);
+
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                                    subdomains: 'abc',
+                                    maxZoom: 19
+                                }).addTo(map);
+
+                                try {
+                                    // Geocode the location name
+                                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapData.name)}`);
+                                    const data = await res.json();
+                                    
+                                    if (data && data.length > 0) {
+                                        const lat = parseFloat(data[0].lat);
+                                        const lon = parseFloat(data[0].lon);
+                                        
+                                        // Set map view
+                                        map.setView([lat, lon], 10);
+                                        
+                                        // Determine color based on intensity
+                                        let color = '#ffff00'; // medium = yellow
+                                        let radius = 15;
+                                        if (mapData.intensity === 'high') {
+                                            color = '#ff0000'; // red
+                                            radius = 20;
+                                        } else if (mapData.intensity === 'low') {
+                                            color = '#00ff00'; // green
+                                            radius = 10;
+                                        }
+                                        
+                                        // Add circle marker for heat zone
+                                        L.circleMarker([lat, lon], {
+                                            radius: radius,
+                                            color: color,
+                                            fillColor: color,
+                                            fillOpacity: 0.6,
+                                            weight: 2
+                                        }).addTo(map).bindPopup(`
+                                            <div style="font-family: 'Share Tech Mono', monospace;">
+                                                <b>HEAT ZONE</b><br/>
+                                                ${mapData.name}<br/>
+                                                Intensity: ${mapData.intensity}<br/>
+                                                ${lat.toFixed(4)}, ${lon.toFixed(4)}
+                                            </div>
+                                        `).openPopup();
+                                    } else {
+                                        console.warn('[MAP] Could not geocode heatmap location:', mapData.name);
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to load heatmap zone for", mapData.name, e);
+                                }
+                            } else if (mapData.type === 'connection') {
+                                // Connection map - geocode both locations and draw arrow
+                                const connOverlay = new window.ConnectionOverlay(map);
+                                
+                                Promise.all([
+                                    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapData.fromName)}`).then(r => r.json()),
+                                    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapData.toName)}`).then(r => r.json())
+                                ]).then(([fromData, toData]) => {
+                                    if (fromData.length > 0 && toData.length > 0) {
+                                        const from = [parseFloat(fromData[0].lat), parseFloat(fromData[0].lon)];
+                                        const to = [parseFloat(toData[0].lat), parseFloat(toData[0].lon)];
+                                        
+                                        // Fit map to show both locations
+                                        const bounds = L.latLngBounds([from, to]);
+                                        map.fitBounds(bounds, { padding: [50, 50] });
+                                        
+                                        // Add markers for both locations
+                                        L.marker(from).addTo(map).bindPopup(`<b>${mapData.fromName}</b>`);
+                                        L.marker(to).addTo(map).bindPopup(`<b>${mapData.toName}</b>`);
+                                        
+                                        // Draw connection
+                                        connOverlay.addConnection({
+                                            from,
+                                            to,
+                                            type: mapData.type,
+                                            intensity: mapData.intensity,
+                                            fromName: mapData.fromName,
+                                            toName: mapData.toName
+                                        });
+                                    } else {
+                                        console.warn('[MAP] Could not geocode connection locations');
+                                    }
+                                }).catch(e => {
+                                    console.error('[MAP] Connection geocoding failed:', e);
+                                });
                             }
                         }
                     }, 50); // delay to let DOM render
@@ -676,7 +865,9 @@
                             if (evt.type === 'meta' && evt.thread_id) {
                                 threadId = evt.thread_id;
                             } else if (evt.type === 'status') {
-                                if (evt.phase === 'revising' && msgWrapper) {
+                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
+
+                                if (evt.phase === 'revising') {
                                     // An earlier response was rejected; start fresh output block
                                     renderMarkdown(msgWrapper.msgBody);
                                     msgWrapper.msgBody.classList.remove('streaming-cursor');
@@ -689,9 +880,6 @@
                                     _rawStreamBuffer = '';
                                 }
 
-                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
-                                msgWrapper.trailContainer.style.display = 'flex';
-
                                 const step = createTrailStep(evt.phase, evt.tool, evt.query, evt.model);
                                 msgWrapper.trailBody.appendChild(step);
                                 stepCount++;
@@ -702,10 +890,15 @@
                                     elTool.textContent = evt.tool;
                                 }
                                 
-                                if (evt.phase === 'reviewing') {
-                                    elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;QA Review in progress...';
+                                // Auto-switch to reasoning tab for status updates
+                                if (evt.phase === 'extracting') {
+                                    switchTab(msgWrapper.id, 'reasoning');
+                                }
+
+                                if (evt.phase === 'reviewing' || evt.phase === 'revising' || evt.phase === 'reasoning') {
+                                    elTyping.innerHTML = `<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;${evt.phase.toUpperCase()}...`;
                                     elTyping.style.display = 'flex';
-                                    elFStatus.textContent = '// QA Review';
+                                    elFStatus.textContent = '// ' + evt.phase.toUpperCase();
                                 } else {
                                     elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;Processing signal...';
                                     elTyping.style.display = 'flex';
@@ -717,6 +910,9 @@
                             } else if (evt.type === 'tool_result') {
                                 if (msgWrapper && msgWrapper.trailBody) {
                                     msgWrapper.trailBody.appendChild(createTrailResult(evt.summary, evt.content || null));
+                                    stepCount++;
+                                    msgWrapper.trailHeader.querySelector('.step-count').textContent = stepCount;
+                                    msgWrapper.trailHeader.style.display = 'block';
                                     elMessages.scrollTop = elMessages.scrollHeight;
                                 }
                             } else if (evt.type === 'token') {
@@ -725,8 +921,24 @@
                                 if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
                                 if (msgWrapper.msgBody.style.display === 'none') {
                                     msgWrapper.msgBody.style.display = 'block';
+                                    // Switch to Result tab on first token
+                                    switchTab(msgWrapper.id, 'result');
                                 }
                                 appendToMsg(msgWrapper.msgBody, evt.content);
+                            } else if (evt.type === 'geo_locations') {
+                                // Handle geographic locations + connections extracted from response
+                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
+                                const locs = evt.locations || [];
+                                const conns = evt.connections || [];
+                                elFStatus.textContent = '// Locations Found';
+                                if (locs.length > 0 || conns.length > 0) {
+                                    console.log('[GEO] Locations:', locs.length, 'Connections:', conns.length);
+                                    if (window.geoMapController) {
+                                        // Switch to Map tab
+                                        switchTab(msgWrapper.id, 'map');
+                                        window.geoMapController.showResponseLocations(locs, conns, msgWrapper.mapBody);
+                                    }
+                                }
                             } else if (evt.type === 'error') {
                                 addMsg('Error: ' + evt.content, 'error');
                             }
@@ -737,14 +949,10 @@
                 if (msgWrapper) {
                     renderMarkdown(msgWrapper.msgBody);
                     msgWrapper.msgBody.classList.remove('streaming-cursor');
-                    if (stepCount > 0) {
-                        msgWrapper.trailHeader.style.display = 'block';
-                        msgWrapper.trailBody.style.display = 'flex'; // Expanded by default so user can see it
-                        msgWrapper.trailHeader.onclick = () => {
-                            const b = msgWrapper.trailBody;
-                            b.style.display = b.style.display === 'none' ? 'flex' : 'none';
-                        };
-                    }
+                    // In tabbed layout, trail expansion is handled by the tab buttons, 
+                    // but we ensure trail container is visible in reasoning tab.
+                    msgWrapper.trailHeader.style.display = 'block';
+                    msgWrapper.trailBody.style.display = 'flex';
                 }
 
                 const ms = Date.now() - t0;
@@ -772,6 +980,10 @@
         });
         elInput.focus();
     </script>
+    
+    <!-- Map Controller -->
+    <script src="/ui/js/connection-overlay.js"></script>
+    <script src="/ui/js/map-controller.js"></script>
 </body>
 
 </html>
