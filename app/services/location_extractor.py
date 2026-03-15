@@ -1,67 +1,77 @@
 import logging
-import spacy
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from typing import List, Dict, Any, Optional
 import time
+import requests
 
 logger = logging.getLogger("agent_flow")
 
 # Cache for geocoding results to avoid repeated API calls
 _geocode_cache: Dict[str, Optional[Dict[str, Any]]] = {}
 
-# Load spaCy model - using en_core_web_sm for NER
-# This model can identify GPE (geopolitical entities), LOC (locations), and FAC (facilities)
-_nlp = None
+# Hugging Face NER model - using dslim/bert-base-NER for location extraction
+# This model can identify LOC (locations), GPE (geopolitical entities), and FAC (facilities)
+_ner_pipeline = None
 
 
-def get_ner_model():
-    """Lazy load the spaCy NER model."""
-    global _nlp
-    if _nlp is None:
+def get_ner_pipeline():
+    """Lazy load the Hugging Face NER pipeline."""
+    global _ner_pipeline
+    if _ner_pipeline is None:
         try:
-            _nlp = spacy.load("en_core_web_sm")
-            logger.info("[LOCATION_EXTRACTOR] Loaded spaCy en_core_web_sm model")
-        except OSError:
-            logger.warning("[LOCATION_EXTRACTOR] spaCy model not found. Downloading...")
-            import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
-            _nlp = spacy.load("en_core_web_sm")
-            logger.info("[LOCATION_EXTRACTOR] Successfully downloaded and loaded spaCy model")
-    return _nlp
+            from transformers import AutoTokenizer, AutoModelForTokenClassification
+            from transformers import pipeline
+            
+            model_name = "dslim/bert-base-NER"
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForTokenClassification.from_pretrained(model_name)
+            _ner_pipeline = pipeline(
+                "ner",
+                model=model,
+                tokenizer=tokenizer,
+                aggregation_strategy="simple"
+            )
+            logger.info("[LOCATION_EXTRACTOR] Loaded Hugging Face NER model: dslim/bert-base-NER")
+        except Exception as e:
+            logger.error(f"[LOCATION_EXTRACTOR] Failed to load NER model: {e}")
+            raise
+    return _ner_pipeline
 
 
 def extract_locations_with_ner(text: str) -> List[Dict[str, str]]:
     """
-    Extract geographic locations from text using spaCy NER.
-    
+    Extract geographic locations from text using Hugging Face NER.
+
     Returns list of dicts with 'name' and 'type' keys.
     """
-    nlp = get_ner_model()
-    doc = nlp(text)
-    
+    ner_pipeline = get_ner_pipeline()
+    ner_results = ner_pipeline(text)
+
     locations = []
     seen = set()
-    
-    for ent in doc.ents:
-        # GPE = Geopolitical Entity (countries, cities, states)
-        # LOC = Location (non-gpe locations like mountains, bodies of water)
-        # FAC = Facility (airports, buildings, etc.)
-        if ent.label_ in ["GPE", "LOC", "FAC"]:
-            if ent.text not in seen:
-                seen.add(ent.text)
+
+    for entity in ner_results:
+        # Hugging Face NER returns: LOC, GPE, FAC, ORG, PER, etc.
+        entity_label = entity.get("entity_group", entity.get("label", ""))
+        entity_text = entity.get("word", entity.get("entity_text", ""))
+        
+        # Only process location-related entities
+        if entity_label in ["LOC", "GPE", "FAC"]:
+            if entity_text not in seen:
+                seen.add(entity_text)
                 loc_type = {
-                    "GPE": "city",  # Could be country, city, or state - we'll geocode to find out
+                    "GPE": "country",
                     "LOC": "landmark",
                     "FAC": "landmark"
-                }.get(ent.label_, "other")
-                
+                }.get(entity_label, "other")
+
                 locations.append({
-                    "name": ent.text,
+                    "name": entity_text,
                     "type": loc_type,
-                    "label": ent.label_  # Keep original spaCy label for reference
+                    "label": entity_label
                 })
-    
+
     logger.info(f"[LOCATION_EXTRACTOR] Found {len(locations)} location(s) via NER: {[loc['name'] for loc in locations]}")
     return locations
 
@@ -69,21 +79,20 @@ def extract_locations_with_ner(text: str) -> List[Dict[str, str]]:
 def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
     """
     Geocode a location name using Nominatim (OpenStreetMap).
-    
-    Returns dict with 'lat', 'lon', 'type', 'display_name' or None if not found.
+
+    Returns dict with 'lat', 'lon', 'type', 'display_name', and optionally 'boundary_geojson' for countries/regions.
+
+    Location type is determined using Nominatim's structured address data.
     """
     # Check cache first
     if location_name in _geocode_cache:
         logger.debug(f"[LOCATION_EXTRACTOR] Cache hit for: {location_name}")
         return _geocode_cache[location_name]
-    
+
     try:
-        # Nominatim requires a user_agent
         geolocator = Nominatim(user_agent="geovision_lab_location_extractor")
-        
-        # Try geocoding
-        location = geolocator.geocode(location_name, timeout=10)
-        
+        location = geolocator.geocode(location_name, timeout=10, addressdetails=1)
+
         if location:
             result = {
                 "lat": location.latitude,
@@ -91,54 +100,92 @@ def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
                 "display_name": location.address,
                 "found": True
             }
-            
-            # Try to determine more specific type from the address
-            address_lower = location.address.lower()
-            if "country" in address_lower or "nation" in address_lower:
+
+            raw_address = location.raw.get('address', {})
+
+            if 'country' in raw_address and len(raw_address) == 1:
                 result["type"] = "country"
-            elif "city" in address_lower or "town" in address_lower or "village" in address_lower:
+            elif 'country_code' in raw_address and 'state' in raw_address:
+                result["type"] = "region"
+            elif 'state' in raw_address and raw_address.get('state') != raw_address.get('country'):
+                result["type"] = "region"
+            elif 'city' in raw_address or 'town' in raw_address or 'village' in raw_address:
                 result["type"] = "city"
-            elif "state" in address_lower or "province" in address_lower or "region" in address_lower:
+            elif 'county' in raw_address or 'municipality' in raw_address:
                 result["type"] = "region"
             else:
                 result["type"] = "landmark"
-            
-            logger.debug(f"[LOCATION_EXTRACTOR] Geocoded '{location_name}' to ({result['lat']}, {result['lon']})")
+
+            if result["type"] in ["country", "region"]:
+                boundary = fetch_boundary_geojson(location_name, result["type"])
+                if boundary:
+                    result["boundary_geojson"] = boundary
+
+            logger.debug(f"[LOCATION_EXTRACTOR] Geocoded '{location_name}' to ({result['lat']}, {result['lon']}) as {result['type']}")
             _geocode_cache[location_name] = result
             return result
         else:
             logger.debug(f"[LOCATION_EXTRACTOR] No results for: {location_name}")
             _geocode_cache[location_name] = None
             return None
-            
+
     except (GeocoderTimedOut, GeocoderServiceError) as e:
         logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}")
         _geocode_cache[location_name] = None
         return None
 
 
+def fetch_boundary_geojson(location_name: str, location_type: str) -> Optional[Dict]:
+    """
+    Fetch GeoJSON boundary data from Nominatim for countries and regions.
+
+    Returns GeoJSON polygon/multipolygon or None if not available.
+    """
+    try:
+        base_url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            "q": location_name,
+            "format": "geojson",
+            "polygon_geojson": 1,
+            "limit": 1,
+            "accept-language": "en"
+        }
+
+        response = requests.get(base_url, params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        if data and len(data) > 0 and "geojson" in data[0]:
+            geojson = data[0]["geojson"]
+            logger.debug(f"[LOCATION_EXTRACTOR] Fetched boundary for {location_name}: {geojson['type']}")
+            return geojson
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"[LOCATION_EXTRACTOR] Failed to fetch boundary for '{location_name}': {e}")
+        return None
+
+
 def extract_and_geocode_locations(text: str) -> List[Dict[str, Any]]:
     """
     Full pipeline: Extract locations with NER, then geocode each one.
-    
+
     Returns list of location dicts with name, type, lat, lon.
     Only includes locations that were successfully geocoded.
     """
-    # Step 1: Extract locations using NER
     ner_locations = extract_locations_with_ner(text)
-    
+
     if not ner_locations:
         return []
-    
-    # Step 2: Geocode each location
+
     geocoded_locations = []
-    
+
     for loc in ner_locations:
-        # Small delay to respect Nominatim's rate limiting (1 request per second)
         time.sleep(0.1)
-        
         geo_result = geocode_location(loc["name"])
-        
+
         if geo_result and geo_result.get("found"):
             geocoded_locations.append({
                 "name": loc["name"],
@@ -147,6 +194,6 @@ def extract_and_geocode_locations(text: str) -> List[Dict[str, Any]]:
                 "lon": geo_result["lon"],
                 "display_name": geo_result.get("display_name", "")
             })
-    
+
     logger.info(f"[LOCATION_EXTRACTOR] Successfully geocoded {len(geocoded_locations)}/{len(ner_locations)} locations")
     return geocoded_locations

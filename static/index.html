@@ -606,16 +606,28 @@
                 placeholder.remove();
             }
 
+            // Determine priority label based on relevance
+            let priorityLabel = '';
+            if (mapData.relevance >= 0.9) {
+                priorityLabel = '<span class="map-priority primary">PRIMARY</span>';
+            } else if (mapData.relevance >= 0.6) {
+                priorityLabel = '<span class="map-priority secondary">SECONDARY</span>';
+            }
+
             const mapContainer = document.createElement('div');
             mapContainer.className = 'map-wrapper';
             mapContainer.id = 'map-wrapper-' + mapData.id;
             mapContainer.innerHTML = `
-                <div class="map-header">▸ MAP SECURED // ${mapData.name}</div>
+                <div class="map-header">
+                    <span>▸ MAP SECURED // ${mapData.name}</span>
+                    ${priorityLabel}
+                </div>
                 <div id="${mapData.id}" class="llm-map"></div>
             `;
             mapsContainer.appendChild(mapContainer);
 
             if (mapData.type === 'point') {
+                // Render city/point marker
                 const map = L.map(mapData.id, {
                     zoomControl: false,
                     attributionControl: false
@@ -636,7 +648,8 @@
                 L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
                     .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
                     .openPopup();
-            } else if (mapData.type === 'country') {
+            } else if (mapData.type === 'boundary') {
+                // Render country/region boundary outline
                 const map = L.map(mapData.id, {
                     zoomControl: false,
                     attributionControl: false
@@ -648,45 +661,66 @@
                     maxZoom: 19
                 }).addTo(map);
 
-                try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?country=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
-                    const data = await res.json();
-                    let found = false;
-
-                    if (data && data.features && data.features.length > 0) {
-                        const feature = data.features[0];
-                        if (feature.geometry) {
-                            const geojsonLayer = L.geoJSON(feature, {
-                                style: {
-                                    color: 'var(--cyan)',
-                                    weight: 2,
-                                    fillOpacity: 0.2
-                                }
-                            }).addTo(map);
-                            map.fitBounds(geojsonLayer.getBounds());
-                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
-                            found = true;
-                        }
+                // Use pre-fetched boundary GeoJSON if available
+                if (mapData.boundary_geojson) {
+                    try {
+                        const geojsonLayer = L.geoJSON(mapData.boundary_geojson, {
+                            style: {
+                                color: 'var(--cyan)',
+                                weight: 2,
+                                fillOpacity: 0.15,
+                                fillColor: 'var(--cyan)'
+                            }
+                        }).addTo(map);
+                        map.fitBounds(geojsonLayer.getBounds());
+                        geojsonLayer.bindPopup(`<b>${mapData.name}</b>`);
+                    } catch (e) {
+                        console.error("Failed to render boundary for", mapData.name, e);
+                        // Fallback to point marker
+                        map.setView([mapData.lat, mapData.lon], 6);
+                        L.marker([mapData.lat, mapData.lon]).addTo(map)
+                            .bindPopup(`<b>${mapData.name}</b>`)
+                            .openPopup();
                     }
+                } else {
+                    // Fetch boundary from Nominatim
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1&limit=1`);
+                        const data = await res.json();
+                        let found = false;
 
-                    if (!found) {
-                        const res2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
-                        const data2 = await res2.json();
-                        if (data2 && data2.features && data2.features.length > 0) {
-                            const feature = data2.features[0];
-                            const geojsonLayer = L.geoJSON(feature, {
-                                style: {
-                                    color: 'var(--cyan)',
-                                    weight: 2,
-                                    fillOpacity: 0.2
-                                }
-                            }).addTo(map);
-                            map.fitBounds(geojsonLayer.getBounds());
-                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
+                        if (data && data.features && data.features.length > 0) {
+                            const feature = data.features[0];
+                            if (feature.geometry) {
+                                const geojsonLayer = L.geoJSON(feature, {
+                                    style: {
+                                        color: 'var(--cyan)',
+                                        weight: 2,
+                                        fillOpacity: 0.15,
+                                        fillColor: 'var(--cyan)'
+                                    }
+                                }).addTo(map);
+                                map.fitBounds(geojsonLayer.getBounds());
+                                geojsonLayer.bindPopup(`<b>${mapData.name}</b>`);
+                                found = true;
+                            }
                         }
+
+                        if (!found) {
+                            // Fallback to point marker
+                            map.setView([mapData.lat, mapData.lon], 6);
+                            L.marker([mapData.lat, mapData.lon]).addTo(map)
+                                .bindPopup(`<b>${mapData.name}</b>`)
+                                .openPopup();
+                        }
+                    } catch (e) {
+                        console.error("Failed to load boundary for", mapData.name, e);
+                        // Fallback to point marker
+                        map.setView([mapData.lat, mapData.lon], 6);
+                        L.marker([mapData.lat, mapData.lon]).addTo(map)
+                            .bindPopup(`<b>${mapData.name}</b>`)
+                            .openPopup();
                     }
-                } catch (e) {
-                    console.error("Failed to load country boundary for", mapData.name, e);
                 }
             }
         }
@@ -798,13 +832,20 @@
                                 elMapsStatus.textContent = evt.summary;
                                 document.getElementById('maps-placeholder')?.remove();
                                 if (evt.locations && evt.locations.length > 0) {
-                                    evt.locations.forEach(loc => {
+                                    // Sort by relevance (descending) before rendering
+                                    const sortedLocations = [...evt.locations].sort((a, b) => 
+                                        (b.relevance || 0.5) - (a.relevance || 0.5)
+                                    );
+                                    sortedLocations.forEach(loc => {
                                         const mapData = {
                                             id: 'llm-map-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-                                            type: loc.type === 'country' ? 'country' : 'point',
+                                            type: loc.type === 'country' || loc.type === 'region' ? 'boundary' : 
+                                                  loc.type === 'city' ? 'point' : 'point',
                                             name: loc.name,
                                             lat: loc.lat,
-                                            lon: loc.lon
+                                            lon: loc.lon,
+                                            boundary_geojson: loc.boundary_geojson || null,
+                                            relevance: loc.relevance || 0.5
                                         };
                                         setTimeout(async () => {
                                             await initMap(mapData, currentTurn.maps);

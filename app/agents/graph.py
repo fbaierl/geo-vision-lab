@@ -13,6 +13,7 @@ from app.agents.tools import tools
 from app.services.llm import get_reasoning_llm, get_reviewer_llm
 from app.services.vector_store import similarity_search
 from app.services.location_extractor import extract_and_geocode_locations
+from app.services.location_prioritizer import prioritize_locations
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -188,6 +189,37 @@ def extract_locations(state: AgentState) -> Dict[str, Any]:
         return {"extracted_locations": []}
 
 
+def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
+    """Filter and prioritize locations based on relevance to the query."""
+    logger.info("=" * 80)
+    logger.info("[LOCATION_PRIORITIZER] Starting location prioritization")
+    logger.info("=" * 80)
+
+    locations = state.get("extracted_locations", [])
+    
+    if not locations:
+        logger.info("[LOCATION_PRIORITIZER] No locations to prioritize")
+        return {"extracted_locations": []}
+
+    # Get the user query from the first message
+    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_query = user_msgs[0].content if user_msgs else ""
+
+    # Get the assistant response
+    last_message = state["messages"][-1]
+    assistant_response = last_message.content if hasattr(last_message, "content") else ""
+
+    try:
+        # Prioritize locations using LLM
+        prioritized = prioritize_locations(user_query, locations, assistant_response)
+        logger.info(f"[LOCATION_PRIORITIZER] Prioritized to {len(prioritized)} location(s)")
+        return {"extracted_locations": prioritized}
+
+    except Exception as e:
+        logger.error(f"[LOCATION_PRIORITIZER] Prioritization failed: {e}")
+        return {"extracted_locations": locations}  # Return original on failure
+
+
 def get_graph():
     checkpointer = MemorySaver()
     workflow = StateGraph(AgentState)
@@ -198,6 +230,7 @@ def get_graph():
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_node("reviewer", review_response)
     workflow.add_node("location_extractor", extract_locations)
+    workflow.add_node("location_prioritizer", prioritize_locations_node)
 
     # Set entry point to vector_search (mandatory first step)
     workflow.set_entry_point("vector_search")
@@ -214,8 +247,11 @@ def get_graph():
     # Reviewer validates or sends back for revision
     workflow.add_conditional_edges("reviewer", check_validation)
 
-    # Location extractor always ends the workflow
-    workflow.add_edge("location_extractor", "__end__")
+    # Location extractor finds all locations
+    workflow.add_edge("location_extractor", "location_prioritizer")
+
+    # Location prioritizer filters by relevance, then ends
+    workflow.add_edge("location_prioritizer", "__end__")
 
     return workflow.compile(checkpointer=checkpointer)
 
@@ -358,18 +394,32 @@ async def process_query_stream(
             if event.get("name") == "location_extractor":
                 output = event.get("data", {}).get("output", {})
                 locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
+                # Store for later - we'll emit after prioritization
+                pass
+
+            # Capture location prioritizer result (emits final filtered locations)
+            if event.get("name") == "location_prioritizer":
+                output = event.get("data", {}).get("output", {})
+                locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
                 if locations and isinstance(locations, list) and len(locations) > 0:
+                    # Include relevance scores in the output
+                    loc_summary = ", ".join([
+                        f"{loc['name']} ({loc.get('relevance', 1.0):.1f})"
+                        for loc in locations[:3]
+                    ])
+                    if len(locations) > 3:
+                        loc_summary += f" +{len(locations) - 3} more"
                     yield {
                         "type": "locations_found",
-                        "tool": "location_extractor",
-                        "summary": f"Extracted {len(locations)} location(s)",
+                        "tool": "location_prioritizer",
+                        "summary": f"Prioritized {len(locations)} location(s): {loc_summary}",
                         "locations": locations,
                     }
                 else:
                     yield {
                         "type": "locations_found",
-                        "tool": "location_extractor",
-                        "summary": "No geographic locations found",
+                        "tool": "location_prioritizer",
+                        "summary": "No relevant geographic locations found",
                         "locations": [],
                     }
 
@@ -392,6 +442,8 @@ async def process_query_stream(
         elif kind == "on_chat_model_stream":
             if "reviewer" in tags:
                 continue
+            if "location_prioritizer" in tags:
+                continue  # Skip streaming for prioritizer
 
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
@@ -405,6 +457,7 @@ async def process_query_stream(
                     content_chunk = str(content_chunk)
 
                 # Remove tool_code and tool_call tags as they arrive
+                # Remove tool call artifacts
                 content_chunk = content_chunk.replace("<tool_code>", "").replace("</tool_code>", "")
                 content_chunk = content_chunk.replace("<tool_call>", "").replace("</tool_call>", "")
                 
