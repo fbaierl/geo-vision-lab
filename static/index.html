@@ -31,7 +31,7 @@
                     <div class="dot"></div> Online
                 </div>
                 <div style="color:var(--muted)">UTC <span id="clock">--:--:--</span></div>
-                
+
             </div>
         </header>
 
@@ -82,17 +82,67 @@
             </div>
         </div>
 
-        <!-- CHAT -->
-        <div id="chat-area">
-            <div id="messages">
-                <div class="divider">Secure channel established</div>
-                <div class="msg agent">
-                    <div class="msg-meta">Agent // <span id="boot-time"></span></div>
-                    <div class="msg-body">Terminal online. Submit a query for geopolitical analysis — I will search
-                        archival conflict data or live open-source intelligence as needed.</div>
+        <!-- MAIN 3-LANE CONTENT AREA -->
+        <div id="main-content">
+            
+            <!-- LANE 1: REASONING CHAIN -->
+            <div id="reasoning-lane" class="lane">
+                <div class="lane-header">
+                    <span class="lane-title">// REASONING CHAIN</span>
+                    <span class="lane-status" id="reasoning-status">Standby</span>
+                </div>
+                <div id="reasoning-content" class="lane-content">
+                    <div id="reasoning-turns" class="turns-container">
+                        <div class="lane-placeholder" id="reasoning-placeholder">
+                            <span class="placeholder-icon">⬡</span>
+                            <span>Awaiting query to begin analysis...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RESIZE HANDLE 1 -->
+            <div class="resize-handle" id="resize-handle-1" title="Drag to resize"></div>
+
+            <!-- LANE 2: TEXT RESULT -->
+            <div id="text-lane" class="lane">
+                <div class="lane-header">
+                    <span class="lane-title">// TEXT RESULT</span>
+                    <span class="lane-status" id="text-status">Ready</span>
+                </div>
+                <div id="text-content" class="lane-content">
+                    <div id="text-turns" class="turns-container">
+                        <div class="lane-placeholder" id="text-placeholder">
+                            <span class="placeholder-icon">▸</span>
+                            <span>Response will appear here...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RESIZE HANDLE 2 -->
+            <div class="resize-handle" id="resize-handle-2" title="Drag to resize"></div>
+
+            <!-- LANE 3: MAPS RESULT -->
+            <div id="maps-lane" class="lane">
+                <div class="lane-header">
+                    <span class="lane-title">// MAPS RESULT</span>
+                    <span class="lane-status" id="maps-status">No Maps</span>
+                </div>
+                <div id="maps-content" class="lane-content">
+                    <div id="maps-turns" class="turns-container">
+                        <div class="lane-placeholder" id="maps-placeholder">
+                            <span class="placeholder-icon">◈</span>
+                            <span>Geographic visualizations will appear here...</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+        </div>
+
+        <!-- INPUT AREA (spans all lanes) -->
+        <div id="input-area">
             <div id="typing">
                 <div class="bar"></div>
                 <div class="bar"></div>
@@ -103,7 +153,7 @@
             <div id="llm-input-container">
                 <div class="model-dropdown-container">
                     <div class="model-toggle-pill" id="custom-model-toggle" tabindex="0">
-                        <span class="model-icon">⬢</span> 
+                        <span class="model-icon">⬢</span>
                         <span id="current-model-display">Qwen 3.5 4B</span>
                         <span class="chevron">▼</span>
                     </div>
@@ -133,17 +183,6 @@
             </div>
         </div>
 
-        <!-- INTEL MODAL -->
-        <div id="intel-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <div id="modal-box">
-                <div id="modal-header">
-                    <span id="modal-title">Intel Report</span>
-                    <button id="modal-close" title="Close">✕</button>
-                </div>
-                <div id="modal-body"></div>
-            </div>
-        </div>
-
         <!-- FOOTER -->
         <footer>
             <span id="f-status">// Standby</span>
@@ -157,7 +196,15 @@
     </div>
 
     <script>
-        const elMessages = document.getElementById('messages');
+        const elReasoningContent = document.getElementById('reasoning-content');
+        const elTextContent = document.getElementById('text-content');
+        const elMapsContent = document.getElementById('maps-content');
+        const elReasoningTurns = document.getElementById('reasoning-turns');
+        const elTextTurns = document.getElementById('text-turns');
+        const elMapsTurns = document.getElementById('maps-turns');
+        const elReasoningStatus = document.getElementById('reasoning-status');
+        const elTextStatus = document.getElementById('text-status');
+        const elMapsStatus = document.getElementById('maps-status');
         const elInput = document.getElementById('query-input');
         const elSend = document.getElementById('send-btn');
         const elTyping = document.getElementById('typing');
@@ -172,13 +219,13 @@
 
         let queryCount = 0, totalMs = 0;
         let threadId = null;
+        let turnCount = 0;
+        let currentTurn = null;
 
         const elGpuPill = document.getElementById('pill-gpu');
         const elGpuLabel = document.getElementById('gpu-label');
         const elGpuHex = elGpuPill.querySelector('.hex');
         const elFGpu = document.getElementById('f-gpu');
-
-        document.getElementById('boot-time').textContent = utcNow();
 
         function utcNow() {
             const d = new Date();
@@ -192,7 +239,7 @@
             try {
                 const res = await fetch('/system/status');
                 const data = await res.json();
-                
+
                 // Update LLM indicator Model Name if one is active:
                 const elModel = document.getElementById('f-model');
                 if (data.model) {
@@ -247,7 +294,7 @@
             elModelDropdown.classList.toggle('show');
             e.stopPropagation();
         });
-        
+
         // Close when clicking outside
         document.addEventListener('click', (e) => {
             if (!elModelToggle.contains(e.target) && !elModelDropdown.contains(e.target)) {
@@ -293,7 +340,7 @@
             opt.addEventListener('click', async function() {
                 const selectedModel = this.getAttribute('data-value');
                 elModelDropdown.classList.remove('show');
-                
+
                 // Optimistic UI update
                 const previousModel = elModelDisplay.textContent;
                 updateUISelection(selectedModel);
@@ -329,286 +376,326 @@
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        function addMsg(text, type) {
-            const wrap = document.createElement('div');
-            wrap.className = `msg ${type}`;
-            if (type === 'divider') {
-                wrap.className = 'divider';
-                wrap.textContent = text;
+        /* ═══ REASONING LANE FUNCTIONS ═══ */
+        function createConversationTurn() {
+            turnCount++;
+            const turnNum = turnCount;
+            const timestamp = utcNow();
+            
+            // Create turn containers for all lanes
+            const reasoningTurn = document.createElement('div');
+            reasoningTurn.className = 'conversation-turn';
+            reasoningTurn.id = `reasoning-turn-${turnNum}`;
+            reasoningTurn.innerHTML = `
+                <div class="turn-header">
+                    <span class="turn-number">▸ TURN ${turnNum}</span>
+                    <span class="turn-time">${timestamp}</span>
+                </div>
+                <div class="turn-content" id="reasoning-turn-content-${turnNum}"></div>
+            `;
+            
+            const textTurn = document.createElement('div');
+            textTurn.className = 'conversation-turn';
+            textTurn.id = `text-turn-${turnNum}`;
+            textTurn.innerHTML = `
+                <div class="turn-header">
+                    <span class="turn-number">▸ TURN ${turnNum}</span>
+                    <span class="turn-time">${timestamp}</span>
+                </div>
+                <div class="turn-content" id="text-turn-content-${turnNum}"></div>
+            `;
+            
+            const mapsTurn = document.createElement('div');
+            mapsTurn.className = 'conversation-turn';
+            mapsTurn.id = `maps-turn-${turnNum}`;
+            mapsTurn.innerHTML = `
+                <div class="turn-header">
+                    <span class="turn-number">▸ TURN ${turnNum}</span>
+                    <span class="turn-time">${timestamp}</span>
+                </div>
+                <div class="turn-content" id="maps-turn-content-${turnNum}"></div>
+            `;
+            
+            // Remove placeholders on first turn
+            if (turnCount === 1) {
+                document.getElementById('reasoning-placeholder')?.remove();
+                document.getElementById('text-placeholder')?.remove();
+                document.getElementById('maps-placeholder')?.remove();
             } else {
-                const sender = type === 'user' ? 'Operator' : 'Agent';
-                wrap.innerHTML =
-                    '<div class="msg-meta">' + esc(sender) + ' // ' + utcNow() + '</div>' +
-                    '<div class="msg-body">' + esc(text) + '</div>';
+                // Add divider before new turn
+                const divider1 = document.createElement('div');
+                divider1.className = 'turn-divider';
+                elReasoningTurns.appendChild(divider1);
+                
+                const divider2 = document.createElement('div');
+                divider2.className = 'turn-divider';
+                elTextTurns.appendChild(divider2);
+                
+                const divider3 = document.createElement('div');
+                divider3.className = 'turn-divider';
+                elMapsTurns.appendChild(divider3);
             }
-            elMessages.appendChild(wrap);
-            elMessages.scrollTop = elMessages.scrollHeight;
-        }
-
-        function addAgentResponseWrapper() {
-            const wrap = document.createElement('div');
-            wrap.className = 'msg agent';
-            wrap.innerHTML =
-                '<div class="msg-meta">Agent // ' + utcNow() + '</div>' +
-                '<div class="trail-container" style="display:none">' +
-                '<div class="trail-header">▸ <span class="step-count">0</span> steps executed</div>' +
-                '<div class="trail-body"></div>' +
-                '</div>' +
-                '<div class="msg-body streaming-cursor" style="display:none"></div>';
-            elMessages.appendChild(wrap);
-            elMessages.scrollTop = elMessages.scrollHeight;
+            
+            // Add turns to containers
+            elReasoningTurns.appendChild(reasoningTurn);
+            elTextTurns.appendChild(textTurn);
+            elMapsTurns.appendChild(mapsTurn);
+            
             return {
-                trailContainer: wrap.querySelector('.trail-container'),
-                trailBody: wrap.querySelector('.trail-body'),
-                trailHeader: wrap.querySelector('.trail-header'),
-                msgBody: wrap.querySelector('.msg-body')
+                reasoning: document.getElementById(`reasoning-turn-content-${turnNum}`),
+                text: document.getElementById(`text-turn-content-${turnNum}`),
+                maps: document.getElementById(`maps-turn-content-${turnNum}`)
             };
         }
 
-        function createTrailStep(phase, tool, query, model) {
+        function clearReasoningLane() {
+            // Don't clear - we're using turns now
+            elReasoningStatus.textContent = 'Processing';
+        }
+
+        function addReasoningStep(phase, tool, query, model) {
             const step = document.createElement('div');
             let label = phase.toUpperCase();
             let desc = '';
-            
-            let modelTag = model ? ` <span style="font-size:0.55rem;color:var(--muted);margin-left:6px;">[${model}]</span>` : '';
+            let borderColor = 'var(--border)';
+            let labelColor = 'var(--muted)';
+
+            let modelTag = model ? ` <span class="model-tag">[${model}]</span>` : '';
 
             if (phase === 'reasoning') {
                 label = 'REASONING' + modelTag;
                 desc = 'Planning analysis approach...';
+                borderColor = 'var(--amber)';
+                labelColor = 'var(--amber)';
             } else if (phase === 'reviewing') {
                 label = 'QA REVIEW' + modelTag;
                 desc = 'Analyzing intelligence report against requirements...';
+                borderColor = 'var(--amber)';
+                labelColor = 'var(--amber)';
             } else if (phase === 'revising') {
                 label = 'REVISING' + modelTag;
                 desc = 'Formulating corrected response...';
+                borderColor = 'var(--amber)';
+                labelColor = 'var(--amber)';
             } else if (phase === 'vector_search') {
                 label = 'VECTOR SEARCH';
                 desc = `Searching archival database for "${query}"`;
+                borderColor = 'var(--cyan)';
+                labelColor = 'var(--cyan)';
             } else if (phase === 'online_search') {
                 label = 'ONLINE SEARCH';
                 desc = `Querying live sources for "${query}"`;
+                borderColor = '#00e676';
+                labelColor = '#00e676';
             } else if (phase === 'streaming') {
                 desc = 'Delivering response';
             }
 
-            step.className = `trail-step phase-${phase}`;
+            step.className = `reasoning-step phase-${phase}`;
+            step.style.borderLeftColor = borderColor;
             step.innerHTML = `
-                <div class="phase-label">▸ ${label}</div>
+                <div class="phase-label" style="color: ${labelColor}">▸ ${label}</div>
                 <div class="phase-desc">${esc(desc)}</div>
             `;
+            if (currentTurn && currentTurn.reasoning) {
+                currentTurn.reasoning.appendChild(step);
+            }
+            elReasoningContent.scrollTop = elReasoningContent.scrollHeight;
             return step;
         }
 
-        /* ═══ INTEL MODAL ═══ */
-        const elModal = document.getElementById('intel-modal');
-        const elModalBody = document.getElementById('modal-body');
-        const elModalTitle = document.getElementById('modal-title');
-        const elModalClose = document.getElementById('modal-close');
-
-        let modalBlocks = [];
-        let modalCurrentIndex = 0;
-
-        function openModal(title, content) {
-            elModalTitle.textContent = title;
-            
-            // Format and split content into blocks, ONLY if it is an intel report.
-            let isIntel = content.match(/^(?:ARCHIVAL INTELLIGENCE REPORT|LIVE WEB INTELLIGENCE|LIVE WEB SEARCH RESULTS)/i) 
-                          || title.toLowerCase().includes("text block");
-            
-            if (isIntel) {
-                let cleanContent = content.replace(/^ARCHIVAL INTELLIGENCE REPORT:\n*/i, '')
-                                          .replace(/^LIVE WEB INTELLIGENCE(?: \(.*?\))?:\n*/i, '')
-                                          .replace(/^LIVE WEB SEARCH RESULTS:\n*/i, '');
-                                          
-                if (cleanContent.includes('\n\n')) {
-                    modalBlocks = cleanContent.split('\n\n').map(b => b.trim()).filter(b => b);
-                } else {
-                    modalBlocks = cleanContent.split('\n').map(b => b.trim()).filter(b => b);
-                }
-                if (modalBlocks.length === 0) modalBlocks = [content];
-            } else {
-                modalBlocks = [content];
-            }
-            
-            modalCurrentIndex = 0;
-            renderModalBlock();
-            
-            elModal.classList.add('open');
-            elModalBody.scrollTop = 0;
-        }
-        
-        function renderModalBlock() {
-            if (modalBlocks.length <= 1) {
-                elModalBody.innerHTML = `<div style="white-space: pre-wrap; font-family: inherit;">${esc(modalBlocks[0])}</div>`;
-            } else {
-                const btnPrevStyle = `background:var(--bg-panel); color:var(--cyan); border:1px solid var(--cyan); padding:4px 10px; font-family:'Share Tech Mono', monospace; cursor:${modalCurrentIndex === 0 ? 'not-allowed' : 'pointer'}; opacity: ${modalCurrentIndex === 0 ? '0.4' : '1'}; transition: opacity 0.2s;`;
-                const btnNextStyle = `background:var(--bg-panel); color:var(--cyan); border:1px solid var(--cyan); padding:4px 10px; font-family:'Share Tech Mono', monospace; cursor:${modalCurrentIndex === modalBlocks.length - 1 ? 'not-allowed' : 'pointer'}; opacity: ${modalCurrentIndex === modalBlocks.length - 1 ? '0.4' : '1'}; transition: opacity 0.2s;`;
-                
-                elModalBody.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
-                        <button id="car-prev" style="${btnPrevStyle}" ${modalCurrentIndex === 0 ? 'disabled' : ''}>◀ Prev</button>
-                        <span style="font-family: 'Share Tech Mono', monospace; font-size: 0.9em; color: var(--cyan);">BLOCK ${modalCurrentIndex + 1} OF ${modalBlocks.length}</span>
-                        <button id="car-next" style="${btnNextStyle}" ${modalCurrentIndex === modalBlocks.length - 1 ? 'disabled' : ''}>Next ▶</button>
-                    </div>
-                    <div style="white-space: pre-wrap; font-family: inherit; line-height: 1.5; color: var(--text-color);">${esc(modalBlocks[modalCurrentIndex])}</div>
-                `;
-                
-                const btnPrev = document.getElementById('car-prev');
-                const btnNext = document.getElementById('car-next');
-                if (btnPrev) btnPrev.addEventListener('click', () => {
-                    if (modalCurrentIndex > 0) {
-                        modalCurrentIndex--;
-                        renderModalBlock();
-                    }
-                });
-                if (btnNext) btnNext.addEventListener('click', () => {
-                    if (modalCurrentIndex < modalBlocks.length - 1) {
-                        modalCurrentIndex++;
-                        renderModalBlock();
-                    }
-                });
-            }
-        }
-
-        function closeModal() { elModal.classList.remove('open'); }
-
-        elModalClose.addEventListener('click', closeModal);
-        elModal.addEventListener('click', (e) => { if (e.target === elModal) closeModal(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
-
-        function createTrailResult(summary, content) {
+        function addReasoningResult(summary, content) {
             const res = document.createElement('div');
-            res.className = 'trail-result' + (content ? ' has-content' : '');
-            res.innerHTML = `<span>↳</span> <span>${esc(summary)}</span>` +
-                (content ? ' <span class="trail-expand">[view]</span>' : '');
+            res.className = 'reasoning-result' + (content ? ' has-content' : '');
+            res.innerHTML = `<span class="result-arrow">↳</span> <span class="result-summary">${esc(summary)}</span>` +
+                (content ? ' <span class="result-expand">[view]</span>' : '');
             if (content) {
-                res.addEventListener('click', () => openModal('Intel Report — ' + esc(summary), content));
+                res.addEventListener('click', () => {
+                    // Expand inline - toggle visibility of content
+                    const existingDetail = res.querySelector('.result-detail');
+                    if (existingDetail) {
+                        existingDetail.remove();
+                    } else {
+                        const detail = document.createElement('div');
+                        detail.className = 'result-detail';
+                        detail.textContent = content;
+                        res.appendChild(detail);
+                    }
+                });
             }
-            return res;
+            if (currentTurn && currentTurn.reasoning) {
+                currentTurn.reasoning.appendChild(res);
+            }
+            elReasoningContent.scrollTop = elReasoningContent.scrollHeight;
+        }
+
+        /* ═══ TEXT LANE FUNCTIONS ═══ */
+        function clearTextLane() {
+            elTextStatus.textContent = 'Receiving';
+            if (!currentTurn) {
+                currentTurn = createConversationTurn();
+            }
+            return createTextWrapper(currentTurn.text);
+        }
+
+        function createTextWrapper(textEl) {
+            const wrap = document.createElement('div');
+            wrap.className = 'text-wrapper streaming-cursor';
+            wrap.innerHTML = '';
+            textEl.appendChild(wrap);
+            return wrap;
         }
 
         let _rawStreamBuffer = '';
 
-        function appendToMsg(bodyEl, text) {
+        function appendToText(textEl, text) {
             _rawStreamBuffer += text;
-            bodyEl.textContent = _rawStreamBuffer;
-            if (bodyEl.classList.contains('streaming-cursor')) {
+            textEl.textContent = _rawStreamBuffer;
+            if (textEl.classList.contains('streaming-cursor')) {
                 const cursor = document.createElement('span');
                 cursor.className = 'cursor-blink';
                 cursor.textContent = '○';
-                bodyEl.appendChild(cursor);
+                textEl.appendChild(cursor);
             }
-            elMessages.scrollTop = elMessages.scrollHeight;
+            elTextContent.scrollTop = elTextContent.scrollHeight;
         }
 
-        function renderMarkdown(bodyEl) {
+        function renderMarkdown(textEl) {
             if (typeof marked !== 'undefined' && _rawStreamBuffer) {
                 let htmlStr = marked.parse(_rawStreamBuffer);
                 const mapRegex = /\[map:\s*([^,]+),\s*([-\d.]+),\s*([-\d.]+)\]/g;
                 const mapCountryRegex = /\[map-country:\s*([^\]]+)\]/g;
                 let mapsToInit = [];
                 let mapCounter = 0;
-                
+
+                // Extract maps and remove from text
                 htmlStr = htmlStr.replace(mapRegex, (match, name, lat, lon) => {
                     const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
                     mapsToInit.push({ id: mapId, type: 'point', name: name.trim(), lat: parseFloat(lat), lon: parseFloat(lon) });
-                    return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name.trim()}</div><div id="${mapId}" class="llm-map"></div></div>`;
+                    return '';
                 });
 
                 htmlStr = htmlStr.replace(mapCountryRegex, (match, name) => {
                     const mapId = 'llm-map-' + Date.now() + '-' + mapCounter++;
                     mapsToInit.push({ id: mapId, type: 'country', name: name.trim() });
-                    return `<div class="llm-map-container"><div class="llm-map-header">▸ MAP SECURED // ${name.trim()}</div><div id="${mapId}" class="llm-map"></div></div>`;
+                    return '';
                 });
 
-                bodyEl.innerHTML = htmlStr;
-                bodyEl.classList.add('md-rendered');
+                textEl.innerHTML = htmlStr;
+                textEl.classList.add('md-rendered');
+                textEl.classList.remove('streaming-cursor');
 
-                mapsToInit.forEach(mapData => {
-                    setTimeout(async () => {
-                        const mapEl = document.getElementById(mapData.id);
-                        if (mapEl) {
-                            if (mapData.type === 'point') {
-                                const map = L.map(mapData.id, {
-                                    zoomControl: false, 
-                                    attributionControl: false 
-                                }).setView([mapData.lat, mapData.lon], 11);
-                                
-                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                                    subdomains: 'abc',
-                                    maxZoom: 19
-                                }).addTo(map);
+                // Initialize maps in maps lane
+                if (mapsToInit.length > 0) {
+                    elMapsStatus.textContent = `${mapsToInit.length} Map(s)`;
+                    document.getElementById('maps-placeholder')?.remove();
+                    mapsToInit.forEach(mapData => {
+                        setTimeout(async () => {
+                            await initMap(mapData, currentTurn.maps);
+                        }, 50);
+                    });
+                }
 
-                                const icon = L.divIcon({
-                                    className: 'map-ping',
-                                    html: '<div style="width:12px; height:12px; background:var(--cyan); border-radius:50%; box-shadow:0 0 10px var(--cyan);"></div>',
-                                    iconSize: [12, 12]
-                                });
-
-                                L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
-                                    .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
-                                    .openPopup();
-                            } else if (mapData.type === 'country') {
-                                const map = L.map(mapData.id, {
-                                    zoomControl: false, 
-                                    attributionControl: false 
-                                }).setView([0, 0], 2);
-                                
-                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                                    subdomains: 'abc',
-                                    maxZoom: 19
-                                }).addTo(map);
-
-                                try {
-                                    const res = await fetch(`https://nominatim.openstreetmap.org/search?country=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
-                                    const data = await res.json();
-                                    let found = false;
-                                    
-                                    if (data && data.features && data.features.length > 0) {
-                                        const feature = data.features[0];
-                                        if (feature.geometry) {
-                                            const geojsonLayer = L.geoJSON(feature, {
-                                                style: {
-                                                    color: 'var(--cyan)',
-                                                    weight: 2,
-                                                    fillOpacity: 0.2
-                                                }
-                                            }).addTo(map);
-                                            map.fitBounds(geojsonLayer.getBounds());
-                                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
-                                            found = true;
-                                        }
-                                    }
-                                    
-                                    if (!found) {
-                                        const res2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
-                                        const data2 = await res2.json();
-                                        if (data2 && data2.features && data2.features.length > 0) {
-                                            const feature = data2.features[0];
-                                            const geojsonLayer = L.geoJSON(feature, {
-                                                style: {
-                                                    color: 'var(--cyan)',
-                                                    weight: 2,
-                                                    fillOpacity: 0.2
-                                                }
-                                            }).addTo(map);
-                                            map.fitBounds(geojsonLayer.getBounds());
-                                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
-                                        }
-                                    }
-                                } catch (e) {
-                                    console.error("Failed to load country boundary for", mapData.name, e);
-                                }
-                            }
-                        }
-                    }, 50); // delay to let DOM render
-                });
+                // Remove cursor span
+                const cursor = textEl.querySelector('.cursor-blink');
+                if (cursor) cursor.remove();
             }
             _rawStreamBuffer = '';
         }
 
+        async function initMap(mapData, mapsContainer) {
+            // Remove placeholder if it exists
+            const placeholder = document.getElementById('maps-placeholder');
+            if (placeholder) {
+                placeholder.remove();
+            }
+
+            const mapContainer = document.createElement('div');
+            mapContainer.className = 'map-wrapper';
+            mapContainer.id = 'map-wrapper-' + mapData.id;
+            mapContainer.innerHTML = `
+                <div class="map-header">▸ MAP SECURED // ${mapData.name}</div>
+                <div id="${mapData.id}" class="llm-map"></div>
+            `;
+            mapsContainer.appendChild(mapContainer);
+
+            if (mapData.type === 'point') {
+                const map = L.map(mapData.id, {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView([mapData.lat, mapData.lon], 11);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    subdomains: 'abc',
+                    maxZoom: 19
+                }).addTo(map);
+
+                const icon = L.divIcon({
+                    className: 'map-ping',
+                    html: '<div style="width:12px; height:12px; background:var(--cyan); border-radius:50%; box-shadow:0 0 10px var(--cyan);"></div>',
+                    iconSize: [12, 12]
+                });
+
+                L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
+                    .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
+                    .openPopup();
+            } else if (mapData.type === 'country') {
+                const map = L.map(mapData.id, {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView([0, 0], 2);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    subdomains: 'abc',
+                    maxZoom: 19
+                }).addTo(map);
+
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?country=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
+                    const data = await res.json();
+                    let found = false;
+
+                    if (data && data.features && data.features.length > 0) {
+                        const feature = data.features[0];
+                        if (feature.geometry) {
+                            const geojsonLayer = L.geoJSON(feature, {
+                                style: {
+                                    color: 'var(--cyan)',
+                                    weight: 2,
+                                    fillOpacity: 0.2
+                                }
+                            }).addTo(map);
+                            map.fitBounds(geojsonLayer.getBounds());
+                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
+                            found = true;
+                        }
+                    }
+
+                    if (!found) {
+                        const res2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1`);
+                        const data2 = await res2.json();
+                        if (data2 && data2.features && data2.features.length > 0) {
+                            const feature = data2.features[0];
+                            const geojsonLayer = L.geoJSON(feature, {
+                                style: {
+                                    color: 'var(--cyan)',
+                                    weight: 2,
+                                    fillOpacity: 0.2
+                                }
+                            }).addTo(map);
+                            map.fitBounds(geojsonLayer.getBounds());
+                            geojsonLayer.bindPopup(`<b>${mapData.name}</b>`).openPopup();
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to load country boundary for", mapData.name, e);
+                }
+            }
+        }
+
+        /* ═══ HISTORY ═══ */
         function addHistory(q) {
             elNoHist && elNoHist.remove();
             const el = document.createElement('div');
@@ -619,11 +706,11 @@
             while (elHistory.children.length > 8) elHistory.lastChild.remove();
         }
 
+        /* ═══ SEND QUERY ═══ */
         async function send() {
             const q = elInput.value.trim();
             if (!q) return;
 
-            addMsg(q, 'user');
             addHistory(q);
             elInput.value = '';
             elInput.disabled = true;
@@ -632,12 +719,18 @@
             elTyping.style.display = 'flex';
             elPillProc.style.display = 'flex';
             elFStatus.textContent = '// Agent Processing';
+
+            // Create new conversation turn
+            currentTurn = null;
+            clearReasoningLane();
+            const textWrapper = clearTextLane();
             
+            // Clear maps lane for new turn
+            elMapsStatus.textContent = 'No Maps';
+
             fetchGpuStatus(); // Fetch GPU status early to show activation sooner
 
             const t0 = Date.now();
-            let msgWrapper = null;
-            let stepCount = 0;
             _rawStreamBuffer = '';
 
             try {
@@ -649,7 +742,9 @@
 
                 if (!res.ok) {
                     const data = await res.json();
-                    addMsg('Error: ' + (data.answer || 'Unknown error'), 'error');
+                    if (currentTurn && currentTurn.text) {
+                        currentTurn.text.innerHTML = `<div class="error-message">Error: ${esc(data.answer || 'Unknown error')}</div>`;
+                    }
                     return;
                 }
 
@@ -676,75 +771,45 @@
                             if (evt.type === 'meta' && evt.thread_id) {
                                 threadId = evt.thread_id;
                             } else if (evt.type === 'status') {
-                                if (evt.phase === 'revising' && msgWrapper) {
-                                    // An earlier response was rejected; start fresh output block
-                                    renderMarkdown(msgWrapper.msgBody);
-                                    msgWrapper.msgBody.classList.remove('streaming-cursor');
-                                    
-                                    msgWrapper.msgBody = document.createElement('div');
-                                    msgWrapper.msgBody.className = 'msg-body streaming-cursor';
-                                    msgWrapper.msgBody.style.display = 'none';
-                                    msgWrapper.trailContainer.parentNode.appendChild(msgWrapper.msgBody);
-                                    
-                                    _rawStreamBuffer = '';
-                                }
-
-                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
-                                msgWrapper.trailContainer.style.display = 'flex';
-
-                                const step = createTrailStep(evt.phase, evt.tool, evt.query, evt.model);
-                                msgWrapper.trailBody.appendChild(step);
-                                stepCount++;
-                                msgWrapper.trailHeader.querySelector('.step-count').textContent = stepCount;
+                                // Add reasoning step
+                                addReasoningStep(evt.phase, evt.tool, evt.query, evt.model);
 
                                 // Update tool display
                                 if (evt.tool && evt.tool !== 'unknown') {
                                     elTool.textContent = evt.tool;
                                 }
-                                
+
                                 if (evt.phase === 'reviewing') {
                                     elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;QA Review in progress...';
                                     elTyping.style.display = 'flex';
                                     elFStatus.textContent = '// QA Review';
+                                    elReasoningStatus.textContent = 'QA Review';
                                 } else {
                                     elTyping.innerHTML = '<div class="bar"></div><div class="bar"></div><div class="bar"></div>&nbsp;Processing signal...';
                                     elTyping.style.display = 'flex';
                                     elFStatus.textContent = '// Agent Processing';
                                 }
-                                
-                                elMessages.scrollTop = elMessages.scrollHeight;
 
                             } else if (evt.type === 'tool_result') {
-                                if (msgWrapper && msgWrapper.trailBody) {
-                                    msgWrapper.trailBody.appendChild(createTrailResult(evt.summary, evt.content || null));
-                                    elMessages.scrollTop = elMessages.scrollHeight;
-                                }
+                                addReasoningResult(evt.summary, evt.content || null);
                             } else if (evt.type === 'token') {
                                 elTyping.style.display = 'none';
                                 elFStatus.textContent = '// Receiving';
-                                if (!msgWrapper) msgWrapper = addAgentResponseWrapper();
-                                if (msgWrapper.msgBody.style.display === 'none') {
-                                    msgWrapper.msgBody.style.display = 'block';
+                                elTextStatus.textContent = 'Receiving';
+                                if (textWrapper.style.display === 'none') {
+                                    textWrapper.style.display = 'block';
                                 }
-                                appendToMsg(msgWrapper.msgBody, evt.content);
+                                appendToText(textWrapper, evt.content);
                             } else if (evt.type === 'error') {
-                                addMsg('Error: ' + evt.content, 'error');
+                                elTextContent.innerHTML = `<div class="error-message">Error: ${esc(evt.content)}</div>`;
                             }
                         } catch (parseErr) { /* skip malformed */ }
                     }
                 }
 
-                if (msgWrapper) {
-                    renderMarkdown(msgWrapper.msgBody);
-                    msgWrapper.msgBody.classList.remove('streaming-cursor');
-                    if (stepCount > 0) {
-                        msgWrapper.trailHeader.style.display = 'block';
-                        msgWrapper.trailBody.style.display = 'flex'; // Expanded by default so user can see it
-                        msgWrapper.trailHeader.onclick = () => {
-                            const b = msgWrapper.trailBody;
-                            b.style.display = b.style.display === 'none' ? 'flex' : 'none';
-                        };
-                    }
+                // Finalize text rendering
+                if (textWrapper) {
+                    renderMarkdown(textWrapper);
                 }
 
                 const ms = Date.now() - t0;
@@ -754,7 +819,9 @@
                 elAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
 
             } catch (e) {
-                addMsg('Connection lost \u2014 ' + e.message, 'error');
+                if (currentTurn && currentTurn.text) {
+                    currentTurn.text.innerHTML = `<div class="error-message">Connection lost — ${esc(e.message)}</div>`;
+                }
             } finally {
                 elTyping.style.display = 'none';
                 elPillProc.style.display = 'none';
@@ -762,6 +829,8 @@
                 elSend.disabled = false;
                 elInput.focus();
                 elFStatus.textContent = '// Standby';
+                elReasoningStatus.textContent = 'Complete';
+                elTextStatus.textContent = 'Complete';
                 fetchGpuStatus(); // Refresh GPU status after each query
             }
         }
@@ -771,6 +840,55 @@
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
         });
         elInput.focus();
+
+        /* ═══ RESIZABLE PANELS ═══ */
+        const resizeHandle1 = document.getElementById('resize-handle-1');
+        const resizeHandle2 = document.getElementById('resize-handle-2');
+        const reasoningLane = document.getElementById('reasoning-lane');
+        const mapsLane = document.getElementById('maps-lane');
+        const mainContent = document.getElementById('main-content');
+        let isResizing1 = false;
+        let isResizing2 = false;
+
+        resizeHandle1.addEventListener('mousedown', (e) => {
+            isResizing1 = true;
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+
+        resizeHandle2.addEventListener('mousedown', (e) => {
+            isResizing2 = true;
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing1 && !isResizing2) return;
+
+            const mainRect = mainContent.getBoundingClientRect();
+
+            if (isResizing1) {
+                const newWidth = e.clientX - mainRect.left;
+                if (newWidth >= 200 && newWidth <= 500) {
+                    reasoningLane.style.flex = `0 0 ${newWidth}px`;
+                    reasoningLane.style.width = `${newWidth}px`;
+                }
+            }
+
+            if (isResizing2) {
+                const newWidth = mainRect.right - e.clientX;
+                if (newWidth >= 400 && newWidth <= 800) {
+                    mapsLane.style.flex = `0 0 ${newWidth}px`;
+                    mapsLane.style.width = `${newWidth}px`;
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing1 = false;
+            isResizing2 = false;
+            document.body.style.cursor = '';
+        });
     </script>
 </body>
 
