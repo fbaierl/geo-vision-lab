@@ -12,6 +12,7 @@ wikipedia
 ddgs
 pypdf
 sentence-transformers
+transformers
 numpy
 fastapi
 uvicorn
@@ -21,3 +22,4 @@ pydantic-settings
 pytest
 pytest-asyncio
 testcontainers[mongodb]
+geopy

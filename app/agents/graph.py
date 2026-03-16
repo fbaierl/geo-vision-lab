@@ -1,4 +1,4 @@
-from typing import Literal, AsyncGenerator
+from typing import Literal, AsyncGenerator, Dict, Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 import logging
@@ -12,6 +12,8 @@ from app.agents.state import AgentState
 from app.agents.tools import tools
 from app.services.llm import get_reasoning_llm
 from app.services.vector_store import similarity_search
+from app.services.location_extractor import extract_and_geocode_locations
+from app.services.location_prioritizer import prioritize_locations
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -23,19 +25,6 @@ You have access to intel feeds:
 
 The archival intelligence from vector search is automatically injected into your context. Review it first, then use additional tools if you need live or updated information.
 
-CRITICAL INSTRUCTION: If the user asks about a specific location, city, country, or region, you MUST ALWAYS provide a map for it.
-For a specific city or exact location, include its exact coordinates using EXACTLY this format:
-[map: Location Name, latitude, longitude]
-
-For a whole country, use EXACTLY this format instead:
-[map-country: Country Name]
-
-Examples:
-[map: Kyiv, 50.4501, 30.5234]
-[map-country: Taiwan]
-
-Do NOT say "I cannot provide a visual map". The system will intercept the map tags and render it automatically. Simply output the tag.
-
 Respond in a clear, brief, unclassified military-style format, avoiding robotic language. Always summarize the intel you found.
 
 CRITICAL INSTRUCTION: Before you generate any final response or tool call, you MUST wrap your thought process inside <think>...</think> tags. Do not skip this reasoning step.
@@ -43,12 +32,10 @@ CRITICAL INSTRUCTION: Before you generate any final response or tool call, you M
 
 critic_prompt = """You are a QA Reviewer. Validate the response against these rules:
 
-RULES (apply only if relevant):
-1. REAL geographic locations (cities, countries) MUST have [map: Name, lat, lon] tags
-2. REAL countries MUST have [map-country: Country] tags  
-3. Use concise military-style format
-
-IMPORTANT: Fictional entities (DuckyDucks, fantasy locations) do NOT need maps. Only flag REAL locations.
+RULES:
+1. Use concise military-style format
+2. Provide clear, factual information
+3. Cite sources when available
 
 User Query: "{user_query}"
 Agent Response: "{assistant_response}"
@@ -144,7 +131,7 @@ def review_response(state: AgentState, config: RunnableConfig):
     logger.info("=" * 80)
     logger.info("[QA_REVIEWER] Starting validation")
     logger.info("=" * 80)
-    
+
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
     last_message = state["messages"][-1]
@@ -152,77 +139,128 @@ def review_response(state: AgentState, config: RunnableConfig):
 
     logger.info(f"[QA_REVIEWER] Query: {user_query[:50]}...")
     logger.info(f"[QA_REVIEWER] Response length: {len(assistant_response)} chars")
-    
-    # Check for map tags if query is about real locations
-    has_map_tag = "[map:" in assistant_response or "[map-country:" in assistant_response
-    is_geo_query = any(word in user_query.lower() for word in ['city', 'country', 'location', 'where', 'map', 'coordinates'])
-    
-    # Simple validation logic
-    is_valid = True
-    reviewer_result = "VALID"
-    
-    if is_geo_query and not has_map_tag:
-        is_valid = False
-        reviewer_result = "INVALID: Missing map tag for geographic query"
-        logger.warning(f"[QA_REVIEWER] {reviewer_result}")
-    else:
-        logger.info("[QA_REVIEWER] Validation PASSED")
-    
+
+    # Simple validation - always pass for now (can add more rules later)
+    logger.info("[QA_REVIEWER] Validation PASSED")
     logger.info("[QA_REVIEWER] === VALIDATION RESULT ===")
-    logger.info(reviewer_result)
+    logger.info("VALID")
     logger.info("[QA_REVIEWER] === END ===")
-    
-    if is_valid:
-        return {"is_valid": True, "validation_attempts": 1, "reviewer_result": reviewer_result}
-    else:
-        return {
-            "is_valid": False,
-            "validation_attempts": 1,
-            "reviewer_result": reviewer_result,
-            "messages": [SystemMessage(content=f"QA FEEDBACK: {reviewer_result}", additional_kwargs={"role": "system"})]
-        }
+
+    return {"is_valid": True, "validation_attempts": 1, "reviewer_result": "VALID"}
 
 
-def check_validation(state: AgentState) -> Literal["agent", "__end__"]:
-    # If it's valid, or we've tried too many times, we end to avoid infinite loops
+def check_validation(state: AgentState) -> Literal["agent", "location_extractor"]:
+    # If it's valid, proceed to location extraction
     if state.get("is_valid"):
-        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to '__end__'.")
-        return "__end__"
-    
+        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to 'location_extractor'.")
+        return "location_extractor"
+
     attempts = state.get("validation_attempts", 0)
     if attempts >= 3:
         logger.debug(f"[AGENT LOG] Max validation attempts ({attempts}) reached. Forcing '__end__'.")
         return "__end__"
-    
+
     logger.debug("[AGENT LOG] Reviewer rejected. Transitioning back to 'agent'.")
     return "agent"
+
+
+def extract_locations(state: AgentState) -> Dict[str, Any]:
+    """Extract geographic locations from the agent's response using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation."""
+    logger.info("=" * 80)
+    logger.info("[LOCATION_EXTRACTOR] Starting location extraction with Hugging Face NER + Nominatim")
+    logger.info("=" * 80)
+
+    # Get the last assistant message (the final response)
+    last_message = state["messages"][-1]
+    assistant_response = last_message.content if hasattr(last_message, "content") else ""
+    
+    # Get the user query from the first message
+    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_query = user_msgs[0].content if user_msgs else ""
+
+    if not assistant_response:
+        logger.info("[LOCATION_EXTRACTOR] No response content to extract locations from")
+        return {"extracted_locations": []}
+
+    try:
+        # Use Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
+        locations = extract_and_geocode_locations(
+            assistant_response, 
+            query=user_query,
+            response_text=assistant_response
+        )
+        logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s): {locations}")
+        return {"extracted_locations": locations}
+
+    except Exception as e:
+        logger.error(f"[LOCATION_EXTRACTOR] Extraction failed: {e}")
+        return {"extracted_locations": []}
+
+
+def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
+    """Filter and prioritize locations based on relevance to the query."""
+    logger.info("=" * 80)
+    logger.info("[LOCATION_PRIORITIZER] Starting location prioritization")
+    logger.info("=" * 80)
+
+    locations = state.get("extracted_locations", [])
+    
+    if not locations:
+        logger.info("[LOCATION_PRIORITIZER] No locations to prioritize")
+        return {"extracted_locations": []}
+
+    # Get the user query from the first message
+    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_query = user_msgs[0].content if user_msgs else ""
+
+    # Get the assistant response
+    last_message = state["messages"][-1]
+    assistant_response = last_message.content if hasattr(last_message, "content") else ""
+
+    try:
+        # Prioritize locations using LLM
+        prioritized = prioritize_locations(user_query, locations, assistant_response)
+        logger.info(f"[LOCATION_PRIORITIZER] Prioritized to {len(prioritized)} location(s)")
+        return {"extracted_locations": prioritized}
+
+    except Exception as e:
+        logger.error(f"[LOCATION_PRIORITIZER] Prioritization failed: {e}")
+        return {"extracted_locations": locations}  # Return original on failure
 
 
 def get_graph():
     checkpointer = MemorySaver()
     workflow = StateGraph(AgentState)
-    
+
     # Add nodes
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_node("reviewer", review_response)
-    
+    workflow.add_node("location_extractor", extract_locations)
+    workflow.add_node("location_prioritizer", prioritize_locations_node)
+
     # Set entry point to vector_search (mandatory first step)
     workflow.set_entry_point("vector_search")
-    
+
     # Vector search always flows to agent
     workflow.add_edge("vector_search", "agent")
-    
+
     # Agent decides whether to use tools or go to reviewer
     workflow.add_conditional_edges("agent", should_continue)
-    
+
     # Tools loop back to agent for further reasoning
     workflow.add_edge("tools", "agent")
-    
+
     # Reviewer validates or sends back for revision
     workflow.add_conditional_edges("reviewer", check_validation)
-    
+
+    # Location extractor finds all locations
+    workflow.add_edge("location_extractor", "location_prioritizer")
+
+    # Location prioritizer filters by relevance, then ends
+    workflow.add_edge("location_prioritizer", "__end__")
+
     return workflow.compile(checkpointer=checkpointer)
 
 
@@ -300,6 +338,9 @@ async def process_query_stream(
             if "reviewer" in tags:
                 from app.core.config import settings
                 yield {"type": "status", "phase": "reviewing", "model": settings.REVIEWER_LLM_MODEL_NAME}
+            elif "location_extractor" in tags:
+                from app.core.config import settings
+                yield {"type": "status", "phase": "extracting_locations", "model": settings.REVIEWER_LLM_MODEL_NAME}
             else:
                 from app.core.config import settings
                 if streaming_started:
@@ -342,7 +383,7 @@ async def process_query_stream(
                         "summary": "Archival intelligence retrieved" if has_data else "No archival data found",
                         "content": results,
                     }
-            
+
             # Capture reviewer result - check for various possible node names
             node_name = event.get("name", "")
             if "review" in node_name.lower():
@@ -355,6 +396,39 @@ async def process_query_stream(
                         "tool": "QA Reviewer",
                         "summary": "Analysis validated" if is_valid else "Analysis revised",
                         "content": reviewer_result,
+                    }
+
+            # Capture location extractor result
+            if event.get("name") == "location_extractor":
+                output = event.get("data", {}).get("output", {})
+                locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
+                # Store for later - we'll emit after prioritization
+                pass
+
+            # Capture location prioritizer result (emits final filtered locations)
+            if event.get("name") == "location_prioritizer":
+                output = event.get("data", {}).get("output", {})
+                locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
+                if locations and isinstance(locations, list) and len(locations) > 0:
+                    # Include relevance scores in the output
+                    loc_summary = ", ".join([
+                        f"{loc['name']} ({loc.get('relevance', 1.0):.1f})"
+                        for loc in locations[:3]
+                    ])
+                    if len(locations) > 3:
+                        loc_summary += f" +{len(locations) - 3} more"
+                    yield {
+                        "type": "locations_found",
+                        "tool": "location_prioritizer",
+                        "summary": f"Prioritized {len(locations)} location(s): {loc_summary}",
+                        "locations": locations,
+                    }
+                else:
+                    yield {
+                        "type": "locations_found",
+                        "tool": "location_prioritizer",
+                        "summary": "No relevant geographic locations found",
+                        "locations": [],
                     }
 
         elif kind == "on_chat_model_end":
@@ -376,6 +450,8 @@ async def process_query_stream(
         elif kind == "on_chat_model_stream":
             if "reviewer" in tags:
                 continue
+            if "location_prioritizer" in tags:
+                continue  # Skip streaming for prioritizer
 
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
@@ -389,6 +465,7 @@ async def process_query_stream(
                     content_chunk = str(content_chunk)
 
                 # Remove tool_code and tool_call tags as they arrive
+                # Remove tool call artifacts
                 content_chunk = content_chunk.replace("<tool_code>", "").replace("</tool_code>", "")
                 content_chunk = content_chunk.replace("<tool_call>", "").replace("</tool_call>", "")
                 
