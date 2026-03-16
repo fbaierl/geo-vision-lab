@@ -374,26 +374,3 @@ valid_locations = select_valid_locations(
 # Test specific components
 .venv/bin/pytest tests/test_location_extractor.py::TestSelectValidLocations -v
 ```
-
-### Debugging
-
-Check logs for LLM decisions:
-```
-[LOCATION_EXTRACTOR] Found 5 location(s) via NER: ['IRA', 'Tehran', 'Tel Aviv', ...]
-[LOCATION_EXTRACTOR] IRA: 2 candidate(s) found
-[LOCATION_EXTRACTOR] Tehran: 2 candidate(s) found
-[LOCATION_EXTRACTOR] Selected: Iran → ایران (country) (Iran country matches query context)
-[LOCATION_EXTRACTOR] LLM selected 2/5 locations
-```
-
-### Why This Approach Works
-
-| Aspect | Old Approach | New Approach |
-|--------|-------------|--------------|
-| **Country Coverage** | ~15 hardcoded countries | All countries worldwide |
-| **Maintenance** | Add new countries manually | Zero maintenance |
-| **Regional Queries** | Fails for non-hardcoded regions | Works for any region |
-| **Decision Logic** | Hardcoded rules | LLM reasoning |
-| **False Positives** | Possible (incomplete lists) | Minimal (LLM has world knowledge) |
-
----
