@@ -751,13 +751,17 @@
         #maps-lane {
         }
 
-        .map-wrapper {
-            margin-bottom: 12px;
+        /* Unified map wrapper */
+        .unified-map-wrapper {
             border: 1px solid var(--border);
             border-radius: 4px;
             overflow: hidden;
             background: rgba(0, 0, 0, 0.4);
             animation: fadeIn 0.3s ease-out;
+            display: flex;
+            flex-direction: column;
+            height: calc(100% - 20px);
+            margin: 10px;
         }
 
         @keyframes fadeIn {
@@ -773,14 +777,20 @@
             background: rgba(0, 229, 255, 0.08);
             color: var(--cyan);
             font-family: var(--ui);
-            padding: 6px 12px;
+            padding: 8px 14px;
             font-size: 0.9rem;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        .location-count {
+            font-size: 0.75rem;
+            color: var(--muted);
+            letter-spacing: 1px;
         }
 
         .map-priority {
@@ -804,6 +814,121 @@
             border: 1px solid var(--amber);
         }
 
+        /* Unified map */
+        .unified-map {
+            flex: 1;
+            min-height: 400px;
+            width: 100%;
+        }
+
+        /* Map legend */
+        .map-legend {
+            background: rgba(2, 10, 15, 0.95);
+            border-top: 1px solid var(--border);
+            padding: 12px 14px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .map-legend::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .map-legend::-webkit-scrollbar-thumb {
+            background: var(--border);
+        }
+
+        .legend-title {
+            font-family: var(--ui);
+            font-size: 0.75rem;
+            color: var(--cyan);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+        }
+
+        .legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .legend-type {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            margin-top: 8px;
+            border-top: 1px solid rgba(0, 229, 255, 0.1);
+        }
+
+        .legend-type:first-child {
+            margin-top: 0;
+            border-top: none;
+        }
+
+        .legend-icon {
+            font-size: 1rem;
+            width: 16px;
+            text-align: center;
+        }
+
+        .legend-type-name {
+            font-size: 0.75rem;
+            color: var(--muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .legend-entry {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .legend-entry:hover {
+            background: rgba(0, 229, 255, 0.1);
+            color: var(--cyan);
+        }
+
+        .legend-bullet {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        .legend-name {
+            font-size: 0.85rem;
+            color: var(--white);
+            flex: 1;
+            letter-spacing: 0.5px;
+        }
+
+        .legend-coords {
+            font-size: 0.7rem;
+            color: var(--muted);
+            font-family: var(--mono);
+        }
+
+        /* Old individual map wrapper (kept for backward compatibility) */
+        .map-wrapper {
+            margin-bottom: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.4);
+            animation: fadeIn 0.3s ease-out;
+        }
+
         .llm-map {
             height: 200px;
             width: 100%;
@@ -819,6 +944,12 @@
         .leaflet-control-zoom-out,
         .leaflet-control-attribution {
             filter: invert(1) hue-rotate(180deg) brightness(80%) contrast(120%);
+        }
+
+        /* Custom marker styles */
+        .map-ping {
+            background: transparent;
+            border: none;
         }
 
         /* ═══ INPUT AREA ═══ */

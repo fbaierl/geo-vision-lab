@@ -599,130 +599,240 @@
             _rawStreamBuffer = '';
         }
 
-        async function initMap(mapData, mapsContainer) {
+        async function renderUnifiedMap(locations, mapsContainer) {
             // Remove placeholder if it exists
             const placeholder = document.getElementById('maps-placeholder');
             if (placeholder) {
                 placeholder.remove();
             }
 
-            // Determine priority label based on relevance
-            let priorityLabel = '';
-            if (mapData.relevance >= 0.9) {
-                priorityLabel = '<span class="map-priority primary">PRIMARY</span>';
-            } else if (mapData.relevance >= 0.6) {
-                priorityLabel = '<span class="map-priority secondary">SECONDARY</span>';
+            // Remove any existing unified map
+            const existingMap = document.getElementById('unified-map-wrapper');
+            if (existingMap) {
+                existingMap.remove();
             }
 
-            const mapContainer = document.createElement('div');
-            mapContainer.className = 'map-wrapper';
-            mapContainer.id = 'map-wrapper-' + mapData.id;
-            mapContainer.innerHTML = `
+            if (!locations || locations.length === 0) {
+                return;
+            }
+
+            // Create unified map container
+            const mapWrapper = document.createElement('div');
+            mapWrapper.id = 'unified-map-wrapper';
+            mapWrapper.className = 'unified-map-wrapper';
+            mapWrapper.innerHTML = `
                 <div class="map-header">
-                    <span>▸ MAP SECURED // ${mapData.name}</span>
-                    ${priorityLabel}
+                    <span>▸ UNIFIED GEOGRAPHIC VIEW</span>
+                    <span class="location-count">${locations.length} location${locations.length > 1 ? 's' : ''}</span>
                 </div>
-                <div id="${mapData.id}" class="llm-map"></div>
+                <div id="unified-map" class="unified-map"></div>
+                <div id="unified-map-legend" class="map-legend"></div>
             `;
-            mapsContainer.appendChild(mapContainer);
+            mapsContainer.appendChild(mapWrapper);
 
-            if (mapData.type === 'point') {
-                // Render city/point marker
-                const map = L.map(mapData.id, {
-                    zoomControl: false,
-                    attributionControl: false
-                }).setView([mapData.lat, mapData.lon], 11);
+            // Create the map
+            const map = L.map('unified-map', {
+                zoomControl: true,
+                attributionControl: true
+            }).setView([0, 0], 2);
 
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                    subdomains: 'abc',
-                    maxZoom: 19
-                }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                subdomains: 'abc',
+                maxZoom: 19
+            }).addTo(map);
 
-                const icon = L.divIcon({
-                    className: 'map-ping',
-                    html: '<div style="width:12px; height:12px; background:var(--cyan); border-radius:50%; box-shadow:0 0 10px var(--cyan);"></div>',
-                    iconSize: [12, 12]
-                });
+            // Group locations by type for legend
+            const locationsByType = {
+                city: [],
+                country: [],
+                region: [],
+                other: []
+            };
 
-                L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map)
-                    .bindPopup(`<b>${mapData.name}</b><br>${mapData.lat}, ${mapData.lon}`)
-                    .openPopup();
-            } else if (mapData.type === 'boundary') {
-                // Render country/region boundary outline
-                const map = L.map(mapData.id, {
-                    zoomControl: false,
-                    attributionControl: false
-                }).setView([0, 0], 2);
+            const bounds = [];
+            const legendItems = [];
 
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                    subdomains: 'abc',
-                    maxZoom: 19
-                }).addTo(map);
+            // Process each location
+            for (const loc of locations) {
+                const mapData = {
+                    type: loc.type === 'country' || loc.type === 'region' ? 'boundary' : 'point',
+                    name: loc.name,
+                    lat: loc.lat,
+                    lon: loc.lon,
+                    boundary_geojson: loc.boundary_geojson || null,
+                    relevance: loc.relevance || 0.5
+                };
 
-                // Use pre-fetched boundary GeoJSON if available
-                if (mapData.boundary_geojson) {
-                    try {
-                        const geojsonLayer = L.geoJSON(mapData.boundary_geojson, {
-                            style: {
-                                color: 'var(--cyan)',
-                                weight: 2,
-                                fillOpacity: 0.15,
-                                fillColor: 'var(--cyan)'
-                            }
-                        }).addTo(map);
-                        map.fitBounds(geojsonLayer.getBounds());
-                        geojsonLayer.bindPopup(`<b>${mapData.name}</b>`);
-                    } catch (e) {
-                        console.error("Failed to render boundary for", mapData.name, e);
-                        // Fallback to point marker
-                        map.setView([mapData.lat, mapData.lon], 6);
-                        L.marker([mapData.lat, mapData.lon]).addTo(map)
-                            .bindPopup(`<b>${mapData.name}</b>`)
-                            .openPopup();
-                    }
+                // Determine location type for grouping
+                let locType = 'other';
+                if (mapData.type === 'boundary') {
+                    locType = loc.type === 'country' ? 'country' : 'region';
                 } else {
-                    // Fetch boundary from Nominatim
-                    try {
-                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1&limit=1`);
-                        const data = await res.json();
-                        let found = false;
+                    locType = 'city';
+                }
+                locationsByType[locType].push(mapData);
 
-                        if (data && data.features && data.features.length > 0) {
-                            const feature = data.features[0];
-                            if (feature.geometry) {
-                                const geojsonLayer = L.geoJSON(feature, {
-                                    style: {
-                                        color: 'var(--cyan)',
-                                        weight: 2,
-                                        fillOpacity: 0.15,
-                                        fillColor: 'var(--cyan)'
-                                    }
-                                }).addTo(map);
-                                map.fitBounds(geojsonLayer.getBounds());
-                                geojsonLayer.bindPopup(`<b>${mapData.name}</b>`);
-                                found = true;
+                // Add marker or boundary
+                if (mapData.type === 'point') {
+                    // City/point marker
+                    const icon = L.divIcon({
+                        className: 'map-ping',
+                        html: `<div style="width:14px; height:14px; background:var(--cyan); border-radius:50%; box-shadow:0 0 12px var(--cyan), 0 0 20px var(--cyan); border:2px solid white;"></div>`,
+                        iconSize: [14, 14]
+                    });
+
+                    const marker = L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map);
+                    marker.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}<br>Coords: ${mapData.lat}, ${mapData.lon}`);
+                    bounds.push([mapData.lat, mapData.lon]);
+                } else if (mapData.type === 'boundary') {
+                    // Country/region boundary
+                    if (mapData.boundary_geojson) {
+                        try {
+                            const geojsonLayer = L.geoJSON(mapData.boundary_geojson, {
+                                style: (feature) => ({
+                                    color: locType === 'country' ? 'var(--cyan)' : 'var(--amber)',
+                                    weight: 3,
+                                    fillOpacity: 0.2,
+                                    fillColor: locType === 'country' ? 'var(--cyan)' : 'var(--amber)'
+                                })
+                            }).addTo(map);
+                            geojsonLayer.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}`);
+                            
+                            if (geojsonLayer.getBounds()) {
+                                bounds.push(geojsonLayer.getBounds());
                             }
-                        }
-
-                        if (!found) {
+                        } catch (e) {
+                            console.error("Failed to render boundary for", mapData.name, e);
                             // Fallback to point marker
-                            map.setView([mapData.lat, mapData.lon], 6);
-                            L.marker([mapData.lat, mapData.lon]).addTo(map)
-                                .bindPopup(`<b>${mapData.name}</b>`)
-                                .openPopup();
+                            const marker = L.marker([mapData.lat, mapData.lon]).addTo(map);
+                            marker.bindPopup(`<b>${mapData.name}</b>`);
+                            bounds.push([mapData.lat, mapData.lon]);
                         }
-                    } catch (e) {
-                        console.error("Failed to load boundary for", mapData.name, e);
-                        // Fallback to point marker
-                        map.setView([mapData.lat, mapData.lon], 6);
-                        L.marker([mapData.lat, mapData.lon]).addTo(map)
-                            .bindPopup(`<b>${mapData.name}</b>`)
-                            .openPopup();
+                    } else {
+                        // Fetch boundary from Nominatim
+                        try {
+                            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1&limit=1`);
+                            const data = await res.json();
+                            let found = false;
+
+                            if (data && data.features && data.features.length > 0) {
+                                const feature = data.features[0];
+                                if (feature.geometry) {
+                                    const geojsonLayer = L.geoJSON(feature, {
+                                        style: (feature) => ({
+                                            color: locType === 'country' ? 'var(--cyan)' : 'var(--amber)',
+                                            weight: 3,
+                                            fillOpacity: 0.2,
+                                            fillColor: locType === 'country' ? 'var(--cyan)' : 'var(--amber)'
+                                        })
+                                    }).addTo(map);
+                                    geojsonLayer.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}`);
+                                    
+                                    if (geojsonLayer.getBounds()) {
+                                        bounds.push(geojsonLayer.getBounds());
+                                    }
+                                    found = true;
+                                }
+                            }
+
+                            if (!found) {
+                                // Fallback to point marker
+                                const marker = L.marker([mapData.lat, mapData.lon]).addTo(map);
+                                marker.bindPopup(`<b>${mapData.name}</b>`);
+                                bounds.push([mapData.lat, mapData.lon]);
+                            }
+                        } catch (e) {
+                            console.error("Failed to load boundary for", mapData.name, e);
+                            // Fallback to point marker
+                            const marker = L.marker([mapData.lat, mapData.lon]).addTo(map);
+                            marker.bindPopup(`<b>${mapData.name}</b>`);
+                            bounds.push([mapData.lat, mapData.lon]);
+                        }
                     }
                 }
             }
+
+            // Fit map to show all locations
+            if (bounds.length > 0) {
+                if (bounds.length === 1 && Array.isArray(bounds[0])) {
+                    map.setView(bounds[0], 6);
+                } else {
+                    const group = L.featureGroup(bounds.map(b => Array.isArray(b) ? L.marker(b) : b));
+                    map.fitBounds(group.getBounds(), { padding: [50, 50] });
+                }
+            }
+
+            // Build legend
+            const legendContainer = document.getElementById('unified-map-legend');
+            let legendHTML = '<div class="legend-title">// LOCATION LEGEND</div><div class="legend-items">';
+            
+            let legendIndex = 0;
+            const typeColors = {
+                city: 'var(--cyan)',
+                country: 'var(--cyan)',
+                region: 'var(--amber)',
+                other: 'var(--muted)'
+            };
+            const typeIcons = {
+                city: '◉',
+                country: '◼',
+                region: '◼',
+                other: '◉'
+            };
+
+            // Group by type and show in legend
+            for (const [type, locs] of Object.entries(locationsByType)) {
+                if (locs.length > 0) {
+                    const color = typeColors[type];
+                    const icon = typeIcons[type];
+                    const typeName = type.toUpperCase();
+                    
+                    legendHTML += `<div class="legend-type">
+                        <span class="legend-icon" style="color: ${color}">${icon}</span>
+                        <span class="legend-type-name">${typeName} (${locs.length})</span>
+                    </div>`;
+                    
+                    // List individual locations for this type
+                    locs.forEach(loc => {
+                        legendHTML += `<div class="legend-entry" data-location-index="${legendIndex}">
+                            <span class="legend-bullet" style="background: ${color}"></span>
+                            <span class="legend-name">${esc(loc.name)}</span>
+                            <span class="legend-coords">${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}</span>
+                        </div>`;
+                        legendIndex++;
+                    });
+                }
+            }
+            
+            legendHTML += '</div>';
+            legendContainer.innerHTML = legendHTML;
+
+            // Add hover interaction: highlight marker when hovering legend entry
+            const legendEntries = legendContainer.querySelectorAll('.legend-entry');
+            const markers = [];
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker || layer instanceof L.GeoJSON) {
+                    markers.push(layer);
+                }
+            });
+
+            legendEntries.forEach((entry, idx) => {
+                entry.addEventListener('mouseenter', () => {
+                    if (markers[idx]) {
+                        const popup = markers[idx].getPopup();
+                        if (popup) {
+                            markers[idx].openPopup();
+                        }
+                        map.panTo(markers[idx].getLatLng());
+                    }
+                });
+                entry.addEventListener('mouseleave', () => {
+                    if (markers[idx]) {
+                        markers[idx].closePopup();
+                    }
+                });
+            });
         }
 
         /* ═══ HISTORY ═══ */
@@ -828,29 +938,18 @@
                             } else if (evt.type === 'tool_result') {
                                 addReasoningResult(evt.summary, evt.content || null);
                             } else if (evt.type === 'locations_found') {
-                                // Handle extracted locations - render maps
+                                // Handle extracted locations - render unified map
                                 elMapsStatus.textContent = evt.summary;
                                 document.getElementById('maps-placeholder')?.remove();
                                 if (evt.locations && evt.locations.length > 0) {
                                     // Sort by relevance (descending) before rendering
-                                    const sortedLocations = [...evt.locations].sort((a, b) => 
+                                    const sortedLocations = [...evt.locations].sort((a, b) =>
                                         (b.relevance || 0.5) - (a.relevance || 0.5)
                                     );
-                                    sortedLocations.forEach(loc => {
-                                        const mapData = {
-                                            id: 'llm-map-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-                                            type: loc.type === 'country' || loc.type === 'region' ? 'boundary' : 
-                                                  loc.type === 'city' ? 'point' : 'point',
-                                            name: loc.name,
-                                            lat: loc.lat,
-                                            lon: loc.lon,
-                                            boundary_geojson: loc.boundary_geojson || null,
-                                            relevance: loc.relevance || 0.5
-                                        };
-                                        setTimeout(async () => {
-                                            await initMap(mapData, currentTurn.maps);
-                                        }, 50);
-                                    });
+                                    // Render all locations on a single unified map
+                                    setTimeout(async () => {
+                                        await renderUnifiedMap(sortedLocations, currentTurn.maps);
+                                    }, 50);
                                 }
                             } else if (evt.type === 'token') {
                                 elTyping.style.display = 'none';

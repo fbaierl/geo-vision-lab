@@ -13,7 +13,6 @@ from unittest.mock import patch, MagicMock, call
 from app.services.location_extractor import (
     extract_locations_with_ner,
     geocode_location,
-    fetch_boundary_geojson,
     extract_and_geocode_locations,
     get_ner_pipeline,
     _geocode_cache
@@ -256,84 +255,6 @@ class TestGeocodeLocation:
         assert result["lon"] == 2.0
         mock_nominatim.assert_not_called()
 
-    @patch('app.services.location_extractor.fetch_boundary_geojson')
-    @patch('app.services.location_extractor.Nominatim')
-    def test_geocode_country_fetches_boundary(self, mock_nominatim, mock_boundary):
-        """Test that boundary is fetched for countries."""
-        mock_geolocator = MagicMock()
-        mock_location = MagicMock()
-        mock_location.latitude = 46.603354
-        mock_location.longitude = 1.8883335
-        mock_location.address = "France"
-        mock_location.raw = {'address': {'country': 'France'}}
-        mock_geolocator.geocode.return_value = mock_location
-        mock_nominatim.return_value = mock_geolocator
-        mock_boundary.return_value = {"type": "Polygon", "coordinates": [[[0, 0], [1, 1], [0, 0]]]}
-
-        result = geocode_location("France")
-
-        assert result is not None
-        assert "boundary_geojson" in result
-        mock_boundary.assert_called_once_with("France", "country")
-
-
-class TestFetchBoundaryGeojson:
-    """Tests for boundary GeoJSON fetching."""
-
-    @patch('app.services.location_extractor.requests.get')
-    def test_fetch_boundary_success(self, mock_get):
-        """Test successful boundary fetch."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {
-                "geojson": {
-                    "type": "Polygon",
-                    "coordinates": [[[0, 0], [1, 1], [2, 0], [0, 0]]]
-                }
-            }
-        ]
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
-
-        result = fetch_boundary_geojson("France", "country")
-
-        assert result is not None
-        assert result["type"] == "Polygon"
-        assert "coordinates" in result
-
-    @patch('app.services.location_extractor.requests.get')
-    def test_fetch_boundary_empty_response(self, mock_get):
-        """Test boundary fetch with empty response."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = []
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
-
-        result = fetch_boundary_geojson("UnknownPlace", "country")
-
-        assert result is None
-
-    @patch('app.services.location_extractor.requests.get')
-    def test_fetch_boundary_no_geojson(self, mock_get):
-        """Test boundary fetch when geojson key is missing."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = [{"name": "Place"}]
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
-
-        result = fetch_boundary_geojson("Place", "country")
-
-        assert result is None
-
-    @patch('app.services.location_extractor.requests.get')
-    def test_fetch_boundary_request_error(self, mock_get):
-        """Test boundary fetch with request error."""
-        mock_get.side_effect = Exception("Network error")
-
-        result = fetch_boundary_geojson("France", "country")
-
-        assert result is None
-
 
 class TestExtractAndGeocodeLocations:
     """Tests for the full extraction and geocoding pipeline."""
@@ -425,3 +346,53 @@ class TestExtractAndGeocodeLocations:
         mock_sleep.assert_called_with(0.1)
 
 
+class TestExtractLocationsWithNERIntegration:
+    """Integration tests using the real NER model."""
+
+    def test_extract_locations_real_model_simple(self):
+        """Test NER extraction with real model on simple text."""
+        # This will download/load the real model on first run
+        result = extract_locations_with_ner("Paris is the capital of France")
+
+        # Assert we get reasonable results (may vary by model)
+        assert len(result) >= 1
+        names = [loc["name"] for loc in result]
+        # At least one of these should be detected
+        assert "France" in names or "Paris" in names
+        
+        # Note: extract_locations_with_ner() returns preliminary types based on NER labels only
+        # For accurate types (country vs city), use extract_and_geocode_locations() which geocodes via Nominatim
+        # LOC entities are labeled as "landmark" as a fallback, even for countries
+
+    def test_extract_locations_real_model_multiple_countries(self):
+        """Test NER extraction with real model on multiple countries."""
+        result = extract_locations_with_ner(
+            "Germany and France are neighboring countries in Europe. "
+            "Berlin is the capital of Germany."
+        )
+
+        assert len(result) >= 2
+        names = [loc["name"] for loc in result]
+        # Should detect at least Germany and France
+        assert "Germany" in names
+        assert "France" in names
+
+    def test_extract_locations_real_model_mixed_types(self):
+        """Test NER extraction with real model on mixed entity types."""
+        result = extract_locations_with_ner(
+            "The Eiffel Tower is located in Paris, France."
+        )
+
+        # Should detect at least Paris and/or France
+        names = [loc["name"] for loc in result]
+        assert len(result) >= 1
+        assert "Paris" in names or "France" in names or "Eiffel Tower" in names
+
+    def test_extract_locations_real_model_no_locations(self):
+        """Test NER extraction with text containing no locations."""
+        result = extract_locations_with_ner(
+            "The quick brown fox jumps over the lazy dog."
+        )
+
+        # This sentence has no named entities
+        assert result == []

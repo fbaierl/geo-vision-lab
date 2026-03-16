@@ -36,7 +36,6 @@ class Settings(BaseSettings):
         return self.OLLAMA_BASE_URL
 
     # --- LLM Models ---
-    LLM_MODEL_NAME: str = "qwen3.5:4b"
     REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
     REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Using 4B for more reliable validation
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"

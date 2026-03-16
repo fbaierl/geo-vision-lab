@@ -3,7 +3,6 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from typing import List, Dict, Any, Optional
 import time
-import requests
 
 logger = logging.getLogger("agent_flow")
 
@@ -44,6 +43,8 @@ def extract_locations_with_ner(text: str) -> List[Dict[str, str]]:
     Extract geographic locations from text using Hugging Face NER.
 
     Returns list of dicts with 'name' and 'type' keys.
+    Note: The type is a preliminary classification based on NER labels.
+    For accurate types, use extract_and_geocode_locations() which geocodes via Nominatim.
     """
     ner_pipeline = get_ner_pipeline()
     ner_results = ner_pipeline(text)
@@ -55,7 +56,7 @@ def extract_locations_with_ner(text: str) -> List[Dict[str, str]]:
         # Hugging Face NER returns: LOC, GPE, FAC, ORG, PER, etc.
         entity_label = entity.get("entity_group", entity.get("label", ""))
         entity_text = entity.get("word", entity.get("entity_text", ""))
-        
+
         # Only process location-related entities
         if entity_label in ["LOC", "GPE", "FAC"]:
             if entity_text not in seen:
@@ -80,7 +81,7 @@ def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
     """
     Geocode a location name using Nominatim (OpenStreetMap).
 
-    Returns dict with 'lat', 'lon', 'type', 'display_name', and optionally 'boundary_geojson' for countries/regions.
+    Returns dict with 'lat', 'lon', 'type', 'display_name'.
 
     Location type is determined using Nominatim's structured address data.
     """
@@ -116,11 +117,6 @@ def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
             else:
                 result["type"] = "landmark"
 
-            if result["type"] in ["country", "region"]:
-                boundary = fetch_boundary_geojson(location_name, result["type"])
-                if boundary:
-                    result["boundary_geojson"] = boundary
-
             logger.debug(f"[LOCATION_EXTRACTOR] Geocoded '{location_name}' to ({result['lat']}, {result['lon']}) as {result['type']}")
             _geocode_cache[location_name] = result
             return result
@@ -132,39 +128,6 @@ def geocode_location(location_name: str) -> Optional[Dict[str, Any]]:
     except (GeocoderTimedOut, GeocoderServiceError) as e:
         logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}")
         _geocode_cache[location_name] = None
-        return None
-
-
-def fetch_boundary_geojson(location_name: str, location_type: str) -> Optional[Dict]:
-    """
-    Fetch GeoJSON boundary data from Nominatim for countries and regions.
-
-    Returns GeoJSON polygon/multipolygon or None if not available.
-    """
-    try:
-        base_url = "https://nominatim.openstreetmap.org/search"
-        params = {
-            "q": location_name,
-            "format": "geojson",
-            "polygon_geojson": 1,
-            "limit": 1,
-            "accept-language": "en"
-        }
-
-        response = requests.get(base_url, params=params, timeout=10)
-        response.raise_for_status()
-
-        data = response.json()
-
-        if data and len(data) > 0 and "geojson" in data[0]:
-            geojson = data[0]["geojson"]
-            logger.debug(f"[LOCATION_EXTRACTOR] Fetched boundary for {location_name}: {geojson['type']}")
-            return geojson
-
-        return None
-
-    except Exception as e:
-        logger.warning(f"[LOCATION_EXTRACTOR] Failed to fetch boundary for '{location_name}': {e}")
         return None
 
 
