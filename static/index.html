@@ -623,12 +623,20 @@
             mapWrapper.innerHTML = `
                 <div class="map-header">
                     <span>▸ UNIFIED GEOGRAPHIC VIEW</span>
-                    <span class="location-count">${locations.length} location${locations.length > 1 ? 's' : ''}</span>
+                    <div class="map-header-actions">
+                        <span class="location-count">${locations.length} location${locations.length > 1 ? 's' : ''}</span>
+                        <button class="debug-btn" id="debug-map-btn" title="View raw location data">
+                            <span>⬡</span> VIEW DATA
+                        </button>
+                    </div>
                 </div>
                 <div id="unified-map" class="unified-map"></div>
                 <div id="unified-map-legend" class="map-legend"></div>
             `;
             mapsContainer.appendChild(mapWrapper);
+            
+            // Store locations data for debug button
+            mapWrapper._locationsData = locations;
 
             // Create the map
             const map = L.map('unified-map', {
@@ -641,6 +649,11 @@
                 subdomains: 'abc',
                 maxZoom: 19
             }).addTo(map);
+            
+            // Create a custom pane for boundaries to render above tiles
+            map.createPane('boundaryPane');
+            map.getPane('boundaryPane').style.zIndex = 600;
+            map.getPane('boundaryPane').style.pointerEvents = 'none';
 
             // Group locations by type for legend
             const locationsByType = {
@@ -651,7 +664,10 @@
             };
 
             const bounds = [];
-            const legendItems = [];
+            const markers = [];
+
+            // Log locations for debugging
+            console.log('[renderUnifiedMap] Processing locations:', locations);
 
             // Process each location
             for (const loc of locations) {
@@ -685,86 +701,97 @@
                     const marker = L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map);
                     marker.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}<br>Coords: ${mapData.lat}, ${mapData.lon}`);
                     bounds.push([mapData.lat, mapData.lon]);
+                    markers.push(marker);
                 } else if (mapData.type === 'boundary') {
-                    // Country/region boundary
-                    if (mapData.boundary_geojson) {
-                        try {
-                            const geojsonLayer = L.geoJSON(mapData.boundary_geojson, {
-                                style: (feature) => ({
-                                    color: locType === 'country' ? 'var(--cyan)' : 'var(--amber)',
-                                    weight: 3,
-                                    fillOpacity: 0.2,
-                                    fillColor: locType === 'country' ? 'var(--cyan)' : 'var(--amber)'
-                                })
-                            }).addTo(map);
-                            geojsonLayer.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}`);
-                            
-                            if (geojsonLayer.getBounds()) {
-                                bounds.push(geojsonLayer.getBounds());
-                            }
-                        } catch (e) {
-                            console.error("Failed to render boundary for", mapData.name, e);
-                            // Fallback to point marker
-                            const marker = L.marker([mapData.lat, mapData.lon]).addTo(map);
-                            marker.bindPopup(`<b>${mapData.name}</b>`);
-                            bounds.push([mapData.lat, mapData.lon]);
-                        }
-                    } else {
-                        // Fetch boundary from Nominatim
-                        try {
-                            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1&limit=1`);
-                            const data = await res.json();
-                            let found = false;
+                    // Country/region boundary - always fetch from Nominatim
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapData.name)}&format=geojson&polygon_geojson=1&limit=1`);
+                        const data = await res.json();
+                        let found = false;
 
-                            if (data && data.features && data.features.length > 0) {
-                                const feature = data.features[0];
-                                if (feature.geometry) {
-                                    const geojsonLayer = L.geoJSON(feature, {
-                                        style: (feature) => ({
-                                            color: locType === 'country' ? 'var(--cyan)' : 'var(--amber)',
-                                            weight: 3,
-                                            fillOpacity: 0.2,
-                                            fillColor: locType === 'country' ? 'var(--cyan)' : 'var(--amber)'
-                                        })
-                                    }).addTo(map);
-                                    geojsonLayer.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}`);
-                                    
-                                    if (geojsonLayer.getBounds()) {
-                                        bounds.push(geojsonLayer.getBounds());
-                                    }
-                                    found = true;
+                        if (data && data.features && data.features.length > 0) {
+                            const feature = data.features[0];
+                            if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
+                                // Use bright colors that will show well after dark mode filter
+                                const strokeColor = locType === 'country' ? '#00ffff' : '#ffab00';
+                                const fillColor = locType === 'country' ? '#0088aa' : '#aa7700';
+                                
+                                const geojsonLayer = L.geoJSON(feature, {
+                                    pane: 'boundaryPane',
+                                    style: () => ({
+                                        color: strokeColor,
+                                        weight: 3,
+                                        fillOpacity: 0.25,
+                                        fillColor: fillColor,
+                                        opacity: 0.9
+                                    })
+                                }).addTo(map);
+                                geojsonLayer.bindPopup(`<b>${mapData.name}</b><br>Type: ${locType.toUpperCase()}`);
+                                
+                                if (geojsonLayer.getBounds()) {
+                                    bounds.push(geojsonLayer.getBounds());
                                 }
+                                markers.push(geojsonLayer);
+                                found = true;
                             }
-
-                            if (!found) {
-                                // Fallback to point marker
-                                const marker = L.marker([mapData.lat, mapData.lon]).addTo(map);
-                                marker.bindPopup(`<b>${mapData.name}</b>`);
-                                bounds.push([mapData.lat, mapData.lon]);
-                            }
-                        } catch (e) {
-                            console.error("Failed to load boundary for", mapData.name, e);
-                            // Fallback to point marker
-                            const marker = L.marker([mapData.lat, mapData.lon]).addTo(map);
-                            marker.bindPopup(`<b>${mapData.name}</b>`);
-                            bounds.push([mapData.lat, mapData.lon]);
                         }
+
+                        if (!found) {
+                            // Fallback to point marker
+                            const icon = L.divIcon({
+                                className: 'map-ping',
+                                html: `<div style="width:14px; height:14px; background:var(--cyan); border-radius:50%; box-shadow:0 0 12px var(--cyan), 0 0 20px var(--cyan); border:2px solid white;"></div>`,
+                                iconSize: [14, 14]
+                            });
+                            const marker = L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map);
+                            marker.bindPopup(`<b>${mapData.name}</b><br>(Boundary not available)`);
+                            bounds.push([mapData.lat, mapData.lon]);
+                            markers.push(marker);
+                        }
+                    } catch (e) {
+                        console.error("Failed to load boundary for", mapData.name, e);
+                        // Fallback to point marker
+                        const icon = L.divIcon({
+                            className: 'map-ping',
+                            html: `<div style="width:14px; height:14px; background:var(--cyan); border-radius:50%; box-shadow:0 0 12px var(--cyan), 0 0 20px var(--cyan); border:2px solid white;"></div>`,
+                            iconSize: [14, 14]
+                        });
+                        const marker = L.marker([mapData.lat, mapData.lon], { icon: icon }).addTo(map);
+                        marker.bindPopup(`<b>${mapData.name}</b>`);
+                        bounds.push([mapData.lat, mapData.lon]);
+                        markers.push(marker);
                     }
                 }
             }
 
             // Fit map to show all locations
             if (bounds.length > 0) {
-                if (bounds.length === 1 && Array.isArray(bounds[0])) {
-                    map.setView(bounds[0], 6);
-                } else {
-                    const group = L.featureGroup(bounds.map(b => Array.isArray(b) ? L.marker(b) : b));
-                    map.fitBounds(group.getBounds(), { padding: [50, 50] });
-                }
+                // Wait a bit for all layers to be added
+                setTimeout(() => {
+                    try {
+                        const group = L.featureGroup(bounds.map(b => {
+                            if (Array.isArray(b)) {
+                                return L.marker(b);
+                            }
+                            return b;
+                        }));
+                        map.fitBounds(group.getBounds(), { padding: [50, 50] });
+                    } catch (e) {
+                        console.error("Failed to fit bounds:", e);
+                        if (bounds.length === 1 && Array.isArray(bounds[0])) {
+                            map.setView(bounds[0], 6);
+                        }
+                    }
+                }, 100);
             }
 
             // Build legend
             const legendContainer = document.getElementById('unified-map-legend');
+            if (!legendContainer) {
+                console.error('Legend container not found!');
+                return;
+            }
+            
             let legendHTML = '<div class="legend-title">// LOCATION LEGEND</div><div class="legend-items">';
             
             let legendIndex = 0;
@@ -782,6 +809,8 @@
             };
 
             // Group by type and show in legend
+            console.log('[renderUnifiedMap] Locations by type:', locationsByType);
+            
             for (const [type, locs] of Object.entries(locationsByType)) {
                 if (locs.length > 0) {
                     const color = typeColors[type];
@@ -806,16 +835,12 @@
             }
             
             legendHTML += '</div>';
+            console.log('[renderUnifiedMap] Building legend with HTML:', legendHTML.length, 'chars');
             legendContainer.innerHTML = legendHTML;
+            console.log('[renderUnifiedMap] Legend rendered, container has', legendContainer.querySelectorAll('.legend-entry').length, 'entries');
 
             // Add hover interaction: highlight marker when hovering legend entry
             const legendEntries = legendContainer.querySelectorAll('.legend-entry');
-            const markers = [];
-            map.eachLayer(layer => {
-                if (layer instanceof L.Marker || layer instanceof L.GeoJSON) {
-                    markers.push(layer);
-                }
-            });
 
             legendEntries.forEach((entry, idx) => {
                 entry.addEventListener('mouseenter', () => {
@@ -824,7 +849,11 @@
                         if (popup) {
                             markers[idx].openPopup();
                         }
-                        map.panTo(markers[idx].getLatLng());
+                        if (markers[idx].getLatLng) {
+                            map.panTo(markers[idx].getLatLng());
+                        } else if (markers[idx].getBounds) {
+                            map.fitBounds(markers[idx].getBounds());
+                        }
                     }
                 });
                 entry.addEventListener('mouseleave', () => {
@@ -833,6 +862,14 @@
                     }
                 });
             });
+            
+            // Add debug button handler
+            const debugBtn = document.getElementById('debug-map-btn');
+            if (debugBtn) {
+                debugBtn.addEventListener('click', () => {
+                    showMapDebugData(locations);
+                });
+            }
         }
 
         /* ═══ HISTORY ═══ */
@@ -845,6 +882,76 @@
             elHistory.prepend(el);
             while (elHistory.children.length > 8) elHistory.lastChild.remove();
         }
+
+        /* ═══ MAP DEBUG DATA MODAL ═══ */
+        function showMapDebugData(locations) {
+            // Create modal if it doesn't exist
+            let modal = document.getElementById('map-debug-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'map-debug-modal';
+                modal.className = 'debug-modal';
+                modal.innerHTML = `
+                    <div class="debug-modal-content">
+                        <div class="debug-modal-header">
+                            <span>▸ MAP LOCATION DATA</span>
+                            <button class="debug-modal-close" id="debug-modal-close-btn">×</button>
+                        </div>
+                        <div class="debug-modal-body">
+                            <pre id="debug-modal-json"></pre>
+                        </div>
+                        <div class="debug-modal-footer">
+                            <button class="debug-modal-btn" id="debug-modal-copy-btn">
+                                <span>⬡</span> COPY JSON
+                            </button>
+                            <button class="debug-modal-btn" id="debug-modal-close-btn-footer">
+                                <span>⬡</span> CLOSE
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                
+                // Add close handlers
+                document.getElementById('debug-modal-close-btn').addEventListener('click', () => {
+                    modal.style.display = 'none';
+                });
+                document.getElementById('debug-modal-close-btn-footer').addEventListener('click', () => {
+                    modal.style.display = 'none';
+                });
+                
+                // Add copy handler
+                document.getElementById('debug-modal-copy-btn').addEventListener('click', () => {
+                    const jsonText = document.getElementById('debug-modal-json').textContent;
+                    navigator.clipboard.writeText(jsonText).then(() => {
+                        const copyBtn = document.getElementById('debug-modal-copy-btn');
+                        const originalText = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<span>✓</span> COPIED!';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalText;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy:', err);
+                    });
+                });
+                
+                // Close on outside click
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            }
+            
+            // Update JSON content
+            const jsonPre = document.getElementById('debug-modal-json');
+            const formattedJson = JSON.stringify(locations, null, 2);
+            jsonPre.textContent = formattedJson;
+            
+            // Show modal
+            modal.style.display = 'flex';
+        }
+
 
         /* ═══ SEND QUERY ═══ */
         async function send() {

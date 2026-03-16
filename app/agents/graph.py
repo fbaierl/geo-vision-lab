@@ -1,5 +1,5 @@
-from typing import Literal, AsyncGenerator, List, Dict, Any
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from typing import Literal, AsyncGenerator, Dict, Any
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 import logging
 import re
@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.services.llm import get_reasoning_llm, get_reviewer_llm
+from app.services.llm import get_reasoning_llm
 from app.services.vector_store import similarity_search
 from app.services.location_extractor import extract_and_geocode_locations
 from app.services.location_prioritizer import prioritize_locations
@@ -173,14 +173,22 @@ def extract_locations(state: AgentState) -> Dict[str, Any]:
     # Get the last assistant message (the final response)
     last_message = state["messages"][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
+    
+    # Get the user query from the first message
+    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_query = user_msgs[0].content if user_msgs else ""
 
     if not assistant_response:
         logger.info("[LOCATION_EXTRACTOR] No response content to extract locations from")
         return {"extracted_locations": []}
 
     try:
-        # Use spaCy NER + Nominatim geocoding
-        locations = extract_and_geocode_locations(assistant_response)
+        # Use spaCy NER + Nominatim geocoding with disambiguation
+        locations = extract_and_geocode_locations(
+            assistant_response, 
+            query=user_query,
+            response_text=assistant_response
+        )
         logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s): {locations}")
         return {"extracted_locations": locations}
 
