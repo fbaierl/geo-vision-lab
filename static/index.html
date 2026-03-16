@@ -376,6 +376,11 @@
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
+        function scrollToBottom(el) {
+            if (!el) return;
+            el.scrollTop = el.scrollHeight;
+        }
+
         /* ═══ REASONING LANE FUNCTIONS ═══ */
         function createConversationTurn() {
             turnCount++;
@@ -520,7 +525,7 @@
             if (currentTurn && currentTurn.reasoning) {
                 currentTurn.reasoning.appendChild(step);
             }
-            elReasoningContent.scrollTop = elReasoningContent.scrollHeight;
+            scrollToBottom(elReasoningContent);
             return step;
         }
 
@@ -546,7 +551,7 @@
             if (currentTurn && currentTurn.reasoning) {
                 currentTurn.reasoning.appendChild(res);
             }
-            elReasoningContent.scrollTop = elReasoningContent.scrollHeight;
+            scrollToBottom(elReasoningContent);
         }
 
         /* ═══ TEXT LANE FUNCTIONS ═══ */
@@ -581,7 +586,7 @@
                 cursor.textContent = '○';
                 textEl.appendChild(cursor);
             }
-            elTextContent.scrollTop = elTextContent.scrollHeight;
+            scrollToBottom(elTextContent);
         }
 
         function renderMarkdown(textEl) {

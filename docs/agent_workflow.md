@@ -10,7 +10,7 @@ GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The syste
 
 1. **Worker Agent** — The primary reasoning engine that handles user queries, performs tool calls, and synthesizes responses
 2. **Critic Agent** — A QA reviewer that validates outputs before delivery
-3. **Location Extractor** — Automatic geographic entity recognition using spaCy NER + Nominatim geocoding
+3. **Location Extractor** — Automatic geographic entity recognition using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
 
 ## Mandatory Vector Search First Protocol
 
@@ -61,8 +61,9 @@ graph TB
     end
 
     subgraph Location["Location Extractor"]
-        NER["spaCy NER<br/>(en_core_web_sm)"]
-        GEO["Nominatim<br/>Geocoding"]
+        NER["Hugging Face NER<br/>(dslim/bert-base-NER)"]
+        GEO["Nominatim<br/>Multi-Candidate Geocoding"]
+        LLM["LLM Selection<br/>(Context-Aware)"]
     end
 
     subgraph Tools["Available Tools"]
@@ -274,28 +275,34 @@ If any constraint is violated, explain the issue and request revision.
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart LR
-    subgraph NER["spaCy NER Pipeline"]
-        TEXT[Response Text] --> MODEL["en_core_web_sm<br/>NER Model"]
+    subgraph NER["Hugging Face NER Pipeline"]
+        TEXT[Response Text] --> MODEL["dslim/bert-base-NER<br/>NER Model"]
         MODEL --> ENTITIES["Extract Entities<br/>GPE/LOC/FAC"]
     end
 
-    subgraph GEO["Nominatim Geocoding"]
-        ENTITIES --> GEOCODE["Geocode Each<br/>Location"]
-        GEOCODE --> COORDS["Return lat/lon<br/>+ Type"]
+    subgraph GEO["Multi-Candidate Geocoding"]
+        ENTITIES --> GEOCODE["Geocode Each<br/>Get ALL Candidates"]
+        GEOCODE --> CANDIDATES["Multiple Options<br/>per Location"]
     end
 
-    COORDS --> MAPS["Render Maps<br/>in UI"]
+    subgraph LLM["LLM Disambiguation"]
+        CANDIDATES --> SELECT["LLM Reviews<br/>All Options"]
+        SELECT --> VALID["Select Valid<br/>Locations"]
+    end
+
+    VALID --> MAPS["Render Maps<br/>in UI"]
 ```
 
 **What happens:**
 1. `extract_locations_node` receives the approved response text
-2. spaCy's `en_core_web_sm` model identifies named entities:
+2. Hugging Face's `dslim/bert-base-NER` model identifies named entities:
    - **GPE** (Geopolitical Entity): Countries, cities, states
    - **LOC** (Location): Mountains, bodies of water, regions
    - **FAC** (Facility): Airports, buildings, landmarks
-3. Each extracted location is geocoded via Nominatim (OpenStreetMap)
-4. Results include: name, type, latitude, longitude, display_name
-5. Locations are streamed to frontend for automatic map rendering
+3. Each extracted location is geocoded via Nominatim with `exactly_one=False` to get ALL candidates
+4. LLM reviews all candidates in query context and selects correct matches
+5. Results include: name, type, latitude, longitude, display_name, country
+6. Locations are streamed to frontend for automatic map rendering
 
 **Key Point:** This step is **fully automatic** — the Worker Agent does NOT need to request maps or provide coordinates. The Location Extractor handles everything.
 
@@ -304,7 +311,14 @@ flowchart LR
 Input: "The conflict in Kyiv has escalated..."
 
 Extracted:
-- GPE: "Kyiv" → geocode → (50.4501, 30.5234) → type: city
+- GPE: "Kyiv" → geocode → multiple candidates → LLM selects → (50.4501, 30.5234) → type: city, country: Ukraine
+```
+
+**Disambiguation Example:**
+```
+Query: "iran vs israel"
+Extracted: "IRA" → geocode → [Town of Ira NY, Ira VT] → LLM rejects (no Iran country option)
+Extracted: "Iran" → geocode → [Iran (country), Iran TX] → LLM selects Iran (country)
 ```
 
 ---

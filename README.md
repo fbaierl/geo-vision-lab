@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="static/demo_maps.webp" alt="GeoVision Lab Demo" width="900" />
+  <img src="static/demo_presentation.gif" alt="GeoVision Lab Demo" width="900" />
 </p>
 
 
@@ -21,7 +21,7 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 
 - **Multi-Agent AI** — Worker + Critic + Location Extractor architecture with autonomous tool selection
 - **Hybrid Search** — Vector search (archival) + Web search (live events)
-- **Automatic Map Rendering** — spaCy NER + Nominatim geocoding for geographic visualizations
+- **Automatic Map Rendering** — Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
 - **3-Lane UI** — Reasoning Chain | Text Result | Maps Result with resizable panels
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
 - **Privacy-First** — All inference runs locally — no data leaves your machine
@@ -46,7 +46,7 @@ graph TB
     subgraph Backend["Backend Services"]
         API["FastAPI<br/>(REST + Streaming)"]
         AGENT["LangGraph Agent<br/>(Worker + Critic)"]
-        LOC["Location Extractor<br/>(spaCy NER + Nominatim)"]
+        LOC["Location Extractor<br/>(Hugging Face NER + LLM)"]
     end
 
     subgraph Data["Data Layer"]
@@ -209,7 +209,7 @@ geo-vision-lab/
 |-------|------------|
 | **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) |
 | **QA/Review LLM** | Ollama + Qwen 2.5:0.5b |
-| **NER/Location** | spaCy (en_core_web_sm) + Nominatim |
+| **NER/Location** | Hugging Face (dslim/bert-base-NER) + LLM disambiguation |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
 | **Agent Framework** | LangGraph + MemorySaver |

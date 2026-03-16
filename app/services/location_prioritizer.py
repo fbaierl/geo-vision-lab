@@ -78,7 +78,7 @@ Only include locations with relevance >= 0.4. Limit to 5 locations max."""
         # Parse JSON from response
         json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
         if not json_match:
-            logger.warning(f"[LOCATION_PRIORITIZER] No JSON array found in response")
+            logger.warning("[LOCATION_PRIORITIZER] No JSON array found in response")
             # Fallback: return top 3 locations
             return _fallback_prioritize(locations)
         

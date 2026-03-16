@@ -165,9 +165,9 @@ def check_validation(state: AgentState) -> Literal["agent", "location_extractor"
 
 
 def extract_locations(state: AgentState) -> Dict[str, Any]:
-    """Extract geographic locations from the agent's response using spaCy NER + Nominatim geocoding."""
+    """Extract geographic locations from the agent's response using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation."""
     logger.info("=" * 80)
-    logger.info("[LOCATION_EXTRACTOR] Starting location extraction with spaCy NER + Nominatim")
+    logger.info("[LOCATION_EXTRACTOR] Starting location extraction with Hugging Face NER + Nominatim")
     logger.info("=" * 80)
 
     # Get the last assistant message (the final response)
@@ -183,7 +183,7 @@ def extract_locations(state: AgentState) -> Dict[str, Any]:
         return {"extracted_locations": []}
 
     try:
-        # Use spaCy NER + Nominatim geocoding with disambiguation
+        # Use Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
         locations = extract_and_geocode_locations(
             assistant_response, 
             query=user_query,
