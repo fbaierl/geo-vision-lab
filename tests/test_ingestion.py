@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock, mock_open
 
 # Skip tests on Python 3.14+ due to spacy/pydantic v1 compatibility issue
+# Note: langchain-text-splitters imports spacy which fails on Python 3.14
 # See: https://github.com/explosion/spaCy/issues/13873
 pytestmark = pytest.mark.skipif(
     sys.version_info >= (3, 14),
@@ -43,7 +44,10 @@ def test_ingestion_pipeline_success(mock_file, mock_exists, mock_hash, mock_inse
 
     # Run the function
     with patch("app.ingestion.ingest.settings", mock_settings):
-        with patch("app.services.vector_store.settings", mock_settings):
+        # After refactoring, vector_store uses DI - mock get_vector_store instead
+        with patch("app.services.vector_store.get_vector_store") as mock_get_vs:
+            mock_vs = MagicMock()
+            mock_get_vs.return_value = mock_vs
             main()
 
     # Assertions
@@ -63,7 +67,9 @@ def test_ingestion_no_files_found(mock_glob):
     mock_glob.return_value = []
 
     with patch("app.ingestion.ingest.settings", mock_settings):
-        with patch("app.services.vector_store.settings", mock_settings):
+        with patch("app.services.vector_store.get_vector_store") as mock_get_vs:
+            mock_vs = MagicMock()
+            mock_get_vs.return_value = mock_vs
             main()
 
     mock_glob.assert_called_once()
