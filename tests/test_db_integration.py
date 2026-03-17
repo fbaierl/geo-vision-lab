@@ -2,6 +2,7 @@ import pytest
 from testcontainers.mongodb import MongoDbContainer
 from unittest.mock import patch, MagicMock
 from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, AIMessage
 import time
 
 # 1. Provide the same MongoDB image we use in docker-compose
@@ -11,21 +12,20 @@ MONGODB_IMAGE = "mongodb/mongodb-atlas-local:8.2"
 def mongodb_container():
     """Spins up a real MongoDB container for testing."""
     with MongoDbContainer(MONGODB_IMAGE) as mongo:
+        # Wait for MongoDB to be ready
+        mongo.start()
+        # Give MongoDB time to initialize as primary
+        time.sleep(3)
         yield mongo
 
 
 # Integration test - runs in dedicated integration test pipeline
-# Note: This test requires MongoDB + Ollama + HuggingFace models
-# It's designed to run in the integration_tests.yml workflow
-@pytest.mark.skip(reason="Requires full integration setup - run in integration pipeline")
 def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     """
     Integration test:
     1. Bind app settings to the ephemeral MongoDB container.
     2. Insert a document into the real MongoDB vector store.
     3. Perform a similarity search and verify retrieval.
-    
-    Note: Requires Ollama running locally for LLM-based location extraction.
     """
     # Build the MongoDB connection string from the container
     host = mongodb_container.get_container_host_ip()
@@ -45,20 +45,10 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     monkeypatch.setattr(settings, "REASONING_LLM_MODEL_NAME", "qwen3.5:4b")
     monkeypatch.setattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434")
 
-    # Since generating real PDFs requires extra libraries, we simulate
-    # the discovery of one PDF and the load of its text, but we let the rest
-    # of app.ingestion.ingest.main() actually execute against the db.
-    import app.ingestion.ingest
-    monkeypatch.setattr(app.ingestion.ingest, "settings", settings)
-
-    # After refactoring, vector_store uses DI - patch the get_collection function
-    # to return the test collection from the container
-    import app.services.vector_store
-    from app.core import di_database
-    monkeypatch.setattr(di_database, "settings", settings)
-
-    from app.agents.graph import app_graph
-    from langchain_core.messages import HumanMessage
+    # Get the collection directly from the test MongoDB container
+    from pymongo import MongoClient
+    mongo_client = MongoClient(db_url)
+    collection = mongo_client[dbname]["test_collection"]
 
     # Prepare a longer Mock Document to test multiple chunk splitting!
     long_text = (
@@ -78,174 +68,125 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     mock_loader_instance = MagicMock()
     mock_loader_instance.load.return_value = [test_doc]
 
-    # Get the collection directly from the test MongoDB container
-    from pymongo import MongoClient
-    mongo_client = MongoClient(db_url)
-    collection = mongo_client[dbname]["test_collection"]
-
-    # Create the vector index! Without this, $vectorSearch returns nothing.
-    # Mock ensure_vector_index since MongoDB local containers don't support vector search indexes
-    with patch.object(app.services.vector_store, "ensure_vector_index"):
-        app.services.vector_store.ensure_vector_index()
-
     # Mock similarity_search to use regular MongoDB query instead of $vectorSearch
     # (local MongoDB containers don't support vector search indexes)
     def mock_similarity_search(query: str, k: int = 3):
-        # Use regex search instead of vector search
         results = list(collection.find({"page_content": {"$regex": query, "$options": "i"}}).limit(k))
         for doc in results:
             doc.pop("_id", None)
         return results
 
-    # We execute the actual application ingestion logic!
-    # With CHUNK_SIZE=100 and CHUNK_OVERLAP=20, this will create multiple chunks
-    # inserted into the real test database.
     # Mock embeddings to avoid HuggingFace model downloads
-    from app.core.di import container
-    from app.core.di_nlp import get_embeddings
-    
     class MockEmbeddings:
         """Mock embeddings that return random vectors."""
         def __init__(self, *args, **kwargs):
             pass
-        
+
         def embed_documents(self, texts):
             import random
             return [[random.random() for _ in range(384)] for _ in texts]
-        
+
         def embed_query(self, text):
             import random
             return [random.random() for _ in range(384)]
-    
-    # Reset DI container cache and override embeddings
-    container.reset_overrides()
-    mock_embeddings_instance = MockEmbeddings()
-    container.override(get_embeddings, lambda: mock_embeddings_instance)
-    
-    # Also override get_collection to return our test collection
-    from app.core.di_database import get_collection as di_get_collection
-    container.override(di_get_collection, lambda: collection)
-    
-    with patch("app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]):
-        with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
-            with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
-                with patch("app.ingestion.ingest.os.path.exists", return_value=False):
-                    with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
-                        app.ingestion.ingest.main()
-    
-    # Reset container after test
-    container.reset_overrides()
 
-    # Wait a moment for MongoDB to index the documents
-    time.sleep(1)
-
-    # 3. Perform a full agent query using the ACTUAL application LangGraph!
-    # The agent will evaluate the question, decide to use vector_search, retrieve the chunks,
-    # synthesize them, and return a natural language answer.
-    query = "Where is the primary physical archival depository secret base located?"
-    inputs = {"messages": [HumanMessage(content=query)]}
-    config = {"configurable": {"thread_id": "integration_test_thread"}}
-
-    # We mock the LLM because we don't want to depend on Ollama running locally,
-    # but we DO want to test the full LangGraph flow where the LLM routes to the
-    # real database tool, and then receives the real database response!
-    # We also mock similarity_search since MongoDB local doesn't support vector search indexes
-    from langchain_core.messages import AIMessage
-
-    mock_llm = MagicMock()
-    mock_llm_with_tools = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm_with_tools
-
-    # Sequenced responses for the LangGraph:
-    # 1. LLM decides to search the vector database
-    call_1 = AIMessage(
-        content="",
-        tool_calls=[{"name": "vector_search", "args": {"query": "secret base"}, "id": "call_123"}]
-    )
-    # 2. LLM receives the real vector database response and synthesizes it
-    call_2 = AIMessage(content="Based on the intelligence, the secret base is located in Antarctica. [map: Antarctica, -82.8628, 135.0000]")
-    # 3. Reviewer validates (returns VALID)
-    mock_reviewer_response = MagicMock()
-    mock_reviewer_response.content = "VALID"
-
-    # Agent LLM returns call_1, then call_2; Reviewer LLM returns VALID
-    mock_llm_with_tools.invoke.side_effect = [call_1, call_2]
-    mock_llm.invoke.return_value = mock_reviewer_response
-
-    # Create mock vector store that uses our custom similarity_search
+    # Create mock vector store
     mock_vector_store = MagicMock()
     mock_vector_store.similarity_search.side_effect = mock_similarity_search
 
-    # Create a mock vector_search tool
-    def mock_vector_search_func(query: str) -> str:
+    # Mock vector_search tool function that queries real MongoDB
+    def mock_vector_search_tool(query: str) -> str:
         """Mock vector search tool that queries real MongoDB collection."""
         results = mock_similarity_search(query, k=3)
         if not results:
             return "No archival data found in historical intelligence database."
         results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
         return f"ARCHIVAL INTELLIGENCE REPORT:\n{results_text}"
-    
-    # Patch the ToolNode's tools mapping
-    from langgraph.prebuilt import ToolNode
-    original_tool_node_init = ToolNode.__init__
-    
-    def mock_tool_node_init(self, tools, **kwargs):
-        # Replace vector_search with our mock
-        mock_tools = []
-        for t in tools:
-            if hasattr(t, 'name') and t.name == "vector_search":
-                mock_tools.append(mock_vector_search_func)
-            else:
-                mock_tools.append(t)
-        original_tool_node_init(self, tools=mock_tools, **kwargs)
-    
-    ToolNode.__init__ = mock_tool_node_init
 
+    # Setup DI container overrides BEFORE importing graph
+    from app.core.di import container
+    from app.core.di_nlp import get_embeddings
+    from app.core.di_services import get_vector_store
+    from app.core.di_database import get_collection as di_get_collection
+
+    container.reset_overrides()
+    container.override(get_embeddings, lambda: MockEmbeddings())
+    container.override(get_vector_store, lambda: mock_vector_store)
+    container.override(di_get_collection, lambda: collection)
+
+    # Patch settings for ingestion module
+    import app.ingestion.ingest
+    monkeypatch.setattr(app.ingestion.ingest, "settings", settings)
+
+    # Patch the vector_search tool in the tools module
+    import app.agents.tools as tools_module
+    original_vector_search = tools_module.vector_search
+    tools_module.vector_search = mock_vector_search_tool  # type: ignore
+
+    # Now import the graph
+    from app.agents.graph import app_graph
+    
+    # The graph was compiled with original tools. Patch the ToolNode's tools mapping
+    tools_node = app_graph.nodes.get('tools')
+    if tools_node and hasattr(tools_node, 'bound'):
+        # Replace vector_search in the tools mapping
+        if hasattr(tools_node.bound, '_tools_by_name'):
+            from langchain_core.tools import tool
+            mock_tool = tool(mock_vector_search_tool)
+            tools_node.bound._tools_by_name['vector_search'] = mock_tool
+
+    # Run ingestion
+    with patch("app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]):
+        with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
+            with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
+                with patch("app.ingestion.ingest.os.path.exists", return_value=False):
+                    with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
+                        app.ingestion.ingest.main()
+
+    # Wait a moment for MongoDB to index the documents
+    time.sleep(1)
+
+    # Perform a full agent query
+    query = "Where is the primary physical archival depository secret base located?"
+    inputs = {"messages": [HumanMessage(content=query)]}
+    config = {"configurable": {"thread_id": "integration_test_thread"}}
+
+    # Mock LLM responses
+    mock_llm = MagicMock()
+    mock_llm_with_tools = MagicMock()
+    mock_llm.bind_tools.return_value = mock_llm_with_tools
+
+    # Sequenced responses for the LangGraph:
+    call_1 = AIMessage(
+        content="",
+        tool_calls=[{"name": "vector_search", "args": {"query": "secret base"}, "id": "call_123"}]
+    )
+    call_2 = AIMessage(content="Based on the intelligence, the secret base is located in Antarctica. [map: Antarctica, -82.8628, 135.0000]")
+    mock_reviewer_response = MagicMock()
+    mock_reviewer_response.content = "VALID"
+
+    mock_llm_with_tools.invoke.side_effect = [call_1, call_2]
+    mock_llm.invoke.return_value = mock_reviewer_response
+
+    # Run the agent
     with patch("app.agents.graph.get_reasoning_llm", return_value=mock_llm):
-        # Also patch get_vector_store to return our mock
-        with patch("app.services.vector_store.get_vector_store", return_value=mock_vector_store):
-            print("\n\n" + "="*50)
-            print("🧠 BEGIN LANGGRAPH EXECUTION FLOW")
-            print("="*50)
+        for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
+            pass  # Process all events
 
-            # We use .stream() instead of .invoke() so we can print each step as it happens
-            for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
-                for node_name, node_state in event.items():
-                    print(f"\n📍 [GRAPH NODE JUMP]: Execution reached node '{node_name}'")
+        # Fetch final state
+        final_state = app_graph.get_state(config)
+        result = final_state.values
 
-                    if "messages" in node_state and node_state["messages"]:
-                        last_msg = node_state["messages"][-1]
-
-                        if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                            print(f"  ⚡ Action: LLM decided to use tools -> {[t['name'] for t in last_msg.tool_calls]}")
-                        elif last_msg.__class__.__name__ == "ToolMessage":
-                            summary = last_msg.content[:100].replace('\n', ' ') + "..."
-                            print(f"  🛠️ Action: Tool '{last_msg.name}' returned data: {summary}")
-                        else:
-                            print("  ✅ Action: LLM synthesized the final answer.")
-
-            print("\n" + "="*50)
-            print("🏁 END LANGGRAPH EXECUTION FLOW")
-            print("="*50 + "\n")
-
-            # After streaming is done, fetch the final state from the checkpointer
-            final_state = app_graph.get_state(config)
-            result = final_state.values
-
-    # 4. Assertions
+    # Assertions
     final_message = result["messages"][-1].content
+    assert "Antarctica" in final_message, f"Expected 'Antarctica' in final message: {final_message}"
 
-    # The agent should have synthesized an answer containing Antarctica
-    assert "Antarctica" in final_message
+    assert mock_llm_with_tools.invoke.call_count == 2, f"Expected 2 LLM calls, got {mock_llm_with_tools.invoke.call_count}"
 
-    # Verify that the LLM was indeed called twice (once for tool decision, once for final synthesis)
-    assert mock_llm_with_tools.invoke.call_count == 2
-
-    # We also ensure the ToolMessage was generated by the real database execution
     tool_messages = [m for m in result["messages"] if m.__class__.__name__ == "ToolMessage"]
-    assert len(tool_messages) == 1
-    # Check that the real database returned our mock document chunk!
-    assert "Antarctica" in tool_messages[0].content
+    assert len(tool_messages) == 1, f"Expected 1 tool message, got {len(tool_messages)}"
+    assert "Antarctica" in tool_messages[0].content, f"Expected 'Antarctica' in tool response: {tool_messages[0].content}"
 
-    # 5. Cleanup - restore original ToolNode init
-    ToolNode.__init__ = original_tool_node_init
+    # Cleanup - restore original vector_search tool
+    tools_module.vector_search = original_vector_search  # type: ignore
+    container.reset_overrides()

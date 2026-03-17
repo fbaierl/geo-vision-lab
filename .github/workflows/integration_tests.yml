@@ -1,6 +1,13 @@
 name: Integration Tests
 
 on:
+  pull_request:
+    branches: [ main, feature/* ]
+    paths:
+      - 'app/ingestion/**'
+      - 'app/services/**'
+      - 'tests/test_db_integration.py'
+      - 'tests/test_ingestion.py'
   schedule:
     # Run daily at 2 AM UTC
     - cron: '0 2 * * *'
