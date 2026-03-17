@@ -10,10 +10,10 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.services.llm import get_reasoning_llm
-from app.services.vector_store import similarity_search
-from app.services.location_extractor import extract_and_geocode_locations
-from app.services.location_prioritizer import prioritize_locations
+from app.core.di import get_reasoning_llm, get_reviewer_llm
+from app.services.vector_store import VectorStoreService, get_vector_store
+from app.services.location_extractor import LocationExtractorService, get_location_extractor
+from app.services.location_prioritizer import LocationPrioritizerService, get_location_prioritizer
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -62,18 +62,21 @@ def vector_search_node(state: AgentState):
     logger.info("=" * 80)
     logger.info("[VECTOR_SEARCH_NODE] Starting mandatory vector search")
     logger.info("=" * 80)
-    
+
     # Extract user query from the first HumanMessage
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     if not user_msgs:
         logger.warning("[VECTOR_SEARCH_NODE] No user message found for vector search.")
         return {"vector_search_results": "No query provided."}
-    
+
     query = user_msgs[0].content
     logger.info(f"[VECTOR_SEARCH_NODE] Query: '{query}'")
-    
+
     try:
-        results = similarity_search(query, k=3)
+        # Use DI to get vector store service
+        vector_store = get_vector_store()
+        results = vector_store.similarity_search(query, k=3)
+        
         if not results:
             logger.info("[VECTOR_SEARCH_NODE] No archival data found in historical intelligence database.")
             return {"vector_search_results": "No archival data found in historical intelligence database."}
@@ -167,13 +170,13 @@ def check_validation(state: AgentState) -> Literal["agent", "location_extractor"
 def extract_locations(state: AgentState) -> Dict[str, Any]:
     """Extract geographic locations from the agent's response using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation."""
     logger.info("=" * 80)
-    logger.info("[LOCATION_EXTRACTOR] Starting location extraction with Hugging Face NER + Nominatim")
+    logger.info("[LOCATION_EXTRACTOR] Starting location extraction")
     logger.info("=" * 80)
 
     # Get the last assistant message (the final response)
     last_message = state["messages"][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
-    
+
     # Get the user query from the first message
     user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else ""
@@ -183,13 +186,14 @@ def extract_locations(state: AgentState) -> Dict[str, Any]:
         return {"extracted_locations": []}
 
     try:
-        # Use Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
-        locations = extract_and_geocode_locations(
-            assistant_response, 
+        # Use DI to get location extractor service
+        location_extractor = get_location_extractor()
+        locations = location_extractor.extract_and_geocode_locations(
+            assistant_response,
             query=user_query,
             response_text=assistant_response
         )
-        logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s): {locations}")
+        logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s)")
         return {"extracted_locations": locations}
 
     except Exception as e:
@@ -204,7 +208,7 @@ def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
     logger.info("=" * 80)
 
     locations = state.get("extracted_locations", [])
-    
+
     if not locations:
         logger.info("[LOCATION_PRIORITIZER] No locations to prioritize")
         return {"extracted_locations": []}
@@ -218,8 +222,9 @@ def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
 
     try:
-        # Prioritize locations using LLM
-        prioritized = prioritize_locations(user_query, locations, assistant_response)
+        # Use DI to get location prioritizer service
+        prioritizer = get_location_prioritizer()
+        prioritized = prioritizer.prioritize_locations(user_query, locations, assistant_response)
         logger.info(f"[LOCATION_PRIORITIZER] Prioritized to {len(prioritized)} location(s)")
         return {"extracted_locations": prioritized}
 

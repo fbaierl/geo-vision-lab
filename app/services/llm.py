@@ -1,16 +1,30 @@
+"""
+LLM Service
+
+Provides LLM clients for reasoning and review tasks.
+All dependencies are managed by the DI container.
+
+Note: This module now delegates to app.core.di for consistency.
+"""
+
 from langchain_ollama import ChatOllama
 from app.core.config import settings
+from app.core.di import get_reasoning_llm as di_get_reasoning_llm, get_reviewer_llm as di_get_reviewer_llm
+
 
 def get_reasoning_llm() -> ChatOllama:
-    """Get the LLM for reasoning tasks (switchable between 9B, 4B, 0.8B)."""
-    return ChatOllama(model=settings.REASONING_LLM_MODEL_NAME, base_url=settings.OLLAMA_URL)
+    """
+    Get the LLM for reasoning tasks (switchable between 9B, 4B, 0.8B).
+    
+    Uses DI container for managed lifecycle and test overrides.
+    """
+    return di_get_reasoning_llm()
 
 
 def get_reviewer_llm() -> ChatOllama:
-    """Get the LLM for QA review (with timeout to prevent hanging)."""
-    return ChatOllama(
-        model=settings.REVIEWER_LLM_MODEL_NAME,
-        base_url=settings.OLLAMA_URL,
-        num_predict=20,  # Short responses for reviewer
-        timeout=60  # 60 second timeout
-    )
+    """
+    Get the LLM for QA review (with timeout to prevent hanging).
+    
+    Uses DI container for managed lifecycle and test overrides.
+    """
+    return di_get_reviewer_llm()
