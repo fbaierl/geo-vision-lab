@@ -1,6 +1,4 @@
 import pytest
-import sys
-import os
 from testcontainers.mongodb import MongoDbContainer
 from unittest.mock import patch, MagicMock
 from langchain_core.documents import Document
@@ -16,19 +14,15 @@ def mongodb_container():
         yield mongo
 
 
-# Skip test on Python 3.14+ due to spacy/pydantic v1 compatibility issue
-# Also skip on CI (GitHub Actions) as it requires external services
-# See: https://github.com/explosion/spaCy/issues/13873
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14) or os.environ.get("CI") == "true",
-    reason="spacy incompatibility (3.14+) or requires external services (CI)"
-)
+# Integration test - runs in dedicated integration test pipeline
 def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     """
     Integration test:
     1. Bind app settings to the ephemeral MongoDB container.
     2. Insert a document into the real MongoDB vector store.
     3. Perform a similarity search and verify retrieval.
+    
+    Note: Requires Ollama running locally for LLM-based location extraction.
     """
     # Build the MongoDB connection string from the container
     host = mongodb_container.get_container_host_ip()
