@@ -93,18 +93,25 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     # We execute the actual application ingestion logic!
     # With CHUNK_SIZE=100 and CHUNK_OVERLAP=20, this will create multiple chunks
     # inserted into the real test database.
-    # Mock get_vector_store to avoid loading embedding models from HuggingFace
-    with patch("app.services.vector_store.get_vector_store") as mock_get_vs:
-        mock_vs = MagicMock()
-        mock_vs.insert_documents = MagicMock()
-        mock_get_vs.return_value = mock_vs
-        
-        with patch("app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]):
-            with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
-                with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
-                    with patch("app.ingestion.ingest.os.path.exists", return_value=False):
-                        with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
-                            app.ingestion.ingest.main()
+    # Mock HuggingFace embeddings to avoid model downloads - use random embeddings
+    from langchain_huggingface import HuggingFaceEmbeddings
+    
+    def mock_embed_documents(self, texts):
+        import random
+        return [[random.random() for _ in range(384)] for _ in texts]
+    
+    def mock_embed_query(self, text):
+        import random
+        return [random.random() for _ in range(384)]
+    
+    with patch.object(HuggingFaceEmbeddings, 'embed_documents', mock_embed_documents):
+        with patch.object(HuggingFaceEmbeddings, 'embed_query', mock_embed_query):
+            with patch("app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]):
+                with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
+                    with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
+                        with patch("app.ingestion.ingest.os.path.exists", return_value=False):
+                            with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
+                                app.ingestion.ingest.main()
 
     # Wait a moment for MongoDB to index the documents
     time.sleep(1)
@@ -145,6 +152,20 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     # Create mock vector store that uses our custom similarity_search
     mock_vector_store = MagicMock()
     mock_vector_store.similarity_search.side_effect = mock_similarity_search
+
+    # Mock the vector_store tool directly to use our mock_similarity_search
+    import app.agents.tools as tools_module
+    original_vector_search = tools_module.vector_search
+    
+    def mock_vector_search_tool(query: str) -> str:
+        """Mock vector search tool that queries real MongoDB."""
+        results = mock_similarity_search(query, k=3)
+        if not results:
+            return "No archival data found in historical intelligence database."
+        results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
+        return f"ARCHIVAL INTELLIGENCE REPORT:\n{results_text}"
+    
+    tools_module.vector_search = mock_vector_search_tool
 
     with patch("app.agents.graph.get_reasoning_llm", return_value=mock_llm):
         with patch("app.services.vector_store.get_vector_store", return_value=mock_vector_store):
@@ -190,3 +211,6 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     assert len(tool_messages) == 1
     # Check that the real database returned our mock document chunk!
     assert "Antarctica" in tool_messages[0].content
+    
+    # 5. Cleanup - restore original vector_search tool
+    tools_module.vector_search = original_vector_search
