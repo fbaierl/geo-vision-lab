@@ -17,7 +17,9 @@ import re
 import json
 
 from langchain_ollama import ChatOllama
-from app.core.di import get_ner_pipeline, get_reviewer_llm, get_geocode_cache
+from app.core.di_nlp import get_ner_pipeline
+from app.core.di_llm import get_reviewer_llm
+from app.core.di_nlp import get_geocode_cache
 
 logger = logging.getLogger("agent_flow")
 
@@ -300,7 +302,7 @@ If no locations are valid, respond with empty array: []"""
 def get_location_extractor() -> LocationExtractorService:
     """
     Get location extractor service with dependencies from DI container.
-    
+
     This is the recommended way to get a LocationExtractorService instance.
     """
     return LocationExtractorService(

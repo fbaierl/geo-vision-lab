@@ -11,7 +11,7 @@ from langchain_ollama import ChatOllama
 import json
 import re
 
-from app.core.di import get_reviewer_llm
+from app.core.di_llm import get_reviewer_llm
 
 logger = logging.getLogger("agent_flow")
 
