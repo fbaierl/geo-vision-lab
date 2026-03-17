@@ -29,4 +29,4 @@ htmlcov/
 .vscode/
 
 # Ignore ingestion hash file
-.ingest_hash
+.ingest_hash.qwen/
