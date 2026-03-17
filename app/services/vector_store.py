@@ -102,6 +102,12 @@ def ensure_vector_index() -> None:
     di_ensure_vector_index()
 
 
+def get_collection() -> Any:
+    """Get MongoDB collection (backward compatibility for tests)."""
+    from app.core.di_database import get_collection as di_get_collection
+    return di_get_collection()
+
+
 def get_vector_store() -> VectorStoreService:
     """
     Get vector store service with dependencies from DI container.

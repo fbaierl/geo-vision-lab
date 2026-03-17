@@ -44,8 +44,11 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     import app.ingestion.ingest
     monkeypatch.setattr(app.ingestion.ingest, "settings", settings)
 
+    # After refactoring, vector_store uses DI - patch the get_collection function
+    # to return the test collection from the container
     import app.services.vector_store
-    monkeypatch.setattr(app.services.vector_store, "settings", settings)
+    from app.core import di_database
+    monkeypatch.setattr(di_database, "settings", settings)
 
     from app.agents.graph import app_graph
     from langchain_core.messages import HumanMessage
@@ -129,8 +132,12 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     mock_llm_with_tools.invoke.side_effect = [call_1, call_2]
     mock_llm.invoke.return_value = mock_reviewer_response
 
+    # Create mock vector store that uses our custom similarity_search
+    mock_vector_store = MagicMock()
+    mock_vector_store.similarity_search.side_effect = mock_similarity_search
+
     with patch("app.agents.graph.get_reasoning_llm", return_value=mock_llm):
-        with patch("app.agents.tools.similarity_search", side_effect=mock_similarity_search):
+        with patch("app.services.vector_store.get_vector_store", return_value=mock_vector_store):
             print("\n\n" + "="*50)
             print("🧠 BEGIN LANGGRAPH EXECUTION FLOW")
             print("="*50)
