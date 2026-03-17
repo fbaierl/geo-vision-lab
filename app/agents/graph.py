@@ -10,22 +10,14 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.core.di_llm import get_reasoning_llm, get_reviewer_llm
+from app.core.di_llm import get_reasoning_llm
 from app.core.di_services import get_vector_store, get_location_extractor, get_location_prioritizer
 from app.core.constants import (
     NODE_VECTOR_SEARCH, NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
     NODE_LOCATION_EXTRACTOR, NODE_LOCATION_PRIORITIZER,
-    EVENT_TYPE_STATUS, EVENT_TYPE_TOOL_RESULT, EVENT_TYPE_TOKEN,
-    EVENT_TYPE_DONE, EVENT_TYPE_LOCATIONS_FOUND,
-    PHASE_VECTOR_SEARCH, PHASE_REASONING, PHASE_REVIEWING,
-    PHASE_ONLINE_SEARCH, PHASE_EXTRACTING_LOCATIONS, PHASE_STREAMING, PHASE_REVISING,
-    TOOL_VECTOR_SEARCH, TOOL_REASONING, TOOL_QA_REVIEWER,
     VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
     STATE_KEY_EXTRACTED_LOCATIONS, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
 )
-from app.services.vector_store import VectorStoreService
-from app.services.location_extractor import LocationExtractorService
-from app.services.location_prioritizer import LocationPrioritizerService
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.

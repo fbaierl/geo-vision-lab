@@ -27,21 +27,22 @@ Testing:
 from typing import Any, Callable, Dict
 
 # Re-export container and all dependencies from focused modules
-from app.core.di_database import (
+# These are intentional re-exports for backward compatibility
+from app.core.di_database import (  # noqa: F401
     get_mongo_client,
     get_database,
     get_collection,
 )
-from app.core.di_nlp import (
+from app.core.di_nlp import (  # noqa: F401
     get_embeddings,
     get_ner_pipeline,
     get_geocode_cache,
 )
-from app.core.di_llm import (
+from app.core.di_llm import (  # noqa: F401
     get_reasoning_llm,
     get_reviewer_llm,
 )
-from app.core.di_services import (
+from app.core.di_services import (  # noqa: F401
     get_vector_store,
     get_vector_store_service,
     get_location_extractor,
@@ -51,7 +52,7 @@ from app.core.di_services import (
 )
 
 # Import ensure_vector_index from database module for internal use
-from app.core.di_database import ensure_vector_index as di_ensure_vector_index
+from app.core.di_database import ensure_vector_index as di_ensure_vector_index  # noqa: F401
 
 
 class DIContainer:

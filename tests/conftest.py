@@ -5,7 +5,7 @@ Provides dependency injection overrides for testing.
 """
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from app.core.di import container
 
 

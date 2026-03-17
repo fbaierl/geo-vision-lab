@@ -4,8 +4,7 @@ Location Value Object
 Defines the Location value object for type-safe geographic location handling.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass(frozen=False)

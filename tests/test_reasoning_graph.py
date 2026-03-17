@@ -1,7 +1,6 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from langchain_core.messages import HumanMessage
-from app.agents.graph import should_continue, call_model
-from app.core.di import container
+from app.agents.graph import should_continue, call_model, vector_search_node, extract_locations
 
 
 # --- should_continue node tests ---
@@ -58,10 +57,6 @@ def test_extract_locations_no_response():
     mock_message = MagicMock()
     mock_message.content = ""
     state = {"messages": [mock_message]}
-    
+
     result = extract_locations(state)
     assert result["extracted_locations"] == []
-
-
-# Import nodes for testing
-from app.agents.graph import vector_search_node, extract_locations

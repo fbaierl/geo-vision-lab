@@ -4,7 +4,6 @@ Tests for Dependency Injection container.
 Verifies that the DI container properly manages dependencies and supports overrides.
 """
 
-import pytest
 from unittest.mock import MagicMock
 from app.core.di import (
     container,

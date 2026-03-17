@@ -4,9 +4,7 @@ Tests for services with dependency injection.
 Demonstrates how to test services using DI overrides instead of patching globals.
 """
 
-import pytest
 from unittest.mock import MagicMock
-from app.core.di import container, get_mongo_client, get_embeddings, get_reviewer_llm, get_ner_pipeline
 from app.services.vector_store import VectorStoreService, get_vector_store
 from app.services.location_extractor import LocationExtractorService, get_location_extractor
 from app.services.location_prioritizer import LocationPrioritizerService

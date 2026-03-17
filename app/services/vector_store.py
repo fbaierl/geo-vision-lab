@@ -5,7 +5,7 @@ Provides vector search, embedding, and document management using MongoDB.
 All dependencies are injected via the DI container - no global state.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from pymongo import MongoClient
 from langchain_huggingface import HuggingFaceEmbeddings
 import logging
