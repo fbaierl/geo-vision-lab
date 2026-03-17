@@ -1,4 +1,5 @@
 import pytest
+import sys
 from testcontainers.mongodb import MongoDbContainer
 from unittest.mock import patch, MagicMock
 from langchain_core.documents import Document
@@ -13,6 +14,13 @@ def mongodb_container():
     with MongoDbContainer(MONGODB_IMAGE) as mongo:
         yield mongo
 
+
+# Skip test on Python 3.14+ due to spacy/pydantic v1 compatibility issue
+# See: https://github.com/explosion/spaCy/issues/13873
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="spacy is not compatible with Python 3.14+ (pydantic v1 issue)"
+)
 def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     """
     Integration test:
