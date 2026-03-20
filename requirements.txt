@@ -5,6 +5,7 @@ langchain_huggingface
 langchain_ollama
 langchain-mongodb
 langgraph
+langsmith
 pymongo
 unstructured
 markdown

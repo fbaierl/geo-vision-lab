@@ -82,6 +82,10 @@ services:
     environment:
       - OLLAMA_HOST=http://geovision-ollama:11434
       - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
+      - LANGSMITH_TRACING=true
+      - LANGSMITH_API_KEY=langsmith
+      - LANGSMITH_PROJECT=geo-vision-lab
+      - LANGSMITH_ENDPOINT=http://geovision-langsmith-backend:1984
     depends_on:
       mongodb:
         condition: service_healthy
@@ -89,6 +93,8 @@ services:
         condition: service_healthy
       ingest:
         condition: service_completed_successfully
+      langsmith-backend:
+        condition: service_healthy
     ports:
       - "8000:8000"
     command: >
@@ -139,6 +145,81 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
 
+  # --- LangSmith Self-Hosted Stack ---
+
+  langsmith-redis:
+    image: redis:7-alpine
+    container_name: geovision-langsmith-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - langsmith_redis_data:/data
+    command: redis-server --appendonly yes
+
+  langsmith-postgres:
+    image: postgres:15-alpine
+    container_name: geovision-langsmith-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=langsmith
+      - POSTGRES_USER=langsmith
+      - POSTGRES_PASSWORD=langsmith
+    volumes:
+      - langsmith_postgres_data:/var/lib/postgresql/data
+
+  langsmith-clickhouse:
+    image: clickhouse/clickhouse-server:23.8-alpine
+    container_name: geovision-langsmith-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      - CLICKHOUSE_DB=langsmith
+      - CLICKHOUSE_USER=langsmith
+      - CLICKHOUSE_PASSWORD=langsmith
+    volumes:
+      - langsmith_clickhouse_data:/var/lib/clickhouse
+
+  langsmith-backend:
+    image: langchain/langsmith:latest
+    container_name: geovision-langsmith-backend
+    ports:
+      - "1984:1984"
+    environment:
+      - REDIS_URL=redis://geovision-langsmith-redis:6379
+      - POSTGRES_HOST=geovision-langsmith-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=langsmith
+      - POSTGRES_USER=langsmith
+      - POSTGRES_PASSWORD=langsmith
+      - CLICKHOUSE_HOST=geovision-langsmith-clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=langsmith
+      - CLICKHOUSE_PASSWORD=langsmith
+      - LANGSMITH_ENCRYPTION_KEY=geovision-encryption-key-32ch
+    depends_on:
+      - langsmith-redis
+      - langsmith-postgres
+      - langsmith-clickhouse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1984/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  langsmith-frontend:
+    image: langchain/langsmith-frontend:latest
+    container_name: geovision-langsmith-frontend
+    ports:
+      - "3030:80"
+    environment:
+      - LANGSMITH_BE_URL=http://geovision-langsmith-backend:1984
+    depends_on:
+      langsmith-backend:
+        condition: service_healthy
+
 volumes:
   mongodb_data:
   mongodb_configdb:
@@ -146,3 +227,6 @@ volumes:
   ollama_data:
   loki_data:
   grafana_data:
+  langsmith_redis_data:
+  langsmith_postgres_data:
+  langsmith_clickhouse_data:

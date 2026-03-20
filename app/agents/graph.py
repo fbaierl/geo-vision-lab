@@ -18,6 +18,7 @@ from app.core.constants import (
     VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
     STATE_KEY_EXTRACTED_LOCATIONS, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
 )
+from app.core.langsmith_config import get_callback_manager
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -270,6 +271,9 @@ def get_graph():
     # Location prioritizer filters by relevance, then ends
     workflow.add_edge(NODE_LOCATION_PRIORITIZER, "__end__")
 
+    # Get LangSmith callbacks if enabled
+    callback_manager = get_callback_manager()
+    
     return workflow.compile(checkpointer=checkpointer)
 
 
