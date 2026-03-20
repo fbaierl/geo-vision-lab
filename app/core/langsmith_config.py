@@ -61,10 +61,10 @@ def get_langchain_tracer() -> Optional[LangChainTracer]:
 def get_callback_manager() -> CallbackManager:
     """Get callback manager with LangSmith tracer if enabled."""
     callbacks = []
-    
+
     if is_langsmith_enabled():
         tracer = get_langchain_tracer()
         if tracer:
             callbacks.append(tracer)
-    
-    return CallbackManager(callbacks=callbacks)
+
+    return CallbackManager(handlers=callbacks)
