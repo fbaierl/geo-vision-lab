@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     LANGSMITH_TRACING: bool = False  # Set to True and add API key to enable
     LANGSMITH_API_KEY: Optional[str] = None
     LANGSMITH_PROJECT: str = "geo-vision-lab"
-    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+    LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"  # EU endpoint
 
     # --- Available Reasoning Models ---
     AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]

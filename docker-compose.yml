@@ -84,6 +84,7 @@ services:
       - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
       - LANGSMITH_TRACING=true
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://eu.api.smith.langchain.com}
       - LANGSMITH_PROJECT=geo-vision-lab
     depends_on:
       mongodb:
