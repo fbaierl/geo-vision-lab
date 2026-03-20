@@ -10,10 +10,14 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.services.llm import get_reasoning_llm
-from app.services.vector_store import similarity_search
-from app.services.location_extractor import extract_and_geocode_locations
-from app.services.location_prioritizer import prioritize_locations
+from app.core.di_llm import get_reasoning_llm
+from app.core.di_services import get_vector_store, get_location_extractor, get_location_prioritizer
+from app.core.constants import (
+    NODE_VECTOR_SEARCH, NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
+    NODE_LOCATION_EXTRACTOR, NODE_LOCATION_PRIORITIZER,
+    VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
+    STATE_KEY_EXTRACTED_LOCATIONS, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
+)
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -46,15 +50,15 @@ Start your response with VALID or INVALID."""
 logger = logging.getLogger("agent_flow")
 
 
-def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
-    last_message = state["messages"][-1]
+def should_continue(state: AgentState) -> Literal[NODE_TOOLS, NODE_REVIEWER]:
+    last_message = state[STATE_KEY_MESSAGES][-1]
     if getattr(last_message, "tool_calls", None):
         logger.debug(
-            f"[AGENT LOG] Transitioning to 'tools' node. Tools requested: {last_message.tool_calls}"
+            f"[AGENT LOG] Transitioning to '{NODE_TOOLS}' node. Tools requested: {last_message.tool_calls}"
         )
-        return "tools"
+        return NODE_TOOLS
     logger.debug("[AGENT LOG] Transitioning to 'reviewer'.")
-    return "reviewer"
+    return NODE_REVIEWER
 
 
 def vector_search_node(state: AgentState):
@@ -62,21 +66,24 @@ def vector_search_node(state: AgentState):
     logger.info("=" * 80)
     logger.info("[VECTOR_SEARCH_NODE] Starting mandatory vector search")
     logger.info("=" * 80)
-    
+
     # Extract user query from the first HumanMessage
-    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     if not user_msgs:
         logger.warning("[VECTOR_SEARCH_NODE] No user message found for vector search.")
-        return {"vector_search_results": "No query provided."}
-    
+        return {STATE_KEY_VECTOR_SEARCH_RESULTS: "No query provided."}
+
     query = user_msgs[0].content
     logger.info(f"[VECTOR_SEARCH_NODE] Query: '{query}'")
-    
+
     try:
-        results = similarity_search(query, k=3)
+        # Use DI to get vector store service
+        vector_store = get_vector_store()
+        results = vector_store.similarity_search(query, k=3)
+
         if not results:
             logger.info("[VECTOR_SEARCH_NODE] No archival data found in historical intelligence database.")
-            return {"vector_search_results": "No archival data found in historical intelligence database."}
+            return {STATE_KEY_VECTOR_SEARCH_RESULTS: "No archival data found in historical intelligence database."}
 
         # Format results like the vector_search tool does
         results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
@@ -85,10 +92,10 @@ def vector_search_node(state: AgentState):
         logger.info("[VECTOR_SEARCH_NODE] === RETRIEVED CONTENT START ===")
         logger.info(results_text)
         logger.info("[VECTOR_SEARCH_NODE] === RETRIEVED CONTENT END ===")
-        return {"vector_search_results": formatted_results}
+        return {STATE_KEY_VECTOR_SEARCH_RESULTS: formatted_results}
     except Exception as e:
         logger.error(f"[VECTOR_SEARCH_NODE] Vector search failed: {e}")
-        return {"vector_search_results": f"Vector search error: {str(e)}"}
+        return {STATE_KEY_VECTOR_SEARCH_RESULTS: f"Vector search error: {str(e)}"}
 
 
 def call_model(state: AgentState):
@@ -123,7 +130,7 @@ def call_model(state: AgentState):
         logger.info(f"[AGENT] Tool calls requested: {[tc['name'] for tc in response.tool_calls]}")
     
     logger.info("[AGENT] Reasoning phase complete")
-    return {"messages": [response]}
+    return {STATE_KEY_MESSAGES: [response]}
 
 
 def review_response(state: AgentState, config: RunnableConfig):
@@ -132,9 +139,9 @@ def review_response(state: AgentState, config: RunnableConfig):
     logger.info("[QA_REVIEWER] Starting validation")
     logger.info("=" * 80)
 
-    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
-    last_message = state["messages"][-1]
+    last_message = state[STATE_KEY_MESSAGES][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else str(last_message)
 
     logger.info(f"[QA_REVIEWER] Query: {user_query[:50]}...")
@@ -143,58 +150,59 @@ def review_response(state: AgentState, config: RunnableConfig):
     # Simple validation - always pass for now (can add more rules later)
     logger.info("[QA_REVIEWER] Validation PASSED")
     logger.info("[QA_REVIEWER] === VALIDATION RESULT ===")
-    logger.info("VALID")
+    logger.info(VALIDATION_VALID)
     logger.info("[QA_REVIEWER] === END ===")
 
-    return {"is_valid": True, "validation_attempts": 1, "reviewer_result": "VALID"}
+    return {STATE_KEY_IS_VALID: True, STATE_KEY_VALIDATION_ATTEMPTS: 1, "reviewer_result": VALIDATION_VALID}
 
 
-def check_validation(state: AgentState) -> Literal["agent", "location_extractor"]:
+def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_LOCATION_EXTRACTOR]:
     # If it's valid, proceed to location extraction
-    if state.get("is_valid"):
+    if state.get(STATE_KEY_IS_VALID):
         logger.debug("[AGENT LOG] Reviewer approved. Transitioning to 'location_extractor'.")
-        return "location_extractor"
+        return NODE_LOCATION_EXTRACTOR
 
-    attempts = state.get("validation_attempts", 0)
+    attempts = state.get(STATE_KEY_VALIDATION_ATTEMPTS, 0)
     if attempts >= 3:
         logger.debug(f"[AGENT LOG] Max validation attempts ({attempts}) reached. Forcing '__end__'.")
         return "__end__"
 
     logger.debug("[AGENT LOG] Reviewer rejected. Transitioning back to 'agent'.")
-    return "agent"
+    return NODE_AGENT
 
 
 def extract_locations(state: AgentState) -> Dict[str, Any]:
     """Extract geographic locations from the agent's response using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation."""
     logger.info("=" * 80)
-    logger.info("[LOCATION_EXTRACTOR] Starting location extraction with Hugging Face NER + Nominatim")
+    logger.info("[LOCATION_EXTRACTOR] Starting location extraction")
     logger.info("=" * 80)
 
     # Get the last assistant message (the final response)
-    last_message = state["messages"][-1]
+    last_message = state[STATE_KEY_MESSAGES][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
-    
+
     # Get the user query from the first message
-    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else ""
 
     if not assistant_response:
         logger.info("[LOCATION_EXTRACTOR] No response content to extract locations from")
-        return {"extracted_locations": []}
+        return {STATE_KEY_EXTRACTED_LOCATIONS: []}
 
     try:
-        # Use Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
-        locations = extract_and_geocode_locations(
-            assistant_response, 
+        # Use DI to get location extractor service
+        location_extractor = get_location_extractor()
+        locations = location_extractor.extract_and_geocode_locations(
+            assistant_response,
             query=user_query,
             response_text=assistant_response
         )
-        logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s): {locations}")
-        return {"extracted_locations": locations}
+        logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s)")
+        return {STATE_KEY_EXTRACTED_LOCATIONS: locations}
 
     except Exception as e:
         logger.error(f"[LOCATION_EXTRACTOR] Extraction failed: {e}")
-        return {"extracted_locations": []}
+        return {STATE_KEY_EXTRACTED_LOCATIONS: []}
 
 
 def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
@@ -203,29 +211,30 @@ def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
     logger.info("[LOCATION_PRIORITIZER] Starting location prioritization")
     logger.info("=" * 80)
 
-    locations = state.get("extracted_locations", [])
-    
+    locations = state.get(STATE_KEY_EXTRACTED_LOCATIONS, [])
+
     if not locations:
         logger.info("[LOCATION_PRIORITIZER] No locations to prioritize")
-        return {"extracted_locations": []}
+        return {STATE_KEY_EXTRACTED_LOCATIONS: []}
 
     # Get the user query from the first message
-    user_msgs = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+    user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else ""
 
     # Get the assistant response
-    last_message = state["messages"][-1]
+    last_message = state[STATE_KEY_MESSAGES][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
 
     try:
-        # Prioritize locations using LLM
-        prioritized = prioritize_locations(user_query, locations, assistant_response)
+        # Use DI to get location prioritizer service
+        prioritizer = get_location_prioritizer()
+        prioritized = prioritizer.prioritize_locations(user_query, locations, assistant_response)
         logger.info(f"[LOCATION_PRIORITIZER] Prioritized to {len(prioritized)} location(s)")
-        return {"extracted_locations": prioritized}
+        return {STATE_KEY_EXTRACTED_LOCATIONS: prioritized}
 
     except Exception as e:
         logger.error(f"[LOCATION_PRIORITIZER] Prioritization failed: {e}")
-        return {"extracted_locations": locations}  # Return original on failure
+        return {STATE_KEY_EXTRACTED_LOCATIONS: locations}  # Return original on failure
 
 
 def get_graph():
@@ -233,33 +242,33 @@ def get_graph():
     workflow = StateGraph(AgentState)
 
     # Add nodes
-    workflow.add_node("vector_search", vector_search_node)
-    workflow.add_node("agent", call_model)
-    workflow.add_node("tools", ToolNode(tools))
-    workflow.add_node("reviewer", review_response)
-    workflow.add_node("location_extractor", extract_locations)
-    workflow.add_node("location_prioritizer", prioritize_locations_node)
+    workflow.add_node(NODE_VECTOR_SEARCH, vector_search_node)
+    workflow.add_node(NODE_AGENT, call_model)
+    workflow.add_node(NODE_TOOLS, ToolNode(tools))
+    workflow.add_node(NODE_REVIEWER, review_response)
+    workflow.add_node(NODE_LOCATION_EXTRACTOR, extract_locations)
+    workflow.add_node(NODE_LOCATION_PRIORITIZER, prioritize_locations_node)
 
     # Set entry point to vector_search (mandatory first step)
-    workflow.set_entry_point("vector_search")
+    workflow.set_entry_point(NODE_VECTOR_SEARCH)
 
     # Vector search always flows to agent
-    workflow.add_edge("vector_search", "agent")
+    workflow.add_edge(NODE_VECTOR_SEARCH, NODE_AGENT)
 
     # Agent decides whether to use tools or go to reviewer
-    workflow.add_conditional_edges("agent", should_continue)
+    workflow.add_conditional_edges(NODE_AGENT, should_continue)
 
     # Tools loop back to agent for further reasoning
-    workflow.add_edge("tools", "agent")
+    workflow.add_edge(NODE_TOOLS, NODE_AGENT)
 
     # Reviewer validates or sends back for revision
-    workflow.add_conditional_edges("reviewer", check_validation)
+    workflow.add_conditional_edges(NODE_REVIEWER, check_validation)
 
     # Location extractor finds all locations
-    workflow.add_edge("location_extractor", "location_prioritizer")
+    workflow.add_edge(NODE_LOCATION_EXTRACTOR, NODE_LOCATION_PRIORITIZER)
 
     # Location prioritizer filters by relevance, then ends
-    workflow.add_edge("location_prioritizer", "__end__")
+    workflow.add_edge(NODE_LOCATION_PRIORITIZER, "__end__")
 
     return workflow.compile(checkpointer=checkpointer)
 

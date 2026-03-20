@@ -1,167 +1,140 @@
+"""
+Vector Store Service
+
+Provides vector search, embedding, and document management using MongoDB.
+All dependencies are injected via the DI container - no global state.
+"""
+
 from typing import List, Dict, Any
 from pymongo import MongoClient
-from pymongo.operations import SearchIndexModel
 from langchain_huggingface import HuggingFaceEmbeddings
-from app.core.config import settings
 import logging
+
+from app.core.di_services import get_vector_store_service
 
 logger = logging.getLogger(__name__)
 
-# Shared embedding model (loaded once at startup)
-_embeddings = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL_NAME)
 
-# Shared MongoDB client (singleton pattern)
-_client = None
-_db = None
+class VectorStoreService:
+    """
+    Vector store service with explicit dependencies.
 
+    Usage:
+        # With DI (recommended)
+        from app.core.di_services import get_vector_store_service
+        service = VectorStoreService(**get_vector_store_service())
 
-def get_mongo_client() -> MongoClient:
-    """Get or create MongoDB client singleton."""
-    global _client
-    if _client is None:
-        # Use directConnection for non-Docker environments
-        _client = MongoClient(settings.DATABASE_URL, directConnection=True)
-    return _client
+        # Or with explicit dependencies
+        service = VectorStoreService(embeddings=emb, client=client, collection=coll)
+    """
 
+    def __init__(
+        self,
+        embeddings: HuggingFaceEmbeddings,
+        client: MongoClient,
+        collection: Any
+    ):
+        self.embeddings = embeddings
+        self.client = client
+        self.collection = collection
 
-def get_database():
-    """Get or create database singleton."""
-    global _db
-    if _db is None:
-        _db = get_mongo_client()[settings.MONGODB_DB]
-    return _db
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed multiple documents."""
+        return self.embeddings.embed_documents(texts)
 
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query."""
+        return self.embeddings.embed_query(text)
 
-def get_collection():
-    """Get the vector collection."""
-    return get_database()[settings.VECTOR_COLLECTION_NAME]
+    def insert_documents(self, documents: List[Dict[str, Any]]) -> None:
+        """Insert documents with embeddings into MongoDB collection."""
+        # Clear existing documents
+        self.collection.delete_many({})
 
+        # Prepare documents with embeddings
+        texts = [doc["page_content"] for doc in documents]
+        embeddings = self.embed_documents(texts)
 
-def ensure_vector_index():
-    """Create vector search index if it doesn't exist."""
-    db = get_database()
-    collection_name = settings.VECTOR_COLLECTION_NAME
-    
-    # Ensure collection exists before creating index
-    if collection_name not in db.list_collection_names():
-        logger.info(f"[VECTOR] Creating collection '{collection_name}'...")
-        db.create_collection(collection_name)
+        # Add embeddings to documents
+        docs_with_embeddings = []
+        for doc, embedding in zip(documents, embeddings):
+            doc_copy = doc.copy()
+            doc_copy["embedding"] = embedding
+            docs_with_embeddings.append(doc_copy)
+
+        # Bulk insert
+        if docs_with_embeddings:
+            self.collection.insert_many(docs_with_embeddings)
+            logger.info(f"[VECTOR] Inserted {len(docs_with_embeddings)} documents")
+
+    def similarity_search(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+        """Perform vector similarity search."""
+        from app.core.config import settings
         
-    collection = get_collection()
-    
-    try:
-        # List existing search indexes
-        existing_indexes = list(collection.list_search_indexes())
-        
-        # Check if our vector index already exists
-        for idx in existing_indexes:
-            if idx.get("name") == settings.VECTOR_INDEX_NAME:
-                logger.info(f"[VECTOR] Vector search index '{settings.VECTOR_INDEX_NAME}' already exists")
-                return  # Index already exists
-        
-        logger.info(f"[VECTOR] Creating vector search index '{settings.VECTOR_INDEX_NAME}'...")
-        
-        # Create vector search index for MongoDB Atlas Vector Search
-        # Using lucene vector index with cosine similarity
-        search_index_model = SearchIndexModel(
-            definition={
-                "fields": [
-                    {
-                        "type": "vector",
-                        "numDimensions": settings.EMBEDDING_DIMENSIONS,
-                        "path": "embedding",
-                        "similarity": "cosine"
-                    },
-                    {
-                        "type": "filter",
-                        "path": "metadata.source"
-                    }
-                ]
+        query_embedding = self.embed_query(query)
+
+        pipeline = [
+            {
+                "$vectorSearch": {
+                    "index": settings.VECTOR_INDEX_NAME,
+                    "path": "embedding",
+                    "queryVector": query_embedding,
+                    "numCandidates": 100,
+                    "limit": k
+                }
             },
-            name=settings.VECTOR_INDEX_NAME,
-            type="vectorSearch",
-        )
-        
-        collection.create_search_index(model=search_index_model)
-        logger.info(f"[VECTOR] Vector search index '{settings.VECTOR_INDEX_NAME}' created successfully")
-        
-        # Wait for index to reach READY status
-        import time
-        max_attempts = 60  # Up to 60 seconds
-        for attempt in range(max_attempts):
-            indexes = list(collection.list_search_indexes())
-            for idx in indexes:
-                if idx.get("name") == settings.VECTOR_INDEX_NAME:
-                    status = idx.get("status", "UNKNOWN")
-                    logger.info(f"[VECTOR] Index status: {status} (attempt {attempt + 1}/{max_attempts})")
-                    if status == "READY":
-                        logger.info("[VECTOR] Index is READY for use")
-                        return
-            time.sleep(2)
-        
-        logger.warning("[VECTOR] Index may still be building — search may not work immediately")
-        
-    except Exception as e:
-        logger.error(f"[VECTOR] Error creating vector index: {e}")
-        raise
+            {
+                "$unset": ["embedding", "_id"]
+            }
+        ]
 
+        results = list(self.collection.aggregate(pipeline))
+        return results
+
+
+# =============================================================================
+# Backward-compatible functions (using DI internally)
+# =============================================================================
+
+def ensure_vector_index() -> None:
+    """Create vector search index if it doesn't exist."""
+    from app.core.di_services import ensure_vector_index as di_ensure_vector_index
+    di_ensure_vector_index()
+
+
+def get_collection() -> Any:
+    """Get MongoDB collection (backward compatibility for tests)."""
+    from app.core.di_database import get_collection as di_get_collection
+    return di_get_collection()
+
+
+def get_vector_store() -> VectorStoreService:
+    """
+    Get vector store service with dependencies from DI container.
+
+    This is the recommended way to get a VectorStoreService instance.
+    """
+    return VectorStoreService(**get_vector_store_service())
+
+
+# Legacy function wrappers for backward compatibility
+# These will be deprecated in future versions
 
 def embed_documents(texts: List[str]) -> List[List[float]]:
-    """Embed multiple documents using the shared embedding model."""
-    return _embeddings.embed_documents(texts)
+    """Embed multiple documents (legacy wrapper)."""
+    return get_vector_store().embed_documents(texts)
 
 
 def embed_query(text: str) -> List[float]:
-    """Embed a single query using the shared embedding model."""
-    return _embeddings.embed_query(text)
+    """Embed a single query (legacy wrapper)."""
+    return get_vector_store().embed_query(text)
 
 
 def insert_documents(documents: List[Dict[str, Any]]) -> None:
-    """Insert documents with embeddings into MongoDB collection."""
-    collection = get_collection()
-    
-    # Clear existing documents in the collection
-    collection.delete_many({})
-    
-    # Prepare documents with embeddings
-    texts = [doc["page_content"] for doc in documents]
-    embeddings = embed_documents(texts)
-    
-    # Add embeddings to documents
-    docs_with_embeddings = []
-    for doc, embedding in zip(documents, embeddings):
-        doc_copy = doc.copy()
-        doc_copy["embedding"] = embedding
-        docs_with_embeddings.append(doc_copy)
-    
-    # Bulk insert
-    if docs_with_embeddings:
-        collection.insert_many(docs_with_embeddings)
-        logger.info(f"[VECTOR] Inserted {len(docs_with_embeddings)} documents with embeddings")
+    """Insert documents with embeddings (legacy wrapper)."""
+    get_vector_store().insert_documents(documents)
 
 
 def similarity_search(query: str, k: int = 3) -> List[Dict[str, Any]]:
-    """Perform vector similarity search using MongoDB vector search."""
-    collection = get_collection()
-
-    # Embed the query
-    query_embedding = embed_query(query)
-
-    # Perform vector search using MongoDB's $vectorSearch aggregation
-    pipeline = [
-        {
-            "$vectorSearch": {
-                "index": settings.VECTOR_INDEX_NAME,
-                "path": "embedding",
-                "queryVector": query_embedding,
-                "numCandidates": 100,
-                "limit": k
-            }
-        },
-        {
-            "$unset": ["embedding", "_id"]  # Remove embedding and _id from results
-        }
-    ]
-
-    results = list(collection.aggregate(pipeline))
-    return results
+    """Perform vector similarity search (legacy wrapper)."""
+    return get_vector_store().similarity_search(query, k)

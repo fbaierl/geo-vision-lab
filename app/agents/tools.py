@@ -2,7 +2,7 @@ from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 import wikipedia
 import logging
-from app.services.vector_store import similarity_search
+from app.services.vector_store import get_vector_store
 
 logger = logging.getLogger("agent_flow")
 
@@ -14,7 +14,9 @@ def vector_search(query: str) -> str:
     """Searches the local vector database containing all uploaded user documents, historical intelligence reports, and custom data context."""
     logger.debug(f"[AGENT LOG] Using vector_search for: {query}")
     try:
-        results = similarity_search(query, k=3)
+        # Use DI to get vector store service
+        vector_store = get_vector_store()
+        results = vector_store.similarity_search(query, k=3)
         if not results:
             return "No archival data found in historical intelligence database."
         results_text = "\n\n".join([doc.get("page_content", "") for doc in results])

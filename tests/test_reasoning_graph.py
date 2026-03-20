@@ -1,6 +1,7 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from langchain_core.messages import HumanMessage
-from app.agents.graph import should_continue, call_model
+from app.agents.graph import should_continue, call_model, vector_search_node, extract_locations
+
 
 # --- should_continue node tests ---
 
@@ -9,42 +10,53 @@ def test_should_continue_with_tools():
     mock_message = MagicMock()
     mock_message.tool_calls = [{"name": "web_search", "args": {"query": "NATO"}}]
     state = {"messages": [mock_message]}
-    
+
     result = should_continue(state)
     assert result == "tools"
 
 def test_should_continue_without_tools():
-    # When the last message has no tool calls, we should end
+    # When the last message has no tool calls, we should go to reviewer
     mock_message = MagicMock()
     mock_message.tool_calls = []
     state = {"messages": [mock_message]}
-    
+
     result = should_continue(state)
     assert result == "reviewer"
 
 
 # --- call_model node tests ---
 
-@patch("app.agents.graph.get_reasoning_llm")
-def test_call_model(mock_get_reasoning_llm):
-    # Mock LLM and its response
-    mock_llm = MagicMock()
-    mock_llm_with_tools = MagicMock()
-    
-    # Setup chain
-    mock_get_reasoning_llm.return_value = mock_llm
-    mock_llm.bind_tools.return_value = mock_llm_with_tools
-    
-    # Mock response
+def test_call_model(override_reasoning_llm):
+    """Test call_model with DI override for reasoning LLM."""
+    # Setup mock response
     mock_response = MagicMock()
     mock_response.content = "I have the answer."
-    mock_llm_with_tools.invoke.return_value = mock_response
-
+    override_reasoning_llm.invoke.return_value = mock_response
+    
     state = {"messages": [HumanMessage(content="Hello")]}
-    
     result = call_model(state)
-    
+
     assert "messages" in result
     assert result["messages"][0].content == "I have the answer."
-    mock_llm.bind_tools.assert_called_once()
-    mock_llm_with_tools.invoke.assert_called_once()
+    override_reasoning_llm.bind_tools.assert_called_once()
+
+
+# --- vector_search_node tests ---
+
+def test_vector_search_node_no_query():
+    """Test vector_search_node with no query."""
+    state = {"messages": []}
+    result = vector_search_node(state)
+    assert result["vector_search_results"] == "No query provided."
+
+
+# --- extract_locations node tests ---
+
+def test_extract_locations_no_response():
+    """Test extract_locations with empty response."""
+    mock_message = MagicMock()
+    mock_message.content = ""
+    state = {"messages": [mock_message]}
+
+    result = extract_locations(state)
+    assert result["extracted_locations"] == []

@@ -4,31 +4,37 @@ import wikipedia
 
 # --- vector_search tests ---
 
-@patch("app.agents.tools.similarity_search")
-def test_vector_search_success(mock_similarity_search):
-    # Mock the similarity_search method
+@patch("app.agents.tools.get_vector_store")
+def test_vector_search_success(mock_get_vector_store):
+    # Mock the vector store service
+    mock_vector_store = MagicMock()
     mock_doc1 = {"page_content": "Historical event 1 details."}
     mock_doc2 = {"page_content": "Historical event 2 details."}
-    mock_similarity_search.return_value = [mock_doc1, mock_doc2]
+    mock_vector_store.similarity_search.return_value = [mock_doc1, mock_doc2]
+    mock_get_vector_store.return_value = mock_vector_store
 
     result = vector_search.invoke({"query": "Cold War"})
 
     assert "ARCHIVAL INTELLIGENCE REPORT:" in result
     assert "Historical event 1 details." in result
     assert "Historical event 2 details." in result
-    mock_similarity_search.assert_called_once_with("Cold War", k=3)
+    mock_vector_store.similarity_search.assert_called_once_with("Cold War", k=3)
 
-@patch("app.agents.tools.similarity_search")
-def test_vector_search_no_results(mock_similarity_search):
-    mock_similarity_search.return_value = []
+@patch("app.agents.tools.get_vector_store")
+def test_vector_search_no_results(mock_get_vector_store):
+    mock_vector_store = MagicMock()
+    mock_vector_store.similarity_search.return_value = []
+    mock_get_vector_store.return_value = mock_vector_store
 
     result = vector_search.invoke({"query": "Nonexistent Event"})
 
     assert result == "No archival data found in historical intelligence database."
 
-@patch("app.agents.tools.similarity_search")
-def test_vector_search_error(mock_similarity_search):
-    mock_similarity_search.side_effect = Exception("DB Connection Error")
+@patch("app.agents.tools.get_vector_store")
+def test_vector_search_error(mock_get_vector_store):
+    mock_vector_store = MagicMock()
+    mock_vector_store.similarity_search.side_effect = Exception("DB Connection Error")
+    mock_get_vector_store.return_value = mock_vector_store
 
     result = vector_search.invoke({"query": "Cold War"})
 

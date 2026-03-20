@@ -30,3 +30,6 @@ htmlcov/
 
 # Ignore ingestion hash file
 .ingest_hash
+
+# Qwen Code skill files
+.qwen/
