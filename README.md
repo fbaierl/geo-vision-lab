@@ -119,7 +119,8 @@ This orchestrates:
 | MongoDB Browser | [localhost:8081](http://localhost:8081) | `admin` / `geovision` |
 | Container Logs | [localhost:9999](http://localhost:9999) | — |
 | Grafana Dashboards | [localhost:3000](http://localhost:3000) | `admin` / `geovision` |
-| LangSmith Tracing | [localhost:3030](http://localhost:3030) | — |
+
+**Optional: LangSmith Tracing** - See [docs/langsmith.md](docs/langsmith.md) for setup.
 
 ---
 

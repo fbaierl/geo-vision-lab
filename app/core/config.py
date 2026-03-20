@@ -40,11 +40,12 @@ class Settings(BaseSettings):
     REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Using 4B for more reliable validation
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
-    # --- LangSmith Tracing (Self-Hosted) ---
-    LANGSMITH_TRACING: bool = True
-    LANGSMITH_API_KEY: str = "langsmith"  # Self-hosted doesn't require a real key
+    # --- LangSmith Tracing (Cloud) ---
+    # Get free API key at: https://smith.langchain.com
+    LANGSMITH_TRACING: bool = False  # Set to True and add API key to enable
+    LANGSMITH_API_KEY: Optional[str] = None
     LANGSMITH_PROJECT: str = "geo-vision-lab"
-    LANGSMITH_ENDPOINT: str = "http://geovision-langsmith-backend:1984"
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
 
     # --- Available Reasoning Models ---
     AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]

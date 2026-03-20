@@ -1,104 +1,87 @@
-# LangSmith Self-Hosted Setup
+# LangSmith Cloud Setup
 
-This project includes a fully self-hosted LangSmith instance for tracing and debugging all LLM operations.
+LangSmith is a debugging and monitoring platform for LLM applications. It provides:
 
-## Architecture
+- **Tracing** - See every LLM call, tool invocation, and reasoning step
+- **Debugging** - Inspect prompts, responses, and token usage
+- **Testing** - Create test suites and evaluate model performance
+- **Analytics** - Track latency, costs, and usage patterns
 
-The LangSmith stack consists of:
+## Quick Setup
 
-- **langsmith-redis** (port 6379) - Message queue and caching
-- **langsmith-postgres** (port 5432) - Primary data storage
-- **langsmith-clickhouse** (ports 8123, 9000) - Analytics and tracing data
-- **langsmith-backend** (port 1984) - API server
-- **langsmith-frontend** (port 3030) - Web UI
+### 1. Get a Free API Key
 
-## Quick Start
+1. Visit [smith.langchain.com](https://smith.langchain.com)
+2. Sign up / log in
+3. Click your profile → **Settings** → **API Keys**
+4. Click **Create API Key**
 
-### 1. Start the Full Stack
+### 2. Configure Your Environment
+
+Copy `.env.example` to `.env`:
 
 ```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your API key:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...your-key-here
+LANGSMITH_PROJECT=geo-vision-lab
+```
+
+### 3. Restart the Stack
+
+```bash
+docker-compose down
 docker-compose up -d
 ```
 
-Wait ~2 minutes for all LangSmith services to become healthy.
+### 4. View Your Traces
 
-### 2. Access the LangSmith UI
+1. Make a query at [localhost:8000](http://localhost:8000)
+2. Visit [smith.langchain.com](https://smith.langchain.com)
+3. Select the `geo-vision-lab` project
+4. See real-time traces of all LLM operations
 
-Open your browser: **http://localhost:3030**
+## What Gets Traced
 
-- No authentication required for local development
-- All traces are automatically sent from the app
+- **LLM Calls** - Prompts, completions, token counts, latency
+- **Tool Usage** - Vector search, web search, geocoding
+- **Agent Reasoning** - Each step of the LangGraph workflow
+- **Location Extraction** - NER results and disambiguation
+- **Validation** - Reviewer model feedback
 
-### 3. View Your Traces
+## Disable Tracing
 
-1. Make a request to the API: `http://localhost:8000`
-2. Refresh the LangSmith UI
-3. See real-time traces of:
-   - LLM calls (prompts, completions, token usage)
-   - Tool invocations (vector search, web search)
-   - Agent reasoning steps
-   - Location extraction & prioritization
-   - Full execution graphs
+To disable (e.g., for offline work):
 
-## Configuration
+1. Set `LANGSMITH_TRACING=false` in `.env`
+2. Or remove the LangSmith env vars from `docker-compose.yml`
 
-LangSmith is configured in `app/core/config.py`:
+## Privacy Note
 
-```python
-LANGSMITH_TRACING: bool = True
-LANGSMITH_API_KEY: str = "langsmith"  # Self-hosted doesn't require real key
-LANGSMITH_PROJECT: str = "geo-vision-lab"
-LANGSMITH_ENDPOINT: str = "http://geovision-langsmith-backend:1984"
-```
+When enabled, trace data is sent to LangChain's cloud servers. This includes:
+- Prompts sent to LLMs
+- LLM responses
+- Tool inputs/outputs
 
-## Disabling LangSmith
+**Do not enable** if you're processing sensitive or classified data.
 
-To disable tracing (e.g., for faster local testing):
+## Pricing
 
-1. Set `LANGSMITH_TRACING=false` in environment variables
-2. Or remove the LangSmith services from `docker-compose.yml`
+- **Free Tier**: 1,000 traces/month (sufficient for development)
+- **Plus**: $100/month for 10,000 traces
+- **Pro**: Custom pricing
 
-## Troubleshooting
+See [langchain.com/pricing](https://www.langchain.com/pricing) for details.
 
-### Backend not starting
-```bash
-docker logs geovision-langsmith-backend
-```
+## Alternative: Open Source
 
-### Frontend not connecting to backend
-Check that the backend is healthy:
-```bash
-docker inspect geovision-langsmith-backend | grep Health
-```
+For fully local tracing, consider:
+- [LangFuse](https://langfuse.com) - Open source, self-hostable
+- [Arize Phoenix](https://arize.com/phoenix) - Local LLM observability
 
-### No traces appearing
-1. Verify the app service has LangSmith env vars
-2. Check app logs: `docker logs geovision-app`
-3. Ensure `langsmith` package is installed: `pip show langsmith`
-
-## Resource Usage
-
-The LangSmith stack requires:
-- ~2-4 GB RAM
-- ~1 GB disk space (grows with traces)
-
-To clean up trace data:
-```bash
-docker-compose down -v  # Removes all volumes
-```
-
-## Comparison: Self-Hosted vs Cloud
-
-| Feature | Self-Hosted | Cloud |
-|---------|-------------|-------|
-| Setup | 5 containers | Env vars only |
-| Data | Local | LangChain servers |
-| Cost | Free | Free tier available |
-| Internet | Not required | Required |
-| Maintenance | You maintain | Managed |
-
-**For most local development**, self-hosted is great because:
-- No data leaves your machine
-- Works offline
-- Full control over retention
-- No API key needed
+These require additional Docker containers but keep all data local.
