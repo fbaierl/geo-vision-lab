@@ -70,7 +70,6 @@ def get_location_extractor() -> Any:
     from app.services.location_extractor import LocationExtractorService
     return LocationExtractorService(
         ner_pipeline=get_ner_pipeline(),
-        reviewer_llm=get_reviewer_llm(),
         geocode_cache=get_geocode_cache()
     )
 
@@ -80,12 +79,11 @@ def get_location_extractor_service() -> Dict[str, Any]:
     Get location extractor service dependencies as a dict.
 
     Returns:
-        Dict with 'ner_pipeline', 'geocode_cache', 'reviewer_llm' keys
+        Dict with 'ner_pipeline', 'geocode_cache' keys
     """
     return {
         "ner_pipeline": get_ner_pipeline(),
-        "geocode_cache": get_geocode_cache(),
-        "reviewer_llm": get_reviewer_llm()
+        "geocode_cache": get_geocode_cache()
     }
 
 

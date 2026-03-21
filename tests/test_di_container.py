@@ -96,34 +96,30 @@ class TestVectorStoreService:
 
 class TestLocationExtractorService:
     """Test LocationExtractorService with DI."""
-    
+
     def test_get_location_extractor_uses_di(self):
         """Test that get_location_extractor uses DI container."""
         mock_ner = MagicMock()
-        mock_llm = MagicMock()
-        
+
         # Override dependencies
         container.override(get_ner_pipeline, lambda: mock_ner)
-        container.override(get_reviewer_llm, lambda: mock_llm)
-        
+
         # Get service
         service = get_location_extractor()
-        
+
         # Verify service was created with correct dependencies
         assert service is not None
         assert service.ner_pipeline is mock_ner
-        assert service.reviewer_llm is mock_llm
-        
+
         container.reset_overrides()
 
 
 class TestLocationPrioritizerService:
     """Test LocationPrioritizerService with DI."""
-    
+
     def test_get_location_prioritizer_uses_di(self):
         """Test that get_location_prioritizer uses DI container."""
         mock_llm = MagicMock()
-        
         # Override dependency
         container.override(get_reviewer_llm, lambda: mock_llm)
         

@@ -8,7 +8,6 @@ and sent to the self-hosted LangSmith instance.
 Access the LangSmith UI at: http://localhost:3030
 """
 
-import os
 from typing import Optional
 from langchain_core.callbacks import CallbackManager
 from langchain_core.tracers.langchain import LangChainTracer

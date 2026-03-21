@@ -2,6 +2,9 @@
 Location Prioritizer Service
 
 Filters and ranks extracted locations based on their relevance to the user query.
+This service receives ALL geocoding candidates from the extractor and makes the
+single decision about which locations to keep and which candidate to use for each.
+
 All dependencies are injected via the DI container - no global state.
 """
 
@@ -19,19 +22,14 @@ logger = logging.getLogger("agent_flow")
 class LocationPrioritizerService:
     """
     Location prioritizer service with explicit dependencies.
-    
+
     Usage:
-        # With DI (recommended)
-        from app.core.di import get_reviewer_llm
         service = LocationPrioritizerService(reviewer_llm=get_reviewer_llm())
-        
-        # Or with explicit dependencies
-        service = LocationPrioritizerService(reviewer_llm=llm)
     """
-    
+
     def __init__(self, reviewer_llm: ChatOllama):
         self.reviewer_llm = reviewer_llm
-    
+
     def prioritize_locations(
         self,
         query: str,
@@ -40,42 +38,66 @@ class LocationPrioritizerService:
     ) -> List[Dict[str, Any]]:
         """
         Use LLM to filter and prioritize locations based on their relevance to the query.
+        
+        Receives ALL geocoding candidates (flat list) and selects the best candidate
+        for each unique location name, then filters by relevance.
 
         Args:
             query: The original user query
-            locations: List of extracted locations with name, type, lat, lon
+            locations: List of ALL geocoded candidates with name, type, lat, lon, 
+                       display_name, country (may contain multiple candidates for same location)
             response_text: The agent's response text (for context)
 
         Returns:
-            Filtered list of locations with relevance scores, sorted by relevance
+            Filtered list of selected locations with relevance scores, sorted by relevance
         """
         if not locations:
             return []
 
-        # If only 1-2 locations, keep them all
-        if len(locations) <= 2:
-            for loc in locations:
-                loc['relevance'] = 1.0
-            return locations
+        # Group candidates by location name
+        candidates_by_name = {}
+        for loc in locations:
+            name = loc['name'].lower()
+            if name not in candidates_by_name:
+                candidates_by_name[name] = []
+            candidates_by_name[name].append(loc)
 
-        # Build location list for the prompt
-        location_list = "\n".join([
-            f"- {loc['name']} ({loc['type']})"
-            for loc in locations
-        ])
+        # If only 1-2 unique locations, keep the best candidate for each
+        if len(candidates_by_name) <= 2:
+            result = []
+            for name, candidates in candidates_by_name.items():
+                best = self._select_best_candidate(candidates)
+                best['relevance'] = 1.0
+                result.append(best)
+            return result
+
+        # Build location list for the prompt - group candidates by name
+        location_groups = []
+        for idx, (name, candidates) in enumerate(candidates_by_name.items()):
+            group_text = f"{idx + 1}. {name} ({len(candidates)} candidate(s)):\n"
+            for cand_idx, c in enumerate(candidates):
+                group_text += (
+                    f"   {cand_idx + 1}) {c['display_name']} "
+                    f"(Type: {c['type']}, Country: {c['country']}, "
+                    f"Lat: {c['lat']:.4f}, Lon: {c['lon']:.4f})\n"
+                )
+            location_groups.append(group_text)
+
+        location_list = "\n\n".join(location_groups)
 
         prompt = f"""You are a location relevance filter for a geopolitical intelligence platform.
 
 USER QUERY: {query}
 
-EXTRACTED LOCATIONS:
+EXTRACTED LOCATIONS (all geocoding candidates shown):
 {location_list}
 
 RESPONSE CONTEXT:
-{response_text[:500]}  # Truncate to avoid token limits
+{response_text[:500]}
 
 TASK:
-Filter and rank these locations by their relevance to the user's query.
+1. For each location group, select the BEST candidate (or exclude the location entirely)
+2. Assign relevance scores to selected locations
 
 CRITERIA:
 1. PRIMARY (relevance: 1.0): The main subject of the query or response
@@ -89,15 +111,21 @@ RULES:
 - For city queries: Include only the city
 - For multi-country queries: Include all primary countries, limit cities
 - Prefer specificity: If query is about "Munich", don't include all of Germany
+- Disambiguate using display_name and country (e.g., "Iran, country" vs "Iran, Texas")
+- Exclude abbreviations or ambiguous matches (e.g., "IRA" when query is about Iran)
 
 Respond ONLY with a JSON array in this format:
 [
-  {{"name": "Location Name", "relevance": 1.0}},
-  {{"name": "Location Name", "relevance": 0.7}},
-  ...
+  {{"location_index": 0, "candidate_index": 0, "relevance": 1.0, "reason": "Iran country is main subject"}},
+  {{"location_index": 2, "candidate_index": 1, "relevance": 0.7, "reason": "Tehran is capital of Iran"}}
 ]
 
-Only include locations with relevance >= 0.4. Limit to 5 locations max."""
+- location_index: Index of the location group (0-indexed, matches the numbered list above)
+- candidate_index: Index of the candidate within that group (0-indexed)
+- relevance: Score from 0.4 to 1.0
+- reason: Brief explanation
+
+Only include entries with relevance >= 0.4. Limit to 5 locations max."""
 
         try:
             response = self.reviewer_llm.invoke(prompt)
@@ -107,37 +135,69 @@ Only include locations with relevance >= 0.4. Limit to 5 locations max."""
             json_match = re.search(r'\[.*\]', response_content, re.DOTALL)
             if not json_match:
                 logger.warning("[LOCATION_PRIORITIZER] No JSON array found in response")
-                return self._fallback_prioritize(locations)
+                return self._fallback_prioritize(candidates_by_name)
 
-            ranked = json.loads(json_match.group())
+            selections = json.loads(json_match.group())
 
-            # Create a mapping of name to relevance
-            relevance_map = {item['name'].lower(): item['relevance'] for item in ranked}
-
-            # Filter and score locations
+            # Build result from selections
             result = []
-            for loc in locations:
-                relevance = relevance_map.get(loc['name'].lower(), 0.4)
-                if relevance >= 0.4:
-                    loc['relevance'] = relevance
-                    result.append(loc)
+            location_names = list(candidates_by_name.keys())
+            
+            for selection in selections:
+                loc_idx = selection.get('location_index')
+                cand_idx = selection.get('candidate_index')
+                relevance = selection.get('relevance', 0.4)
+
+                if loc_idx is not None and cand_idx is not None and relevance >= 0.4:
+                    if 0 <= loc_idx < len(location_names):
+                        name = location_names[loc_idx]
+                        candidates = candidates_by_name.get(name, [])
+                        if 0 <= cand_idx < len(candidates):
+                            selected = candidates[cand_idx].copy()
+                            selected['relevance'] = relevance
+                            selected['selection_reason'] = selection.get('reason', '')
+                            result.append(selected)
+                            logger.info(
+                                f"[LOCATION_PRIORITIZER] Selected: {selected['name']} → "
+                                f"{selected['display_name']} (relevance: {relevance})"
+                            )
 
             # Sort by relevance (descending) and limit to 5
             result.sort(key=lambda x: x['relevance'], reverse=True)
             result = result[:5]
 
-            logger.info(f"[LOCATION_PRIORITIZER] Filtered {len(locations)} locations to {len(result)}")
+            logger.info(f"[LOCATION_PRIORITIZER] Filtered to {len(result)} location(s)")
             return result
 
         except Exception as e:
             logger.error(f"[LOCATION_PRIORITIZER] Failed to prioritize: {e}")
-            return self._fallback_prioritize(locations)
-    
-    def _fallback_prioritize(self, locations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            return self._fallback_prioritize(candidates_by_name)
+
+    def _select_best_candidate(self, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Select the best candidate from a list (highest specificity)."""
+        # Priority: country > region > city > town > village > landmark
+        type_priority = {
+            'country': 1,
+            'region': 2,
+            'city': 3,
+            'town': 4,
+            'village': 5,
+            'neighbourhood': 6,
+            'landmark': 7
+        }
+        return min(candidates, key=lambda x: type_priority.get(x['type'], 99))
+
+    def _fallback_prioritize(self, candidates_by_name: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """
         Fallback prioritization when LLM fails.
-        Simple heuristic: countries/regions first, then cities, limit to 3.
+        Simple heuristic: select best candidate per location, countries/regions first, limit to 5.
         """
+        # Select best candidate for each location name
+        best_candidates = []
+        for name, candidates in candidates_by_name.items():
+            best = self._select_best_candidate(candidates)
+            best_candidates.append(best)
+
         # Priority order: country > region > city > landmark
         type_priority = {
             'country': 1,
@@ -147,39 +207,29 @@ Only include locations with relevance >= 0.4. Limit to 5 locations max."""
         }
 
         # Sort by type priority
-        sorted_locs = sorted(locations, key=lambda x: type_priority.get(x['type'], 5))
+        sorted_locs = sorted(best_candidates, key=lambda x: type_priority.get(x['type'], 5))
 
         # Assign relevance scores
+        result = []
         for i, loc in enumerate(sorted_locs[:5]):
+            loc = loc.copy()
             if i == 0:
                 loc['relevance'] = 1.0
             elif i < 3:
                 loc['relevance'] = 0.7
             else:
                 loc['relevance'] = 0.4
+            result.append(loc)
 
-        return sorted_locs[:5]
+        return result[:5]
 
 
 # =============================================================================
-# Backward-compatible functions (using DI internally)
+# DI factory function
 # =============================================================================
 
 def get_location_prioritizer() -> LocationPrioritizerService:
     """
     Get location prioritizer service with dependencies from DI container.
-    
-    This is the recommended way to get a LocationPrioritizerService instance.
     """
     return LocationPrioritizerService(reviewer_llm=get_reviewer_llm())
-
-
-# Legacy function wrappers for backward compatibility
-
-def prioritize_locations(
-    query: str,
-    locations: List[Dict[str, Any]],
-    response_text: str
-) -> List[Dict[str, Any]]:
-    """Prioritize locations (legacy wrapper using DI)."""
-    return get_location_prioritizer().prioritize_locations(query, locations, response_text)
