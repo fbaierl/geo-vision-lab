@@ -49,8 +49,26 @@ jobs:
 
     - name: Start Ollama service
       run: |
-        docker run -d --name ollama -p 11434:11434 ollama/ollama:latest
-        sleep 10
+        docker run -d --name ollama -p 11434:11434 \
+          --health-cmd="ollama list" \
+          --health-interval=5s \
+          --health-timeout=5s \
+          --health-retries=10 \
+          ollama/ollama:latest
+        
+        echo "Waiting for Ollama service to be ready..."
+        for i in {1..30}; do
+          if docker exec ollama ollama list >/dev/null 2>&1; then
+            echo "Ollama is ready!"
+            break
+          fi
+          echo "Waiting... ($i/30)"
+          sleep 2
+        done
+        
+        # Verify Ollama is responsive
+        docker exec ollama ollama list
+        
         # Pull smaller test models (qwen2.5:0.5b for speed, all-minilm for embeddings)
         docker exec ollama ollama pull qwen2.5:0.5b
         docker exec ollama ollama pull all-minilm-l6-v2
