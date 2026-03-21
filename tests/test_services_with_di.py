@@ -6,7 +6,7 @@ Demonstrates how to test services using DI overrides instead of patching globals
 
 from unittest.mock import MagicMock
 from app.services.vector_store import VectorStoreService, get_vector_store
-from app.services.location_extractor import LocationExtractorService, get_location_extractor
+from app.services.location_extractor import LocationExtractorService
 from app.services.location_prioritizer import LocationPrioritizerService
 
 
@@ -85,48 +85,42 @@ class TestLocationExtractorService:
             {"entity_group": "GPE", "word": "Paris", "entity_text": "Paris"},
             {"entity_group": "LOC", "word": "Eiffel Tower", "entity_text": "Eiffel Tower"}
         ]
-        
-        # Create mock LLM
-        mock_llm = MagicMock()
-        
-        # Create service
+
+        # Create service (no reviewer_llm needed)
         service = LocationExtractorService(
             ner_pipeline=mock_ner,
-            reviewer_llm=mock_llm,
             geocode_cache={}
         )
-        
+
         # Call method
         locations = service.extract_locations_with_ner("Paris is beautiful")
-        
+
         # Verify
         assert len(locations) == 2
         assert locations[0]["name"] == "Paris"
         assert locations[0]["type"] == "country"  # GPE -> country
         assert locations[1]["name"] == "Eiffel Tower"
         assert locations[1]["type"] == "landmark"  # LOC -> landmark
-    
+
     def test_geocode_location_with_cache(self):
         """Test geocoding uses cache."""
         mock_ner = MagicMock()
-        mock_llm = MagicMock()
-        
+
         # Pre-populate cache
         cache = {
             "Paris": [
                 {"name": "Paris", "lat": 48.8566, "lon": 2.3522, "display_name": "Paris, France", "type": "city", "country": "France"}
             ]
         }
-        
+
         service = LocationExtractorService(
             ner_pipeline=mock_ner,
-            reviewer_llm=mock_llm,
             geocode_cache=cache
         )
-        
+
         # Call method - should use cache, not call Nominatim
         results = service.geocode_location("Paris")
-        
+
         # Verify cache was used
         assert len(results) == 1
         assert results[0]["lat"] == 48.8566
@@ -134,85 +128,90 @@ class TestLocationExtractorService:
 
 class TestLocationPrioritizerService:
     """Test LocationPrioritizerService with injected dependencies."""
-    
+
     def test_prioritize_locations_with_llm(self):
         """Test location prioritization with mock LLM."""
         # Create mock LLM
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = '[{"name": "Paris", "relevance": 1.0}, {"name": "London", "relevance": 0.7}]'
+        # New format: location_index, candidate_index, relevance
+        mock_response.content = '[{"location_index": 0, "candidate_index": 0, "relevance": 1.0, "reason": "Paris is main subject"}]'
         mock_llm.invoke.return_value = mock_response
-        
+
         # Create service
         service = LocationPrioritizerService(reviewer_llm=mock_llm)
-        
-        # Test locations
+
+        # Test locations with full geocoding data (including display_name and country)
         locations = [
-            {"name": "Paris", "type": "city", "lat": 48.8566, "lon": 2.3522},
-            {"name": "London", "type": "city", "lat": 51.5074, "lon": -0.1278},
-            {"name": "Berlin", "type": "city", "lat": 52.5200, "lon": 13.4050}
+            {"name": "Paris", "type": "city", "lat": 48.8566, "lon": 2.3522, "display_name": "Paris, France", "country": "France"},
+            {"name": "Paris", "type": "city", "lat": 33.8, "lon": -96.6, "display_name": "Paris, Texas, USA", "country": "USA"},
+            {"name": "London", "type": "city", "lat": 51.5074, "lon": -0.1278, "display_name": "London, UK", "country": "UK"},
         ]
-        
+
         # Call method
         result = service.prioritize_locations(
             query="Tell me about Paris",
             locations=locations,
             response_text="Paris is the capital of France..."
         )
-        
+
         # Verify
         assert len(result) > 0
         assert result[0]["name"] == "Paris"
         assert result[0]["relevance"] == 1.0
-    
+        # Should select France candidate, not Texas
+        assert result[0]["country"] == "France"
+
     def test_prioritize_locations_fallback(self):
         """Test fallback when LLM fails."""
         # Create mock LLM that fails
         mock_llm = MagicMock()
         mock_llm.invoke.side_effect = Exception("LLM error")
-        
+
         # Create service
         service = LocationPrioritizerService(reviewer_llm=mock_llm)
-        
-        # Test locations
+
+        # Test locations with full geocoding data
         locations = [
-            {"name": "Paris", "type": "city", "lat": 48.8566, "lon": 2.3522},
-            {"name": "France", "type": "country", "lat": 46.603354, "lon": 1.888334}
+            {"name": "Paris", "type": "city", "lat": 48.8566, "lon": 2.3522, "display_name": "Paris, France", "country": "France"},
+            {"name": "France", "type": "country", "lat": 46.603354, "lon": 1.888334, "display_name": "France", "country": "France"}
         ]
-        
+
         # Call method - should use fallback
         result = service.prioritize_locations(
             query="Tell me about Paris",
             locations=locations,
             response_text="Paris is the capital of France..."
         )
-        
+
         # Verify fallback returned results
         assert len(result) > 0
         # In fallback, country is prioritized over city
         types = [loc["type"] for loc in result]
         assert "country" in types or "city" in types
 
-
 class TestServiceIntegrationWithDI:
     """Test getting services via DI container with overrides."""
-    
+
     def test_get_vector_store_with_overrides(self, override_mongo, override_embeddings):
         """Test getting vector store via DI with overrides."""
         # Get service via DI
         service = get_vector_store()
-        
+
         # Verify it uses our mocks
         assert service.client is override_mongo
         assert service.embeddings is override_embeddings
-    
+
     def test_get_location_extractor_with_overrides(
-        self, override_ner_pipeline, override_reviewer_llm
+        self, override_ner_pipeline
     ):
         """Test getting location extractor via DI with overrides."""
-        # Get service via DI
-        service = get_location_extractor()
-        
-        # Verify it uses our mocks
+        # Get service via DI with override
+        from app.services.location_extractor import LocationExtractorService
+        service = LocationExtractorService(
+            ner_pipeline=override_ner_pipeline,
+            geocode_cache={}
+        )
+
+        # Verify it uses our mock
         assert service.ner_pipeline is override_ner_pipeline
-        assert service.reviewer_llm is override_reviewer_llm

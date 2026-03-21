@@ -120,6 +120,8 @@ This orchestrates:
 | Container Logs | [localhost:9999](http://localhost:9999) | — |
 | Grafana Dashboards | [localhost:3000](http://localhost:3000) | `admin` / `geovision` |
 
+**Optional: LangSmith Tracing** - See [docs/langsmith.md](docs/langsmith.md) for setup.
+
 ---
 
 ## Model Switching
@@ -218,6 +220,7 @@ geo-vision-lab/
 | **Testing** | PyTest + Testcontainers |
 | **CI/CD** | GitHub Actions |
 | **Observability** | Grafana + Loki + Dozzle |
+| **Tracing & Debugging** | LangSmith (self-hosted) |
 | **Containerization** | Docker + Docker Compose |
 
 ---

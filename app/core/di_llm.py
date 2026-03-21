@@ -19,6 +19,7 @@ from langchain_ollama import ChatOllama
 import logging
 
 from app.core.config import settings
+from app.core.langsmith_config import get_callback_manager
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +33,24 @@ def _get_container():
 def _create_reasoning_llm() -> ChatOllama:
     """Factory function to create reasoning LLM."""
     logger.info(f"[DI] Creating reasoning LLM: {settings.REASONING_LLM_MODEL_NAME}")
+    callback_manager = get_callback_manager()
     return ChatOllama(
         model=settings.REASONING_LLM_MODEL_NAME,
-        base_url=settings.OLLAMA_URL
+        base_url=settings.OLLAMA_URL,
+        callback_manager=callback_manager
     )
 
 
 def _create_reviewer_llm() -> ChatOllama:
     """Factory function to create reviewer LLM."""
     logger.info(f"[DI] Creating reviewer LLM: {settings.REVIEWER_LLM_MODEL_NAME}")
+    callback_manager = get_callback_manager()
     return ChatOllama(
         model=settings.REVIEWER_LLM_MODEL_NAME,
         base_url=settings.OLLAMA_URL,
         num_predict=20,
-        timeout=60
+        timeout=60,
+        callback_manager=callback_manager
     )
 
 

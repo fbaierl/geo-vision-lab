@@ -325,6 +325,7 @@ async def process_query_stream(
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False
+    done_sent = False
 
     # Emit vector search status immediately (mandatory first step)
     from app.core.config import settings
@@ -339,128 +340,135 @@ async def process_query_stream(
     in_think = False
     think_buffer = ""
 
-    async for event in app_graph.astream_events(inputs, config=config, version="v2"):
-        kind = event.get("event")
-        tags = event.get("tags", [])
+    try:
+        async for event in app_graph.astream_events(inputs, config=config, version="v2"):
+            kind = event.get("event")
+            tags = event.get("tags", [])
 
-        if kind == "on_chat_model_start":
-            if "reviewer" in tags:
-                from app.core.config import settings
-                yield {"type": "status", "phase": "reviewing", "model": settings.REVIEWER_LLM_MODEL_NAME}
-            elif "location_extractor" in tags:
-                from app.core.config import settings
-                yield {"type": "status", "phase": "extracting_locations", "model": settings.REVIEWER_LLM_MODEL_NAME}
-            else:
-                from app.core.config import settings
-                if streaming_started:
-                    yield {"type": "status", "phase": "revising", "model": settings.REASONING_LLM_MODEL_NAME}
-                yield {"type": "status", "phase": "reasoning", "model": settings.REASONING_LLM_MODEL_NAME}
+            # Debug logging for event tracing
+            logger.debug(f"[STREAM EVENT] kind={kind}, name={event.get('name')}, tags={tags}")
 
-        elif kind == "on_tool_start":
-            tool_name = event.get("name", "unknown")
-            tool_input = event.get("data", {}).get("input", {})
-            query_used = tool_input.get("query", "")
-            phase = "vector_search" if tool_name == "vector_search" else "online_search"
-            yield {
-                "type": "status",
-                "phase": phase,
-                "tool": tool_name,
-                "query": query_used,
-            }
-
-        elif kind == "on_tool_end":
-            tool_name = event.get("name", "unknown")
-            output = event.get("data", {}).get("output", "")
-            text = output.content if hasattr(output, "content") else str(output)
-            yield {
-                "type": "tool_result",
-                "tool": tool_name,
-                "summary": _summarise_tool_output(output),
-                "content": text,
-            }
-
-        elif kind == "on_chain_end":
-            # Capture vector_search_node completion via chain events
-            if event.get("name") == "vector_search":
-                output = event.get("data", {}).get("output", {})
-                results = output.get("vector_search_results", "") if isinstance(output, dict) else str(output)
-                if results and isinstance(results, str) and results.strip():
-                    has_data = "No archival data" not in results and "error" not in results.lower()
-                    yield {
-                        "type": "tool_result",
-                        "tool": "vector_search",
-                        "summary": "Archival intelligence retrieved" if has_data else "No archival data found",
-                        "content": results,
-                    }
-
-            # Capture reviewer result - check for various possible node names
-            node_name = event.get("name", "")
-            if "review" in node_name.lower():
-                output = event.get("data", {}).get("output", {})
-                reviewer_result = output.get("reviewer_result", "") if isinstance(output, dict) else ""
-                if reviewer_result and isinstance(reviewer_result, str) and reviewer_result.strip():
-                    is_valid = reviewer_result.startswith("VALID")
-                    yield {
-                        "type": "tool_result",
-                        "tool": "QA Reviewer",
-                        "summary": "Analysis validated" if is_valid else "Analysis revised",
-                        "content": reviewer_result,
-                    }
-
-            # Capture location extractor result
-            if event.get("name") == "location_extractor":
-                output = event.get("data", {}).get("output", {})
-                locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
-                # Store for later - we'll emit after prioritization
-                pass
-
-            # Capture location prioritizer result (emits final filtered locations)
-            if event.get("name") == "location_prioritizer":
-                output = event.get("data", {}).get("output", {})
-                locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
-                if locations and isinstance(locations, list) and len(locations) > 0:
-                    # Include relevance scores in the output
-                    loc_summary = ", ".join([
-                        f"{loc['name']} ({loc.get('relevance', 1.0):.1f})"
-                        for loc in locations[:3]
-                    ])
-                    if len(locations) > 3:
-                        loc_summary += f" +{len(locations) - 3} more"
-                    yield {
-                        "type": "locations_found",
-                        "tool": "location_prioritizer",
-                        "summary": f"Prioritized {len(locations)} location(s): {loc_summary}",
-                        "locations": locations,
-                    }
+            if kind == "on_chat_model_start":
+                if "reviewer" in tags:
+                    from app.core.config import settings
+                    yield {"type": "status", "phase": "reviewing", "model": settings.REVIEWER_LLM_MODEL_NAME}
+                elif "location_extractor" in tags:
+                    from app.core.config import settings
+                    yield {"type": "status", "phase": "extracting_locations", "model": settings.REVIEWER_LLM_MODEL_NAME}
                 else:
-                    yield {
-                        "type": "locations_found",
-                        "tool": "location_prioritizer",
-                        "summary": "No relevant geographic locations found",
-                        "locations": [],
-                    }
+                    from app.core.config import settings
+                    if streaming_started:
+                        yield {"type": "status", "phase": "revising", "model": settings.REASONING_LLM_MODEL_NAME}
+                    yield {"type": "status", "phase": "reasoning", "model": settings.REASONING_LLM_MODEL_NAME}
 
-        elif kind == "on_chat_model_end":
-            output = event.get("data", {}).get("output")
-            content = getattr(output, "content", "")
-            tool_calls = getattr(output, "tool_calls", [])
-
-            # Skip reviewer here - it's captured in on_chain_end
-            if "reviewer" in tags:
-                pass
-            elif tool_calls and content:
+            elif kind == "on_tool_start":
+                tool_name = event.get("name", "unknown")
+                tool_input = event.get("data", {}).get("input", {})
+                query_used = tool_input.get("query", "")
+                phase = "vector_search" if tool_name == "vector_search" else "online_search"
                 yield {
-                    "type": "tool_result",
-                    "tool": "reasoning",
-                    "summary": "Reasoning steps completed",
-                    "content": content.strip()
+                    "type": "status",
+                    "phase": phase,
+                    "tool": tool_name,
+                    "query": query_used,
                 }
 
-        elif kind == "on_chat_model_stream":
-            if "reviewer" in tags:
-                continue
-            if "location_prioritizer" in tags:
-                continue  # Skip streaming for prioritizer
+            elif kind == "on_tool_end":
+                tool_name = event.get("name", "unknown")
+                output = event.get("data", {}).get("output", "")
+                text = output.content if hasattr(output, "content") else str(output)
+                yield {
+                    "type": "tool_result",
+                    "tool": tool_name,
+                    "summary": _summarise_tool_output(output),
+                    "content": text,
+                }
+
+            elif kind == "on_chain_end":
+                # Capture vector_search_node completion via chain events
+                if event.get("name") == "vector_search":
+                    output = event.get("data", {}).get("output", {})
+                    results = output.get("vector_search_results", "") if isinstance(output, dict) else str(output)
+                    if results and isinstance(results, str) and results.strip():
+                        has_data = "No archival data" not in results and "error" not in results.lower()
+                        yield {
+                            "type": "tool_result",
+                            "tool": "vector_search",
+                            "summary": "Archival intelligence retrieved" if has_data else "No archival data found",
+                            "content": results,
+                        }
+
+                # Capture reviewer result - check for various possible node names
+                node_name = event.get("name", "")
+                if "review" in node_name.lower():
+                    output = event.get("data", {}).get("output", {})
+                    reviewer_result = output.get("reviewer_result", "") if isinstance(output, dict) else ""
+                    if reviewer_result and isinstance(reviewer_result, str) and reviewer_result.strip():
+                        is_valid = reviewer_result.startswith("VALID")
+                        logger.debug(f"[QA_REVIEWER] Validation result: {reviewer_result}")
+                        yield {
+                            "type": "validation_result",
+                            "tool": "QA Reviewer",
+                            "summary": "Analysis validated" if is_valid else "Analysis revised",
+                            "content": reviewer_result,
+                        }
+
+                # Capture location extractor result - match by node name constant
+                if event.get("name") == "location_extractor":
+                    output = event.get("data", {}).get("output", {})
+                    locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
+                    logger.debug(f"[LOCATION_EXTRACTOR] Found {len(locations)} locations")
+                    # Store for later - we'll emit after prioritization
+                    pass
+
+                # Capture location prioritizer result (emits final filtered locations)
+                if event.get("name") == "location_prioritizer":
+                    output = event.get("data", {}).get("output", {})
+                    locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
+                    logger.debug(f"[LOCATION_PRIORITIZER] Prioritized to {len(locations)} locations")
+                    if locations and isinstance(locations, list) and len(locations) > 0:
+                        # Include relevance scores in the output
+                        loc_summary = ", ".join([
+                            f"{loc['name']} ({loc.get('relevance', 1.0):.1f})"
+                            for loc in locations[:3]
+                        ])
+                        if len(locations) > 3:
+                            loc_summary += f" +{len(locations) - 3} more"
+                        yield {
+                            "type": "locations_found",
+                            "tool": "location_prioritizer",
+                            "summary": f"Prioritized {len(locations)} location(s): {loc_summary}",
+                            "locations": locations,
+                        }
+                    else:
+                        yield {
+                            "type": "locations_found",
+                            "tool": "location_prioritizer",
+                            "summary": "No relevant geographic locations found",
+                            "locations": [],
+                        }
+
+            elif kind == "on_chat_model_end":
+                output = event.get("data", {}).get("output")
+                content = getattr(output, "content", "")
+                tool_calls = getattr(output, "tool_calls", [])
+
+                # Skip reviewer here - it's captured in on_chain_end
+                if "reviewer" in tags:
+                    pass
+                elif tool_calls and content:
+                    yield {
+                        "type": "tool_result",
+                        "tool": "reasoning",
+                        "summary": "Reasoning steps completed",
+                        "content": content.strip()
+                    }
+
+            elif kind == "on_chat_model_stream":
+                if "reviewer" in tags:
+                    continue
+                if "location_prioritizer" in tags:
+                    continue  # Skip streaming for prioritizer
 
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
@@ -544,18 +552,13 @@ async def process_query_stream(
                                     buffer = ""
                                 break
 
-    if buffer:
-        if in_think:
-            think_buffer += buffer
-            yield {
-                "type": "tool_result", 
-                "tool": "reasoning", 
-                "summary": "Reasoning steps completed", 
-                "content": think_buffer.strip()
-            }
-        else:
-            if not streaming_started:
-                yield {"type": "status", "phase": "streaming"}
-            yield {"type": "token", "content": buffer}
-
-    yield {"type": "done"}
+    except Exception as e:
+        logger.error(f"[QUERY-STREAM] Error during streaming: {e}")
+        yield {"type": "error", "content": str(e)}
+    finally:
+        # Always send done event to signal completion
+        if not done_sent:
+            if buffer and not in_think:
+                yield {"type": "token", "content": buffer}
+            yield {"type": "done"}
+            done_sent = True
