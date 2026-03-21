@@ -176,6 +176,11 @@
                         <span class="service-name">pgAdmin</span>
                         <span class="service-port">:8082</span>
                     </a>
+                    <a class="service-link" href="https://eu.smith.langchain.com/" target="_blank">
+                        <span class="service-icon">◇</span>
+                        <span class="service-name">LangSmith (EU)</span>
+                        <span class="service-port">Cloud</span>
+                    </a>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -599,6 +604,15 @@
                 const availableWidth = desktopRect.width - (padding * 2);
                 const availableHeight = desktopRect.height - (padding * 2);
                 
+                // Define window configurations for snap layout
+                const windowConfigs = {
+                    'window-chat': { widthRatio: 0.35, heightRatio: 0.85, name: 'chat' },
+                    'window-reasoning': { widthRatio: 0.25, heightRatio: 0.85, name: 'reasoning' },
+                    'window-history': { widthRatio: 0.20, heightRatio: 0.35, name: 'history' },
+                    'window-services': { widthRatio: 0.20, heightRatio: 0.35, name: 'services' },
+                    'window-maps': { widthRatio: 0.55, heightRatio: 0.70, name: 'maps' }
+                };
+                
                 // Calculate layout based on number of windows
                 if (numWindows === 1) {
                     // Single window - full width, centered
@@ -638,19 +652,72 @@
                         win.element.style.transform = 'none';
                     });
                 } else {
-                    // Four or more windows - grid layout
-                    const cols = 2;
-                    const rows = Math.ceil(numWindows / cols);
-                    const cellWidth = (availableWidth / cols) - (padding / 2);
-                    const cellHeight = (availableHeight / rows) - (padding / 2);
+                    // Four or more windows - custom technical layout
+                    // Left column: Chat (tall) + History (small)
+                    // Middle column: Reasoning (tall) + Services (small)
+                    // Right: Maps (large)
                     
-                    visibleWindows.forEach((win, idx) => {
-                        const col = idx % cols;
-                        const row = Math.floor(idx / cols);
-                        win.element.style.width = cellWidth + 'px';
-                        win.element.style.height = cellHeight + 'px';
-                        win.element.style.left = padding + (col * (cellWidth + padding)) + 'px';
-                        win.element.style.top = padding + (row * (cellHeight + padding)) + 'px';
+                    const leftColWidth = availableWidth * 0.25;
+                    const midColWidth = availableWidth * 0.20;
+                    const rightColWidth = availableWidth * 0.50;
+                    const smallHeight = availableHeight * 0.30;
+                    const tallHeight = availableHeight * 0.65;
+                    
+                    // Sort windows by priority
+                    const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-history', 'window-services'];
+                    visibleWindows.sort((a, b) => {
+                        const aIdx = priorityOrder.indexOf(a.id);
+                        const bIdx = priorityOrder.indexOf(b.id);
+                        return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+                    });
+                    
+                    // Position tracking
+                    let leftY = padding;
+                    let midY = padding;
+                    const rightY = padding;
+                    
+                    visibleWindows.forEach((win) => {
+                        const config = windowConfigs[win.id];
+                        if (!config) {
+                            // Default positioning for unknown windows
+                            win.element.style.width = (availableWidth / 3) + 'px';
+                            win.element.style.height = (availableHeight / 2) + 'px';
+                            return;
+                        }
+                        
+                        if (win.id === 'window-chat') {
+                            // Left column - tall vertical
+                            win.element.style.width = leftColWidth + 'px';
+                            win.element.style.height = tallHeight + 'px';
+                            win.element.style.left = padding + 'px';
+                            win.element.style.top = padding + 'px';
+                            leftY = padding + tallHeight + padding;
+                        } else if (win.id === 'window-history') {
+                            // Left column - small (below chat)
+                            win.element.style.width = leftColWidth + 'px';
+                            win.element.style.height = smallHeight + 'px';
+                            win.element.style.left = padding + 'px';
+                            win.element.style.top = leftY + 'px';
+                        } else if (win.id === 'window-reasoning') {
+                            // Middle column - tall vertical
+                            win.element.style.width = midColWidth + 'px';
+                            win.element.style.height = tallHeight + 'px';
+                            win.element.style.left = padding + leftColWidth + padding + 'px';
+                            win.element.style.top = padding + 'px';
+                            midY = padding + tallHeight + padding;
+                        } else if (win.id === 'window-services') {
+                            // Middle column - small (below reasoning)
+                            win.element.style.width = midColWidth + 'px';
+                            win.element.style.height = smallHeight + 'px';
+                            win.element.style.left = padding + leftColWidth + padding + 'px';
+                            win.element.style.top = midY + 'px';
+                        } else if (win.id === 'window-maps') {
+                            // Right column - large, takes full height
+                            win.element.style.width = rightColWidth + 'px';
+                            win.element.style.height = (availableHeight * 0.75) + 'px';
+                            win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
+                            win.element.style.top = padding + 'px';
+                        }
                         win.element.style.transform = 'none';
                     });
                 }
