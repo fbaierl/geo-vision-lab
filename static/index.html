@@ -209,6 +209,10 @@
                         <span>Awaiting query to begin analysis...</span>
                     </div>
                 </div>
+                <div class="loading-spinner" id="reasoning-loading" style="display: none;">
+                    <div class="loading-spinner-icon"></div>
+                    <div class="loading-spinner-text">Analyzing<span class="loading-dots"><span></span><span></span><span></span></span></div>
+                </div>
             </div>
             <div class="window-resize-handle right"></div>
             <div class="window-resize-handle bottom"></div>
@@ -234,6 +238,10 @@
                     <div class="map-legend" id="map-legend">
                         <span>No locations mapped</span>
                     </div>
+                </div>
+                <div class="loading-spinner" id="maps-loading" style="display: none;">
+                    <div class="loading-spinner-icon"></div>
+                    <div class="loading-spinner-text">Extracting Locations<span class="loading-dots"><span></span><span></span><span></span></span></div>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -771,6 +779,10 @@
         // Reasoning
         const reasoningContent = document.getElementById('reasoning-content');
         const reasoningPlaceholder = document.getElementById('reasoning-placeholder');
+        const reasoningLoading = document.getElementById('reasoning-loading');
+
+        // Maps
+        const mapsLoading = document.getElementById('maps-loading');
         
         // Model selector
         const modelToggle = document.getElementById('model-toggle');
@@ -880,10 +892,7 @@
         function addMessage(content, isUser = false) {
             const msg = document.createElement('div');
             msg.className = `chat-message ${isUser ? 'user' : ''}`;
-            msg.innerHTML = `
-                <div class="chat-message-avatar">${isUser ? '👤' : '◈'}</div>
-                <div class="chat-message-content markdown-content">${content}</div>
-            `;
+            msg.innerHTML = `<div class="chat-message-content markdown-content">${content}</div>`;
             chatMessages.appendChild(msg);
             chatMessages.scrollTop = chatMessages.scrollHeight;
             return msg.querySelector('.chat-message-content');
@@ -930,6 +939,12 @@
         
         // Reasoning functions
         function addReasoningStep(phase, tool, query, model) {
+            // Hide loading spinner on first step
+            if (reasoningLoading && reasoningLoading.style.display !== 'none') {
+                reasoningLoading.style.display = 'none';
+                if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
+            }
+            
             if (reasoningPlaceholder) reasoningPlaceholder.remove();
 
             const step = document.createElement('div');
@@ -937,79 +952,113 @@
 
             let label = phase.toUpperCase();
             let desc = '';
+            let hasData = false;
+            let dataContent = null;
 
             if (phase === 'reasoning') desc = 'Planning analysis approach...';
             else if (phase === 'reviewing') desc = 'QA review in progress...';
             else if (phase === 'revising') desc = 'Formulating corrected response...';
-            else if (phase === 'vector_search') desc = `Searching archival database...`;
-            else if (phase === 'online_search') desc = `Querying live sources...`;
+            else if (phase === 'vector_search') {
+                desc = `Searching archival database...`;
+                hasData = true;
+                dataContent = query;
+            }
+            else if (phase === 'online_search') {
+                desc = `Querying live sources...`;
+                hasData = true;
+                dataContent = query;
+            }
             else if (phase === 'streaming') desc = 'Delivering response...';
             else if (phase === 'extracting_locations') desc = 'Extracting geographic locations...';
 
+            let modelTag = model ? ` <span style="font-size: 0.6rem; color: var(--text-muted);">[${model}]</span>` : '';
+
             step.innerHTML = `
-                <div class="reasoning-step-label">▸ ${label}</div>
+                <div class="reasoning-step-label">▸ ${label}${modelTag}</div>
                 <div class="reasoning-step-desc">${escapeHtml(desc)}</div>
+                ${hasData ? `<div class="reasoning-step-data-toggle" style="margin-top: 6px; font-size: 0.7rem; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                    <span style="transition: transform 0.2s;">▼</span>
+                    <span>View query data</span>
+                </div>
+                <div class="reasoning-step-data" style="display: none; margin-top: 8px; padding: 8px; background: var(--bg-desktop); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;">${escapeHtml(dataContent)}</div>` : ''}
             `;
+            
             reasoningContent.appendChild(step);
+            
+            // Add toggle functionality
+            if (hasData) {
+                const toggle = step.querySelector('.reasoning-step-data-toggle');
+                const data = step.querySelector('.reasoning-step-data');
+                const arrow = toggle.querySelector('span');
+                
+                toggle.addEventListener('click', () => {
+                    const isExpanded = data.style.display !== 'none';
+                    data.style.display = isExpanded ? 'none' : 'block';
+                    arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+                    toggle.querySelector('span:last-child').textContent = isExpanded ? 'View query data' : 'Hide query data';
+                });
+            }
+            
             reasoningContent.scrollTop = reasoningContent.scrollHeight;
         }
 
         // Map rendering
         let mapInstance = null;
-        
+        let mapMarkers = [];
+
         function renderMap(locations, container) {
             if (!container) return;
-            
+
             // Clear existing map
             container.innerHTML = '';
-            
+            mapMarkers = [];
+
             if (!locations || locations.length === 0) return;
-            
+
             // Sort by relevance
-            const sortedLocations = [...locations].sort((a, b) => 
+            const sortedLocations = [...locations].sort((a, b) =>
                 (b.relevance || 0.5) - (a.relevance || 0.5)
             );
-            
+
             // Create map
             mapInstance = L.map(container, {
                 zoomControl: true,
                 attributionControl: true
             });
-            
+
             // Add dark tile layer
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
                 subdomains: 'abcd',
                 maxZoom: 19
             }).addTo(mapInstance);
-            
+
             // Create boundary pane
             mapInstance.createPane('boundaryPane');
             mapInstance.getPane('boundaryPane').style.zIndex = 600;
             mapInstance.getPane('boundaryPane').style.pointerEvents = 'none';
-            
+
             const bounds = [];
-            const markers = [];
-            
+
             // Process locations
             sortedLocations.forEach((loc, idx) => {
                 const isPrimary = idx === 0;
                 const color = isPrimary ? '#3daee9' : (idx < 3 ? '#5ec0ff' : '#88c0d0');
                 const size = isPrimary ? 16 : 12;
-                
+
                 // Add marker
                 const icon = L.divIcon({
                     className: 'map-marker',
                     html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; box-shadow:0 0 12px ${color}, 0 0 20px ${color}; border:2px solid white;"></div>`,
                     iconSize: [size, size]
                 });
-                
+
                 const marker = L.marker([loc.lat, loc.lon], { icon: icon }).addTo(mapInstance);
                 marker.bindPopup(`<b>${loc.name}</b><br>Type: ${loc.type}<br>Relevance: ${(loc.relevance || 0.5).toFixed(2)}`);
                 bounds.push([loc.lat, loc.lon]);
-                markers.push(marker);
+                mapMarkers.push({ marker, loc, color });
             });
-            
+
             // Fit map to bounds
             if (bounds.length > 0) {
                 setTimeout(() => {
@@ -1023,25 +1072,60 @@
                     }
                 }, 100);
             }
+
+            // Build legend
+            buildMapLegend(sortedLocations);
+        }
+
+        function buildMapLegend(locations) {
+            const legend = document.getElementById('map-legend');
+            if (!legend) return;
+
+            let html = '<span style="font-weight: 600; color: var(--accent-bright);">Locations:</span> ';
+            locations.forEach((loc, idx) => {
+                const color = idx === 0 ? '#3daee9' : (idx < 3 ? '#5ec0ff' : '#88c0d0');
+                html += `<span class="map-legend-item" data-idx="${idx}" style="display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                    <span style="width: 8px; height: 8px; background: ${color}; border-radius: 50%; box-shadow: 0 0 6px ${color};"></span>
+                    <span style="font-size: 0.75rem; color: var(--text);">${escapeHtml(loc.name)}</span>
+                </span>`;
+            });
+
+            legend.innerHTML = html;
+
+            // Add click handlers to focus on location
+            legend.querySelectorAll('.map-legend-item').forEach((item, idx) => {
+                item.addEventListener('click', () => {
+                    if (mapMarkers[idx] && mapInstance) {
+                        const { marker, loc } = mapMarkers[idx];
+                        mapInstance.setView([loc.lat, loc.lon], 10);
+                        marker.openPopup();
+                    }
+                });
+            });
         }
         
         // Send query
         async function sendQuery() {
             const q = chatInput.value.trim();
             if (!q) return;
-            
+
             addMessage(escapeHtml(q), true);
             addHistory(q);
-            
+
             chatInput.value = '';
             chatInput.disabled = true;
             sendBtn.disabled = true;
             typingIndicator.classList.add('show');
             pillProcessing.style.display = 'flex';
-            
+
+            // Show loading states
+            if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
+            if (reasoningLoading) reasoningLoading.style.display = 'flex';
+            if (mapsLoading) mapsLoading.style.display = 'flex';
+
             const responseEl = addMessage('');
             rawStreamBuffer = '';
-            
+
             const t0 = Date.now();
             
             try {
@@ -1088,18 +1172,15 @@
                                 // Could add tool result display here
                             } else if (evt.type === 'locations_found') {
                                 // Handle extracted locations - render map
-                                const mapsWindow = document.getElementById('window-maps');
+                                // Hide maps loading
+                                if (mapsLoading) mapsLoading.style.display = 'none';
+
                                 const mapContainer = document.getElementById('map-container');
-                                const mapLegend = document.getElementById('map-legend');
-                                
+
                                 if (evt.locations && evt.locations.length > 0) {
-                                    // Update map legend
-                                    const locationNames = evt.locations.map(loc => loc.name).join(', ');
-                                    mapLegend.innerHTML = `<span>▸ ${evt.locations.length} locations: ${locationNames}</span>`;
-                                    
-                                    // Render the map
+                                    // Render the map (includes building legend)
                                     renderMap(evt.locations, mapContainer);
-                                    
+
                                     // Show maps window if minimized
                                     const winData = windowManager.windows.get('window-maps');
                                     if (winData && winData.minimized) {
