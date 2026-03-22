@@ -1,7 +1,7 @@
 <h1 align="center">GeoVision Lab</h1>
 
 <p align="center">
-  <em>Autonomous Geopolitical Intelligence Platform — fully containerized, privacy-first</em>
+  <em>Local-first RAG platform for geopolitical analysis — fully containerized, privacy-first</em>
 </p>
 
 <p align="center">
@@ -22,11 +22,12 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 - **Multi-Agent AI** — Worker + Critic + Location Extractor architecture with autonomous tool selection
 - **Hybrid Search** — Vector search (archival) + Web search (live events)
 - **Automatic Map Rendering** — Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
-- **3-Lane UI** — Reasoning Chain | Text Result | Maps Result with resizable panels
+- **3-Panel UI** — Reasoning Chain | Text Result | Maps Result with resizable panels
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
 - **Privacy-First** — All inference runs locally — no data leaves your machine
 - **Observability** — Grafana + Loki logging, Dozzle real-time monitoring
 - **Model Switching** — Dynamic Qwen 3.5 selection (9B/4B) at runtime
+- **GPU Status Indicator** — Real-time display of GPU acceleration status
 
 ### Test Data Included
 
@@ -40,7 +41,7 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 %%{init: {'theme': 'dark'}}%%
 graph TB
     subgraph User["User Interface"]
-        UI["Tactical Terminal<br/>(3-Lane UI + Leaflet)"]
+        UI["Web Interface<br/>(3-Panel UI + Leaflet)"]
     end
 
     subgraph Backend["Backend Services"]
@@ -115,7 +116,7 @@ This orchestrates:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Intelligence Terminal | [localhost:8000](http://localhost:8000) | — |
+| Web Interface | [localhost:8000](http://localhost:8000) | — |
 | MongoDB Browser | [localhost:8081](http://localhost:8081) | `admin` / `geovision` |
 | Container Logs | [localhost:9999](http://localhost:9999) | — |
 | Grafana Dashboards | [localhost:3000](http://localhost:3000) | `admin` / `geovision` |
@@ -134,7 +135,7 @@ GeoVision Lab supports **dynamic switching between different Qwen 3.5 LLM models
 | **Qwen 3.5 4B** | 4B | Balanced | High | Default — general purpose |
 
 **To switch models:**
-1. Open the Tactical UI at [localhost:8000](http://localhost:8000)
+1. Open the Web Interface at [localhost:8000](http://localhost:8000)
 2. Use the model selector dropdown above the chat input
 3. Selection takes effect immediately
 
@@ -162,10 +163,11 @@ The platform includes a sample document (`documents/fantasy.md`) about the **Duc
 2. **Vector Search** — Ask about DuckyDucks; watch `vector_search` tool trigger
 3. **Live Search** — Ask about breaking news; verify `duckduckgo_search` execution
 4. **Time Awareness** — Ask "What exact date and time is it right now?"
-5. **Map Rendering** — Ask about any real location (e.g., "Tell me about Paris"); verify automatic map appears in Maps lane
+5. **Map Rendering** — Ask about any real location (e.g., "Tell me about Paris"); verify automatic map appears in Maps panel
 6. **Model Switching** — Switch between Qwen variants; observe quality/speed differences
-7. **3-Lane UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Maps Result shows geocoded locations
-8. **Resizable Panels** — Drag the vertical handles between lanes to adjust widths
+7. **3-Panel UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Maps Result shows geocoded locations
+8. **Resizable Panels** — Drag the vertical handles between panels to adjust widths
+9. **GPU Status** — Check the top panel shows correct GPU status (Active/Standby/CPU Only)
 
 ---
 
@@ -179,7 +181,7 @@ geo-vision-lab/
 │   ├── core/               # Global settings & config
 │   ├── ingestion/          # RAG data processing pipeline
 │   └── services/           # LLM & MongoDB connectors
-├── static/                 # Vanilla JS / CSS Tactical UI
+├── static/                 # Vanilla JS / CSS Web Interface
 ├── documents/
 │   ├── pdf/                # Your source PDFs
 │   └── fantasy.md          # Sample test data
@@ -224,7 +226,3 @@ geo-vision-lab/
 | **Containerization** | Docker + Docker Compose |
 
 ---
-
-<p align="center">
-  <strong>Built with 🦆 for geopolitical intelligence analysis</strong>
-</p>
