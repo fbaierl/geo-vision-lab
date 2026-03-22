@@ -15,7 +15,7 @@ All dependencies are injected via the DI container - no global state.
 import logging
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError, GeocoderQuotaExceeded
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import time
 import os
 
