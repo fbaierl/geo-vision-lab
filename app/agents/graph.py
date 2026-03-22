@@ -197,11 +197,20 @@ def extract_locations(state: AgentState) -> Dict[str, Any]:
             query=user_query,
             response_text=assistant_response
         )
+        
+        # Check for geocoding errors and emit warnings
+        if hasattr(location_extractor, 'geocoding_errors') and location_extractor.geocoding_errors:
+            for error in location_extractor.geocoding_errors:
+                logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error: {error['message']}")
+                # Note: We continue processing - don't fail the entire flow
+        
         logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s)")
         return {STATE_KEY_EXTRACTED_LOCATIONS: locations}
 
     except Exception as e:
         logger.error(f"[LOCATION_EXTRACTOR] Extraction failed: {e}")
+        # Return empty list - don't fail the entire flow
+        # The error will be logged and can be displayed in the UI
         return {STATE_KEY_EXTRACTED_LOCATIONS: []}
 
 
@@ -418,6 +427,15 @@ async def process_query_stream(
                     output = event.get("data", {}).get("output", {})
                     locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
                     logger.debug(f"[LOCATION_EXTRACTOR] Found {len(locations)} locations")
+                    
+                    # Check for extraction errors
+                    if not locations or len(locations) == 0:
+                        # Emit error event if extraction failed
+                        yield {
+                            "type": "location_error",
+                            "tool": "location_extractor",
+                            "content": "Location extraction completed but no locations were found. This may be due to:\n- No geographic locations in the response text\n- Nominatim rate limiting (HTTP 429)\n- Geocoding service unavailable\n\nThe query response is still valid - continuing without map visualization.",
+                        }
                     # Store for later - we'll emit after prioritization
                     pass
 
