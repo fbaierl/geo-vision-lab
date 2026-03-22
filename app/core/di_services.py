@@ -20,7 +20,7 @@ from typing import Any, Dict
 
 from app.core.di_database import get_mongo_client, get_collection
 from app.core.di_nlp import get_embeddings, get_ner_pipeline, get_geocode_cache
-from app.core.di_llm import get_reviewer_llm
+from app.core.di_llm import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ def get_location_prioritizer() -> Any:
         LocationPrioritizerService instance
     """
     from app.services.location_prioritizer import LocationPrioritizerService
-    return LocationPrioritizerService(reviewer_llm=get_reviewer_llm())
+    return LocationPrioritizerService(llm=get_llm())
 
 
 def ensure_vector_index() -> None:

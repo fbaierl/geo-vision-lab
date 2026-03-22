@@ -14,7 +14,7 @@ from langchain_ollama import ChatOllama
 import json
 import re
 
-from app.core.di_llm import get_reviewer_llm
+from app.core.di_llm import get_llm
 
 logger = logging.getLogger("agent_flow")
 
@@ -24,11 +24,11 @@ class LocationPrioritizerService:
     Location prioritizer service with explicit dependencies.
 
     Usage:
-        service = LocationPrioritizerService(reviewer_llm=get_reviewer_llm())
+        service = LocationPrioritizerService(llm=get_llm())
     """
 
-    def __init__(self, reviewer_llm: ChatOllama):
-        self.reviewer_llm = reviewer_llm
+    def __init__(self, llm: ChatOllama):
+        self.llm = llm
 
     def prioritize_locations(
         self,
@@ -61,15 +61,6 @@ class LocationPrioritizerService:
             if name not in candidates_by_name:
                 candidates_by_name[name] = []
             candidates_by_name[name].append(loc)
-
-        # If only 1-2 unique locations, keep the best candidate for each
-        if len(candidates_by_name) <= 2:
-            result = []
-            for name, candidates in candidates_by_name.items():
-                best = self._select_best_candidate(candidates)
-                best['relevance'] = 1.0
-                result.append(best)
-            return result
 
         # Build location list for the prompt - group candidates by name
         location_groups = []
@@ -128,7 +119,7 @@ Respond ONLY with a JSON array in this format:
 Only include entries with relevance >= 0.4. Limit to 5 locations max."""
 
         try:
-            response = self.reviewer_llm.invoke(prompt)
+            response = self.llm.invoke(prompt)
             response_content = response.content if hasattr(response, 'content') else str(response)
 
             # Parse JSON from response
@@ -232,4 +223,4 @@ def get_location_prioritizer() -> LocationPrioritizerService:
     """
     Get location prioritizer service with dependencies from DI container.
     """
-    return LocationPrioritizerService(reviewer_llm=get_reviewer_llm())
+    return LocationPrioritizerService(llm=get_llm())

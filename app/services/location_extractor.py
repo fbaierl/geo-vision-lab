@@ -56,6 +56,8 @@ class LocationExtractorService:
         Extract geographic locations from text using Hugging Face NER.
 
         Returns list of dicts with 'name' and 'type' keys.
+        Skips entities shorter than 3 characters to filter out abbreviations
+        like 'IRA', 'UN', 'EU' that are often misclassified as locations.
         """
         try:
             ner_results = self.ner_pipeline(text)
@@ -66,6 +68,10 @@ class LocationExtractorService:
             for entity in ner_results:
                 entity_label = entity.get("entity_group", entity.get("label", ""))
                 entity_text = entity.get("word", entity.get("entity_text", ""))
+
+                # Skip entities shorter than 3 characters (filters out abbreviations)
+                if len(entity_text) < 3:
+                    continue
 
                 if entity_label in ["LOC", "GPE", "FAC"]:
                     if entity_text not in seen:
