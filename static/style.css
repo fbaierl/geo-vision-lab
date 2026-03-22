@@ -859,6 +859,19 @@ html, body {
     color: var(--accent-bright) !important;
 }
 
+.reasoning-step-toggle {
+    user-select: none;
+    font-weight: 600;
+}
+
+.reasoning-step-toggle:hover {
+    opacity: 0.8;
+}
+
+.reasoning-step-content {
+    position: relative;
+}
+
 .reasoning-placeholder {
     padding: 32px;
     text-align: center;

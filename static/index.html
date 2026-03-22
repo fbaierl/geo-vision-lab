@@ -784,6 +784,9 @@
         // Maps
         const mapsLoading = document.getElementById('maps-loading');
         
+        // Store reasoning steps by tool for updating with results
+        const reasoningSteps = new Map();
+        
         // Model selector
         const modelToggle = document.getElementById('model-toggle');
         const modelMenu = document.getElementById('model-menu');
@@ -944,7 +947,7 @@
                 reasoningLoading.style.display = 'none';
                 if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
             }
-            
+
             if (reasoningPlaceholder) reasoningPlaceholder.remove();
 
             const step = document.createElement('div');
@@ -952,21 +955,19 @@
 
             let label = phase.toUpperCase();
             let desc = '';
-            let hasData = false;
-            let dataContent = null;
+            let hasQuery = false;
+            let hasResult = false;
 
             if (phase === 'reasoning') desc = 'Planning analysis approach...';
             else if (phase === 'reviewing') desc = 'QA review in progress...';
             else if (phase === 'revising') desc = 'Formulating corrected response...';
             else if (phase === 'vector_search') {
                 desc = `Searching archival database...`;
-                hasData = true;
-                dataContent = query;
+                hasQuery = true;
             }
             else if (phase === 'online_search') {
                 desc = `Querying live sources...`;
-                hasData = true;
-                dataContent = query;
+                hasQuery = true;
             }
             else if (phase === 'streaming') desc = 'Delivering response...';
             else if (phase === 'extracting_locations') desc = 'Extracting geographic locations...';
@@ -976,30 +977,65 @@
             step.innerHTML = `
                 <div class="reasoning-step-label">▸ ${label}${modelTag}</div>
                 <div class="reasoning-step-desc">${escapeHtml(desc)}</div>
-                ${hasData ? `<div class="reasoning-step-data-toggle" style="margin-top: 6px; font-size: 0.7rem; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
-                    <span style="transition: transform 0.2s;">▼</span>
-                    <span>View query data</span>
+                ${hasQuery ? `<div class="reasoning-step-section" style="margin-top: 8px;">
+                    <div class="reasoning-step-toggle" data-type="query" style="font-size: 0.7rem; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                        <span class="arrow" style="transition: transform 0.2s;">▼</span>
+                        <span>Query</span>
+                    </div>
+                    <div class="reasoning-step-content" style="display: none; margin-top: 6px; padding: 8px; background: var(--bg-desktop); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 150px; overflow-y: auto;">${escapeHtml(query)}</div>
+                </div>` : ''}
+                <div class="reasoning-step-result-section" style="display: none; margin-top: 8px;">
+                    <div class="reasoning-step-toggle" data-type="result" style="font-size: 0.7rem; color: var(--green); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                        <span class="arrow" style="transition: transform 0.2s;">▼</span>
+                        <span>Result</span>
+                    </div>
+                    <div class="reasoning-step-content" style="display: none; margin-top: 6px; padding: 8px; background: var(--bg-desktop); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;"></div>
                 </div>
-                <div class="reasoning-step-data" style="display: none; margin-top: 8px; padding: 8px; background: var(--bg-desktop); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;">${escapeHtml(dataContent)}</div>` : ''}
             `;
-            
+
             reasoningContent.appendChild(step);
-            
-            // Add toggle functionality
-            if (hasData) {
-                const toggle = step.querySelector('.reasoning-step-data-toggle');
-                const data = step.querySelector('.reasoning-step-data');
-                const arrow = toggle.querySelector('span');
-                
-                toggle.addEventListener('click', () => {
-                    const isExpanded = data.style.display !== 'none';
-                    data.style.display = isExpanded ? 'none' : 'block';
-                    arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
-                    toggle.querySelector('span:last-child').textContent = isExpanded ? 'View query data' : 'Hide query data';
+
+            // Store step reference for later result update
+            if (tool && tool !== 'unknown') {
+                reasoningSteps.set(tool, {
+                    step,
+                    resultSection: step.querySelector('.reasoning-step-result-section'),
+                    resultContent: step.querySelector('.reasoning-step-result-section .reasoning-step-content')
                 });
             }
-            
+
+            // Add toggle functionality for all toggles
+            step.querySelectorAll('.reasoning-step-toggle').forEach(toggle => {
+                toggle.addEventListener('click', () => {
+                    const content = toggle.nextElementSibling;
+                    const arrow = toggle.querySelector('.arrow');
+                    const isExpanded = content.style.display !== 'none';
+                    content.style.display = isExpanded ? 'none' : 'block';
+                    arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+                });
+            });
+
             reasoningContent.scrollTop = reasoningContent.scrollHeight;
+        }
+
+        function addReasoningResult(tool, summary, content) {
+            const stepData = reasoningSteps.get(tool);
+            if (!stepData) return;
+
+            const { resultSection, resultContent } = stepData;
+            
+            // Show result section
+            resultSection.style.display = 'block';
+            
+            // Truncate content if too long
+            let displayContent = summary;
+            if (content && content.length > 500) {
+                displayContent = summary + '\n\n' + content.substring(0, 500) + '\n\n... (truncated)';
+            } else if (content) {
+                displayContent = summary + '\n\n' + content;
+            }
+            
+            resultContent.textContent = displayContent;
         }
 
         // Map rendering
@@ -1169,7 +1205,8 @@
                                     statTool.textContent = evt.tool;
                                 }
                             } else if (evt.type === 'tool_result') {
-                                // Could add tool result display here
+                                // Display tool result in reasoning step
+                                addReasoningResult(evt.tool, evt.summary, evt.content);
                             } else if (evt.type === 'locations_found') {
                                 // Handle extracted locations - render map
                                 // Hide maps loading
