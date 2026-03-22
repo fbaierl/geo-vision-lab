@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeoVision Lab — Arch Linux Style</title>
     <meta name="description" content="GeoVision Lab — Autonomous Geopolitical Intelligence Platform">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2315171e'/%3E%3Cpath d='M16 4L28 10v12L16 28 4 22V10L16 4z' fill='none' stroke='%233daee9' stroke-width='2'/%3E%3Cpath d='M16 8l8 4v8l-8 4-8-4V12l8-4z' fill='%233daee9' opacity='0.3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235ec0ff'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -316,6 +317,11 @@
                 // Global mouse events for drag/resize
                 document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
                 document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+
+                // Apply snap layout on init
+                this.applySnapLayout();
+                if (snapBtn) snapBtn.classList.add('active');
+                this.snapped = true;
 
                 // Focus first window
                 this.focusWindow('window-chat');
@@ -925,13 +931,13 @@
         // Reasoning functions
         function addReasoningStep(phase, tool, query, model) {
             if (reasoningPlaceholder) reasoningPlaceholder.remove();
-            
+
             const step = document.createElement('div');
             step.className = `reasoning-step phase-${phase}`;
-            
+
             let label = phase.toUpperCase();
             let desc = '';
-            
+
             if (phase === 'reasoning') desc = 'Planning analysis approach...';
             else if (phase === 'reviewing') desc = 'QA review in progress...';
             else if (phase === 'revising') desc = 'Formulating corrected response...';
@@ -939,13 +945,84 @@
             else if (phase === 'online_search') desc = `Querying live sources...`;
             else if (phase === 'streaming') desc = 'Delivering response...';
             else if (phase === 'extracting_locations') desc = 'Extracting geographic locations...';
-            
+
             step.innerHTML = `
                 <div class="reasoning-step-label">▸ ${label}</div>
                 <div class="reasoning-step-desc">${escapeHtml(desc)}</div>
             `;
             reasoningContent.appendChild(step);
             reasoningContent.scrollTop = reasoningContent.scrollHeight;
+        }
+
+        // Map rendering
+        let mapInstance = null;
+        
+        function renderMap(locations, container) {
+            if (!container) return;
+            
+            // Clear existing map
+            container.innerHTML = '';
+            
+            if (!locations || locations.length === 0) return;
+            
+            // Sort by relevance
+            const sortedLocations = [...locations].sort((a, b) => 
+                (b.relevance || 0.5) - (a.relevance || 0.5)
+            );
+            
+            // Create map
+            mapInstance = L.map(container, {
+                zoomControl: true,
+                attributionControl: true
+            });
+            
+            // Add dark tile layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(mapInstance);
+            
+            // Create boundary pane
+            mapInstance.createPane('boundaryPane');
+            mapInstance.getPane('boundaryPane').style.zIndex = 600;
+            mapInstance.getPane('boundaryPane').style.pointerEvents = 'none';
+            
+            const bounds = [];
+            const markers = [];
+            
+            // Process locations
+            sortedLocations.forEach((loc, idx) => {
+                const isPrimary = idx === 0;
+                const color = isPrimary ? '#3daee9' : (idx < 3 ? '#5ec0ff' : '#88c0d0');
+                const size = isPrimary ? 16 : 12;
+                
+                // Add marker
+                const icon = L.divIcon({
+                    className: 'map-marker',
+                    html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; box-shadow:0 0 12px ${color}, 0 0 20px ${color}; border:2px solid white;"></div>`,
+                    iconSize: [size, size]
+                });
+                
+                const marker = L.marker([loc.lat, loc.lon], { icon: icon }).addTo(mapInstance);
+                marker.bindPopup(`<b>${loc.name}</b><br>Type: ${loc.type}<br>Relevance: ${(loc.relevance || 0.5).toFixed(2)}`);
+                bounds.push([loc.lat, loc.lon]);
+                markers.push(marker);
+            });
+            
+            // Fit map to bounds
+            if (bounds.length > 0) {
+                setTimeout(() => {
+                    try {
+                        const group = L.featureGroup(bounds.map(b => L.marker(b)));
+                        mapInstance.fitBounds(group.getBounds(), { padding: [50, 50] });
+                    } catch (e) {
+                        if (bounds.length === 1 && Array.isArray(bounds[0])) {
+                            mapInstance.setView(bounds[0], 6);
+                        }
+                    }
+                }, 100);
+            }
         }
         
         // Send query
@@ -999,7 +1076,7 @@
                         
                         try {
                             const evt = JSON.parse(jsonStr);
-                            
+
                             if (evt.type === 'meta' && evt.thread_id) {
                                 threadId = evt.thread_id;
                             } else if (evt.type === 'status') {
@@ -1009,6 +1086,26 @@
                                 }
                             } else if (evt.type === 'tool_result') {
                                 // Could add tool result display here
+                            } else if (evt.type === 'locations_found') {
+                                // Handle extracted locations - render map
+                                const mapsWindow = document.getElementById('window-maps');
+                                const mapContainer = document.getElementById('map-container');
+                                const mapLegend = document.getElementById('map-legend');
+                                
+                                if (evt.locations && evt.locations.length > 0) {
+                                    // Update map legend
+                                    const locationNames = evt.locations.map(loc => loc.name).join(', ');
+                                    mapLegend.innerHTML = `<span>▸ ${evt.locations.length} locations: ${locationNames}</span>`;
+                                    
+                                    // Render the map
+                                    renderMap(evt.locations, mapContainer);
+                                    
+                                    // Show maps window if minimized
+                                    const winData = windowManager.windows.get('window-maps');
+                                    if (winData && winData.minimized) {
+                                        windowManager.restoreWindow('window-maps');
+                                    }
+                                }
                             } else if (evt.type === 'token') {
                                 typingIndicator.classList.remove('show');
                                 appendToMessage(responseEl, evt.content);
