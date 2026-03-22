@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoVision Lab — Arch Linux Style</title>
+    <title>GeoVision Lab</title>
     <meta name="description" content="GeoVision Lab — Autonomous Geopolitical Intelligence Platform">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2315171e'/%3E%3Cpath d='M16 4L28 10v12L16 28 4 22V10L16 4z' fill='none' stroke='%233daee9' stroke-width='2'/%3E%3Cpath d='M16 8l8 4v8l-8 4-8-4V12l8-4z' fill='%233daee9' opacity='0.3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235ec0ff'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -931,13 +931,32 @@
             el.textContent = rawStreamBuffer + '○';
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
-        
+
         function renderMarkdown(el) {
             if (typeof marked !== 'undefined' && rawStreamBuffer) {
                 el.innerHTML = marked.parse(rawStreamBuffer);
                 el.classList.add('md-rendered');
             }
             rawStreamBuffer = '';
+        }
+
+        // Live markdown rendering during streaming
+        let markdownRenderTimeout = null;
+        
+        function appendToMessageLive(el, text) {
+            rawStreamBuffer += text;
+            
+            // Render markdown live (debounced)
+            if (markdownRenderTimeout) clearTimeout(markdownRenderTimeout);
+            markdownRenderTimeout = setTimeout(() => {
+                if (rawStreamBuffer) {
+                    el.innerHTML = marked.parse(rawStreamBuffer) + '<span class="cursor-blink">○</span>';
+                    el.classList.add('md-rendered');
+                }
+            }, 100);
+            
+            // Auto-scroll
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
         // Reasoning functions
@@ -972,24 +991,24 @@
             else if (phase === 'streaming') desc = 'Delivering response...';
             else if (phase === 'extracting_locations') desc = 'Extracting geographic locations...';
 
-            let modelTag = model ? ` <span style="font-size: 0.6rem; color: var(--text-muted);">[${model}]</span>` : '';
+            let modelTag = model ? ` <span class="reasoning-step-model">[${model}]</span>` : '';
 
             step.innerHTML = `
                 <div class="reasoning-step-label">▸ ${label}${modelTag}</div>
                 <div class="reasoning-step-desc">${escapeHtml(desc)}</div>
-                ${hasQuery ? `<div class="reasoning-step-section" style="margin-top: 8px;">
-                    <div class="reasoning-step-toggle" data-type="query" style="font-size: 0.7rem; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
-                        <span class="arrow" style="transition: transform 0.2s;">▼</span>
+                ${hasQuery ? `<div class="reasoning-step-section">
+                    <div class="reasoning-step-toggle reasoning-step-query-toggle">
+                        <span class="arrow">▼</span>
                         <span>Query</span>
                     </div>
-                    <div class="reasoning-step-content" style="display: none; margin-top: 6px; padding: 8px; background: var(--bg-desktop); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 150px; overflow-y: auto;">${escapeHtml(query)}</div>
+                    <div class="reasoning-step-content reasoning-step-query-content">${escapeHtml(query)}</div>
                 </div>` : ''}
-                <div class="reasoning-step-result-section" style="display: none; margin-top: 8px;">
-                    <div class="reasoning-step-toggle" data-type="result" style="font-size: 0.7rem; color: var(--green); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
-                        <span class="arrow" style="transition: transform 0.2s;">▼</span>
+                <div class="reasoning-step-result-section">
+                    <div class="reasoning-step-toggle reasoning-step-result-toggle">
+                        <span class="arrow">▼</span>
                         <span>Result</span>
                     </div>
-                    <div class="reasoning-step-content" style="display: none; margin-top: 6px; padding: 8px; background: var(--bg-desktop); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;"></div>
+                    <div class="reasoning-step-content reasoning-step-result-content"></div>
                 </div>
             `;
 
@@ -1000,7 +1019,7 @@
                 reasoningSteps.set(tool, {
                     step,
                     resultSection: step.querySelector('.reasoning-step-result-section'),
-                    resultContent: step.querySelector('.reasoning-step-result-section .reasoning-step-content')
+                    resultContent: step.querySelector('.reasoning-step-result-content')
                 });
             }
 
@@ -1038,6 +1057,22 @@
             resultContent.textContent = displayContent;
         }
 
+        function addReasoningError(tool, errorMessage) {
+            // Create or update error step
+            const errorStep = document.createElement('div');
+            errorStep.className = 'reasoning-step phase-error';
+            
+            const errorHTML = `
+                <div class="reasoning-step-label" style="color: var(--amber);">▸ ERROR</div>
+                <div class="reasoning-step-desc" style="color: var(--text);">Tool: ${escapeHtml(tool)}</div>
+                <div class="reasoning-step-content" style="display: block; margin-top: 6px; padding: 8px; background: rgba(229, 57, 53, 0.1); border: 1px solid var(--red); border-radius: 4px; font-size: 0.75rem; color: var(--red); white-space: pre-wrap; word-break: break-word;">${escapeHtml(errorMessage)}</div>
+            `;
+            
+            errorStep.innerHTML = errorHTML;
+            reasoningContent.appendChild(errorStep);
+            reasoningContent.scrollTop = reasoningContent.scrollHeight;
+        }
+
         // Map rendering
         let mapInstance = null;
         let mapMarkers = [];
@@ -1045,9 +1080,15 @@
         function renderMap(locations, container) {
             if (!container) return;
 
-            // Clear existing map
-            container.innerHTML = '';
+            // Properly remove existing map
+            if (mapInstance) {
+                mapInstance.remove();
+                mapInstance = null;
+            }
             mapMarkers = [];
+
+            // Clear container
+            container.innerHTML = '';
 
             if (!locations || locations.length === 0) return;
 
@@ -1056,61 +1097,76 @@
                 (b.relevance || 0.5) - (a.relevance || 0.5)
             );
 
-            // Create map
-            mapInstance = L.map(container, {
-                zoomControl: true,
-                attributionControl: true
-            });
-
-            // Add dark tile layer
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-                subdomains: 'abcd',
-                maxZoom: 19
-            }).addTo(mapInstance);
-
-            // Create boundary pane
-            mapInstance.createPane('boundaryPane');
-            mapInstance.getPane('boundaryPane').style.zIndex = 600;
-            mapInstance.getPane('boundaryPane').style.pointerEvents = 'none';
-
-            const bounds = [];
-
-            // Process locations
-            sortedLocations.forEach((loc, idx) => {
-                const isPrimary = idx === 0;
-                const color = isPrimary ? '#3daee9' : (idx < 3 ? '#5ec0ff' : '#88c0d0');
-                const size = isPrimary ? 16 : 12;
-
-                // Add marker
-                const icon = L.divIcon({
-                    className: 'map-marker',
-                    html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; box-shadow:0 0 12px ${color}, 0 0 20px ${color}; border:2px solid white;"></div>`,
-                    iconSize: [size, size]
+            // Small delay to ensure container is visible and sized
+            setTimeout(() => {
+                // Ensure container has dimensions
+                if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+                    console.warn('Map container has no dimensions, waiting...');
+                    setTimeout(() => initMap(), 100);
+                    return;
+                }
+                initMap();
+            }, 50);
+            
+            function initMap() {
+                // Create map
+                mapInstance = L.map(container, {
+                    zoomControl: true,
+                    attributionControl: true,
+                    fadeAnimation: true,
+                    zoomAnimation: true
                 });
 
-                const marker = L.marker([loc.lat, loc.lon], { icon: icon }).addTo(mapInstance);
-                marker.bindPopup(`<b>${loc.name}</b><br>Type: ${loc.type}<br>Relevance: ${(loc.relevance || 0.5).toFixed(2)}`);
-                bounds.push([loc.lat, loc.lon]);
-                mapMarkers.push({ marker, loc, color });
-            });
+                // Add dark tile layer
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                    subdomains: 'abcd',
+                    maxZoom: 19
+                }).addTo(mapInstance);
 
-            // Fit map to bounds
-            if (bounds.length > 0) {
-                setTimeout(() => {
-                    try {
-                        const group = L.featureGroup(bounds.map(b => L.marker(b)));
-                        mapInstance.fitBounds(group.getBounds(), { padding: [50, 50] });
-                    } catch (e) {
-                        if (bounds.length === 1 && Array.isArray(bounds[0])) {
-                            mapInstance.setView(bounds[0], 6);
+                // Create boundary pane
+                mapInstance.createPane('boundaryPane');
+                mapInstance.getPane('boundaryPane').style.zIndex = 600;
+                mapInstance.getPane('boundaryPane').style.pointerEvents = 'none';
+
+                const bounds = [];
+
+                // Process locations
+                sortedLocations.forEach((loc, idx) => {
+                    const isPrimary = idx === 0;
+                    const color = isPrimary ? '#3daee9' : (idx < 3 ? '#5ec0ff' : '#88c0d0');
+                    const size = isPrimary ? 16 : 12;
+
+                    // Add marker
+                    const icon = L.divIcon({
+                        className: 'map-marker',
+                        html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; box-shadow:0 0 12px ${color}, 0 0 20px ${color}; border:2px solid white;"></div>`,
+                        iconSize: [size, size]
+                    });
+
+                    const marker = L.marker([loc.lat, loc.lon], { icon: icon }).addTo(mapInstance);
+                    marker.bindPopup(`<b>${loc.name}</b><br>Type: ${loc.type}<br>Relevance: ${(loc.relevance || 0.5).toFixed(2)}`);
+                    bounds.push([loc.lat, loc.lon]);
+                    mapMarkers.push({ marker, loc, color });
+                });
+
+                // Fit map to bounds
+                if (bounds.length > 0) {
+                    setTimeout(() => {
+                        try {
+                            const group = L.featureGroup(bounds.map(b => L.marker(b)));
+                            mapInstance.fitBounds(group.getBounds(), { padding: [50, 50] });
+                        } catch (e) {
+                            if (bounds.length === 1 && Array.isArray(bounds[0])) {
+                                mapInstance.setView(bounds[0], 6);
+                            }
                         }
-                    }
-                }, 100);
-            }
+                    }, 50);
+                }
 
-            // Build legend
-            buildMapLegend(sortedLocations);
+                // Build legend
+                buildMapLegend(sortedLocations);
+            }
         }
 
         function buildMapLegend(locations) {
@@ -1226,9 +1282,20 @@
                                 }
                             } else if (evt.type === 'token') {
                                 typingIndicator.classList.remove('show');
-                                appendToMessage(responseEl, evt.content);
+                                appendToMessageLive(responseEl, evt.content);
                             } else if (evt.type === 'error') {
                                 responseEl.innerHTML = `<div class="error-message">Error: ${escapeHtml(evt.content)}</div>`;
+                                // Also show error in reasoning window
+                                addReasoningError(evt.tool || 'unknown', evt.content);
+                            } else if (evt.type === 'location_error') {
+                                // Handle location extraction errors gracefully
+                                addReasoningError('location_extractor', evt.content);
+                                // Hide maps loading
+                                if (mapsLoading) mapsLoading.style.display = 'none';
+                                const mapLegend = document.getElementById('map-legend');
+                                if (mapLegend) {
+                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Location extraction failed - continuing without maps</span>';
+                                }
                             }
                         } catch (parseErr) {
                             // Skip malformed
@@ -1236,9 +1303,11 @@
                     }
                 }
                 
-                // Finalize
-                renderMarkdown(responseEl);
-                
+                // Finalize - clear cursor
+                if (markdownRenderTimeout) clearTimeout(markdownRenderTimeout);
+                const cursor = responseEl.querySelector('.cursor-blink');
+                if (cursor) cursor.remove();
+
                 const ms = Date.now() - t0;
                 queryCount++;
                 totalMs += ms;

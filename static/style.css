@@ -834,6 +834,10 @@ html, body {
 .reasoning-step.phase-online_search { border-color: var(--green); }
 .reasoning-step.phase-streaming { border-color: var(--text-muted); }
 .reasoning-step.phase-extracting_locations { border-color: var(--purple); }
+.reasoning-step.phase-error { 
+    border-color: var(--red); 
+    background: rgba(229, 57, 53, 0.05);
+}
 
 .reasoning-step-label {
     font-size: 0.65rem;
@@ -862,14 +866,62 @@ html, body {
 .reasoning-step-toggle {
     user-select: none;
     font-weight: 600;
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    transition: opacity 0.15s;
 }
 
 .reasoning-step-toggle:hover {
     opacity: 0.8;
 }
 
+.reasoning-step-query-toggle {
+    color: var(--accent);
+}
+
+.reasoning-step-result-toggle {
+    color: var(--green);
+}
+
 .reasoning-step-content {
-    position: relative;
+    display: none;
+    margin-top: 6px;
+    padding: 8px;
+    background: var(--bg-desktop);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.reasoning-step-query-content {
+    color: var(--text-muted);
+    max-height: 150px;
+}
+
+.reasoning-step-result-content {
+    color: var(--text);
+}
+
+.reasoning-step-result-section {
+    display: none;
+    margin-top: 8px;
+}
+
+.reasoning-step-model {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+}
+
+.reasoning-step-section {
+    margin-top: 8px;
 }
 
 .reasoning-placeholder {
@@ -1179,6 +1231,19 @@ html, body {
     padding: 12px;
     border-radius: 6px;
     font-size: 0.85rem;
+}
+
+/* ═══ STREAMING CURSOR ═══ */
+.cursor-blink {
+    color: var(--accent);
+    animation: blink 0.7s step-end infinite;
+    font-weight: bold;
+    margin-left: 4px;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
 }
 
 /* ═══ STATUS WINDOW ═══ */

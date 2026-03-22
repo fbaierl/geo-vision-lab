@@ -14,14 +14,19 @@ All dependencies are injected via the DI container - no global state.
 
 import logging
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
-from typing import List, Dict, Any, Optional
+from geopy.exc import GeocoderTimedOut, GeocoderServiceError, GeocoderQuotaExceeded
+from typing import List, Dict, Any, Optional, Tuple
 import time
+import os
 
 from app.core.di_nlp import get_ner_pipeline
 from app.core.di_nlp import get_geocode_cache
 
 logger = logging.getLogger("agent_flow")
+
+# Nominatim URL configuration
+NOMINATIM_URL = os.getenv("NOMINATIM_URL", None)
+NOMINATIM_TIMEOUT = int(os.getenv("NOMINATIM_TIMEOUT", "10"))
 
 
 class LocationExtractorService:
@@ -30,7 +35,7 @@ class LocationExtractorService:
 
     Usage:
         from app.core.di_nlp import get_ner_pipeline, get_geocode_cache
-        
+
         service = LocationExtractorService(
             ner_pipeline=get_ner_pipeline(),
             geocode_cache=get_geocode_cache()
@@ -44,6 +49,7 @@ class LocationExtractorService:
     ):
         self.ner_pipeline = ner_pipeline
         self.geocode_cache = geocode_cache if geocode_cache is not None else {}
+        self.geocoding_errors = []
 
     def extract_locations_with_ner(self, text: str) -> List[Dict[str, str]]:
         """
@@ -51,38 +57,43 @@ class LocationExtractorService:
 
         Returns list of dicts with 'name' and 'type' keys.
         """
-        ner_results = self.ner_pipeline(text)
+        try:
+            ner_results = self.ner_pipeline(text)
 
-        locations = []
-        seen = set()
+            locations = []
+            seen = set()
 
-        for entity in ner_results:
-            entity_label = entity.get("entity_group", entity.get("label", ""))
-            entity_text = entity.get("word", entity.get("entity_text", ""))
+            for entity in ner_results:
+                entity_label = entity.get("entity_group", entity.get("label", ""))
+                entity_text = entity.get("word", entity.get("entity_text", ""))
 
-            if entity_label in ["LOC", "GPE", "FAC"]:
-                if entity_text not in seen:
-                    seen.add(entity_text)
-                    loc_type = {
-                        "GPE": "country",
-                        "LOC": "landmark",
-                        "FAC": "landmark"
-                    }.get(entity_label, "other")
+                if entity_label in ["LOC", "GPE", "FAC"]:
+                    if entity_text not in seen:
+                        seen.add(entity_text)
+                        loc_type = {
+                            "GPE": "country",
+                            "LOC": "landmark",
+                            "FAC": "landmark"
+                        }.get(entity_label, "other")
 
-                    locations.append({
-                        "name": entity_text,
-                        "type": loc_type,
-                        "label": entity_label
-                    })
+                        locations.append({
+                            "name": entity_text,
+                            "type": loc_type,
+                            "label": entity_label
+                        })
 
-        logger.info(f"[LOCATION_EXTRACTOR] Found {len(locations)} location(s) via NER")
-        return locations
+            logger.info(f"[LOCATION_EXTRACTOR] Found {len(locations)} location(s) via NER")
+            return locations
+        except Exception as e:
+            logger.error(f"[LOCATION_EXTRACTOR] NER pipeline error: {e}")
+            return []
 
     def geocode_location(self, location_name: str) -> List[Dict[str, Any]]:
         """
         Geocode a location name using Nominatim (OpenStreetMap).
 
         Returns ALL geocoding candidates (not just the first match).
+        Handles rate limiting gracefully with retries.
         """
         # Check cache first
         if location_name in self.geocode_cache:
@@ -90,46 +101,84 @@ class LocationExtractorService:
             cached = self.geocode_cache[location_name]
             return cached if cached else []
 
-        try:
-            geolocator = Nominatim(user_agent="geovision_lab_location_extractor")
+        max_retries = 3
+        retry_delay = 2.0
 
-            results = geolocator.geocode(
-                location_name,
-                timeout=10,
-                addressdetails=1,
-                limit=10,
-                exactly_one=False
-            )
+        for attempt in range(max_retries):
+            try:
+                # Use custom URL if configured (self-hosted Nominatim)
+                if NOMINATIM_URL:
+                    from geopy.adapters import HTTPAdapter
+                    geolocator = Nominatim(
+                        user_agent="geovision_lab_location_extractor",
+                        adapter_factory=HTTPAdapter
+                    )
+                    # Override default URL
+                    geolocator.base_url = NOMINATIM_URL.replace('/search', '')
+                else:
+                    geolocator = Nominatim(user_agent="geovision_lab_location_extractor")
 
-            if not results:
-                logger.debug(f"[LOCATION_EXTRACTOR] No results for: {location_name}")
-                self.geocode_cache[location_name] = []
-                return []
+                results = geolocator.geocode(
+                    location_name,
+                    timeout=NOMINATIM_TIMEOUT,
+                    addressdetails=1,
+                    limit=10,
+                    exactly_one=False
+                )
 
-            candidates = []
-            for result in results:
-                raw_address = result.raw.get('address', {})
+                if not results:
+                    logger.debug(f"[LOCATION_EXTRACTOR] No results for: {location_name}")
+                    self.geocode_cache[location_name] = []
+                    return []
 
-                candidate = {
-                    "name": location_name,
-                    "lat": result.latitude,
-                    "lon": result.longitude,
-                    "display_name": result.address,
-                    "type": self._classify_location_type(raw_address),
-                    "country": raw_address.get('country', 'Unknown'),
-                    "state": raw_address.get('state', ''),
-                    "city": raw_address.get('city', raw_address.get('town', ''))
-                }
-                candidates.append(candidate)
+                candidates = []
+                for result in results:
+                    raw_address = result.raw.get('address', {})
 
-            logger.debug(f"[LOCATION_EXTRACTOR] Found {len(candidates)} candidate(s) for '{location_name}'")
-            self.geocode_cache[location_name] = candidates
-            return candidates
+                    candidate = {
+                        "name": location_name,
+                        "lat": result.latitude,
+                        "lon": result.longitude,
+                        "display_name": result.address,
+                        "type": self._classify_location_type(raw_address),
+                        "country": raw_address.get('country', 'Unknown'),
+                        "state": raw_address.get('state', ''),
+                        "city": raw_address.get('city', raw_address.get('town', ''))
+                    }
+                    candidates.append(candidate)
 
-        except (GeocoderTimedOut, GeocoderServiceError) as e:
-            logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}")
-            self.geocode_cache[location_name] = []
-            return []
+                logger.debug(f"[LOCATION_EXTRACTOR] Found {len(candidates)} candidate(s) for '{location_name}'")
+                self.geocode_cache[location_name] = candidates
+                return candidates
+
+            except GeocoderQuotaExceeded as e:
+                logger.warning(
+                    f"[LOCATION_EXTRACTOR] Rate limit hit for '{location_name}' "
+                    f"(attempt {attempt + 1}/{max_retries}): {e}"
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                else:
+                    error_msg = f"Nominatim rate limit exceeded after {max_retries} attempts. Consider using self-hosted Nominatim."
+                    self.geocoding_errors.append({
+                        "location": location_name,
+                        "error": "rate_limit",
+                        "message": error_msg
+                    })
+                    logger.error(f"[LOCATION_EXTRACTOR] {error_msg}")
+                    self.geocode_cache[location_name] = []
+                    return []
+
+            except (GeocoderTimedOut, GeocoderServiceError) as e:
+                logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                else:
+                    self.geocode_cache[location_name] = []
+                    return []
+
+        self.geocode_cache[location_name] = []
+        return []
 
     def _classify_location_type(self, address: Dict[str, Any]) -> str:
         """
