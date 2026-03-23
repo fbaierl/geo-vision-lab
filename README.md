@@ -37,6 +37,140 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 
 ## Architecture
 
+### Main Agent Graph
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           GEO-VISION-LAB AGENT FLOW                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────────┐
+                              │   USER QUERY     │
+                              └────────┬─────────┘
+                                       │
+                                       ▼
+                         ┌─────────────────────────┐
+                         │   VECTOR_SEARCH_NODE    │
+                         │   (Archival RAG Lookup) │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                    ┌─────────────────────────────────┐
+                    │      AGENT_NODE (Worker)        │
+                    │  - Receives vector search results│
+                    │  - Can call tools iteratively   │
+                    │  - Builds response with reasoning│
+                    └────────────┬────────────────────┘
+                                 │
+               ┌─────────────────┴─────────────────┐
+               │                                   │
+               ▼                                   ▼
+    ┌─────────────────────┐           ┌─────────────────────┐
+    │   TOOL_NODE         │           │  REVIEWER_NODE      │
+    │  - DuckDuckGo       │           │  (QA Critic LLM)    │
+    │  - Wikipedia        │           │  - Validates output │
+    │  - Time lookup      │           │  - Checks constraints│
+    └─────────┬───────────┘           └──────────┬──────────┘
+              │                                  │
+              │         ┌────────────────────────┤
+              │         │                        │
+              │         │ (if invalid, <3 tries) │
+              │         │                        │
+              │         ▼                        ▼
+              │   ┌─────────────┐      ┌─────────────────────┐
+              │   │   Retry     │      │ LOCATION_EXTRACTOR  │
+              │   │   Agent     │      │   (Sub-Graph)       │
+              │   └─────────────┘      └──────────┬──────────┘
+              │                                   │
+              └───────────────────────────────────┘
+                                      │
+                                      ▼
+                              ┌───────────────┐
+                              │  FINAL OUTPUT │
+                              │  + Locations  │
+                              └───────────────┘
+```
+
+### Location Processing Sub-Graph (Phase 1 - Current)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      LOCATION_SUBGRAPH (Internal Flow)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────┐
+    │  user_query          │
+    │  assistant_response  │
+    └──────────┬───────────┘
+               │
+               ▼
+    ┌─────────────────────────┐
+    │  PARSE_QUERY_LOCS       │◄─── Future: Extract target locations from query
+    │  (Placeholder)          │
+    └──────────┬──────────────┘
+               │
+               ▼
+    ┌─────────────────────────┐
+    │  EXTRACT_NER_LOCS       │
+    │  - Hugging Face NER     │
+    │  - Nominatim Geocoding  │
+    │  - Multi-candidate fetch│
+    └──────────┬──────────────┘
+               │
+               ▼
+    ┌─────────────────────────┐
+    │  GEOCODE_WITH_CTX       │◄─── Future: Bias geocoding with query context
+    │  (Passthrough)          │
+    └──────────┬──────────────┘
+               │
+               ▼
+    ┌─────────────────────────┐
+    │  FILTER_RELEVANCE       │
+    │  - LLM prioritization   │
+    │  - Relevance scoring    │
+    │  - Exclusion reasoning  │
+    └──────────┬──────────────┘
+               │
+               ▼
+    ┌─────────────────────────┐
+    │  final_locations        │
+    │  (sorted by relevance)  │
+    └─────────────────────────┘
+```
+
+### Location Prioritization Detail
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    FILTER_RELEVANCE (LLM Decision Process)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    Input: All geocoded candidates (may have multiple per location name)
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  For EACH location group:                                           │
+    │  1. Select BEST candidate (or mark excluded with candidate_index=-1)│
+    │  2. Assign relevance score (0.0 to 1.0)                             │
+    │  3. Provide reason (REQUIRED for debugging)                         │
+    └─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Relevance Criteria:                                                │
+    │  - PRIMARY (1.0):   Main subject of query/response                  │
+    │  - SECONDARY (0.7): Important related (capitals, major cities)      │
+    │  - TERTIARY (0.4):  Mentioned but not central                       │
+    │  - EXCLUDED (0.0):  Wrong country, ambiguous, incidental            │
+    └─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+    Output: All locations with relevance + reason (sorted desc, max 5)
+            - Included: relevance > 0.0
+            - Excluded: relevance = 0.0, excluded: true, reason provided
+```
+
+### System Architecture
+
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TB
@@ -47,7 +181,7 @@ graph TB
     subgraph Backend["Backend Services"]
         API["FastAPI<br/>(REST + Streaming)"]
         AGENT["LangGraph Agent<br/>(Worker + Critic)"]
-        LOC["Location Extractor<br/>(Hugging Face NER + LLM)"]
+        LOC["Location Sub-Graph<br/>(NER + Geocode + Filter)"]
     end
 
     subgraph Data["Data Layer"]

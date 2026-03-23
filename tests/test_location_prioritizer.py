@@ -134,23 +134,26 @@ class TestPrioritizeLocations:
         assert result == []
 
     def test_prioritize_filters_by_relevance_threshold(self):
-        """Test that locations with relevance < 0.4 are filtered."""
+        """Test that locations with low relevance are still included for debugging."""
         mock_llm = MagicMock()
-        
-        # LLM returns a location with relevance below threshold
+
+        # LLM returns a location with low relevance
         mock_response = AIMessage(content='''[
             {"location_index": 0, "candidate_index": 0, "relevance": 0.3, "reason": "Not very relevant"}
         ]''')
         mock_llm.invoke.return_value = mock_response
-        
+
         service = LocationPrioritizerService(llm=mock_llm)
-        
+
         locations = [{"name": "Test", "lat": 1.0, "lon": 2.0, "display_name": "Test", "type": "city", "country": "Test"}]
-        
+
         result = service.prioritize_locations("Query", locations, "Response")
-        
-        # Should filter out the low-relevance location
-        assert len(result) == 0
+
+        # Now we keep ALL locations for debugging (even with low relevance)
+        # But locations with relevance <= 0 are marked as excluded
+        assert len(result) == 1
+        assert result[0]['relevance'] == 0.3
+        assert result[0]['selection_reason'] == "Not very relevant"
 
     def test_prioritize_limits_to_5_locations(self):
         """Test that result is limited to 5 locations max."""
@@ -323,13 +326,83 @@ class TestSelectBestCandidate:
         """Test that first candidate is selected when all have same type."""
         mock_llm = MagicMock()
         service = LocationPrioritizerService(llm=mock_llm)
-        
+
         candidates = [
             {"name": "Paris", "type": "city", "lat": 48.8, "lon": 2.3, "display_name": "Paris, France", "country": "France"},
             {"name": "Paris", "type": "city", "lat": 33.8, "lon": -96.6, "display_name": "Paris, Texas", "country": "USA"},
         ]
-        
+
         result = service._select_best_candidate(candidates)
-        
+
         # Should select first one (France)
         assert result["display_name"] == "Paris, France"
+
+
+class TestExcludedLocations:
+    """Tests for the exclusion feature (candidate_index: -1)."""
+
+    def test_excluded_location_with_candidate_index_minus_one(self):
+        """Test that locations with candidate_index: -1 are marked as excluded."""
+        mock_llm = MagicMock()
+
+        # LLM returns a mix of included and excluded locations
+        mock_response = AIMessage(content='''[
+            {"location_index": 0, "candidate_index": 0, "relevance": 1.0, "reason": "Iran is main subject"},
+            {"location_index": 1, "candidate_index": -1, "relevance": 0.0, "reason": "Wrong country (USA, not Iran)"},
+            {"location_index": 2, "candidate_index": 0, "relevance": 0.7, "reason": "Tehran is capital"}
+        ]''')
+        mock_llm.invoke.return_value = mock_response
+
+        service = LocationPrioritizerService(llm=mock_llm)
+
+        locations = [
+            {"name": "iran", "type": "country", "lat": 32.4, "lon": 53.7, "display_name": "Iran", "country": "Iran"},
+            {"name": "ira", "type": "village", "lat": 43.2, "lon": -76.5, "display_name": "Ira, New York", "country": "USA"},
+            {"name": "tehran", "type": "city", "lat": 35.7, "lon": 51.4, "display_name": "Tehran, Iran", "country": "Iran"},
+        ]
+
+        result = service.prioritize_locations("Tell me about Iran war", locations, "Response")
+
+        # Should have 3 locations (including the excluded one), sorted by relevance
+        assert len(result) == 3
+
+        # First location (Iran) should be included with highest relevance
+        assert result[0]['name'] == 'iran'
+        assert result[0]['relevance'] == 1.0
+        assert result[0].get('excluded') is None or result[0].get('excluded') is False
+
+        # Second location (Tehran) should be included with medium relevance
+        assert result[1]['name'] == 'tehran'
+        assert result[1]['relevance'] == 0.7
+
+        # Third location (Ira) should be excluded (sorted to end due to 0.0 relevance)
+        assert result[2]['name'] == 'ira'
+        assert result[2]['relevance'] == 0.0
+        assert result[2]['excluded'] is True
+        assert result[2]['selection_reason'] == "Wrong country (USA, not Iran)"
+
+    def test_all_excluded_locations_sorted_by_relevance(self):
+        """Test that excluded locations (relevance 0.0) are sorted to the end."""
+        mock_llm = MagicMock()
+
+        mock_response = AIMessage(content='''[
+            {"location_index": 0, "candidate_index": -1, "relevance": 0.0, "reason": "Not relevant"},
+            {"location_index": 1, "candidate_index": 0, "relevance": 1.0, "reason": "Main subject"},
+            {"location_index": 2, "candidate_index": -1, "relevance": 0.0, "reason": "Wrong location"}
+        ]''')
+        mock_llm.invoke.return_value = mock_response
+
+        service = LocationPrioritizerService(llm=mock_llm)
+
+        locations = [
+            {"name": "loc1", "type": "city", "lat": 1.0, "lon": 1.0, "display_name": "Location 1", "country": "Test"},
+            {"name": "loc2", "type": "country", "lat": 2.0, "lon": 2.0, "display_name": "Location 2", "country": "Test"},
+            {"name": "loc3", "type": "city", "lat": 3.0, "lon": 3.0, "display_name": "Location 3", "country": "Test"},
+        ]
+
+        result = service.prioritize_locations("Query", locations, "Response")
+
+        # Should be sorted by relevance (descending)
+        assert result[0]['relevance'] == 1.0  # loc2
+        assert result[1]['relevance'] == 0.0  # loc1
+        assert result[2]['relevance'] == 0.0  # loc3

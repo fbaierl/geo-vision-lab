@@ -404,7 +404,9 @@ async def process_query_stream(
                 # The sub-graph combines extraction and prioritization
                 if event.get("name") == "location_extractor":
                     output = event.get("data", {}).get("output", {})
-                    locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
+                    # The subgraph outputs 'final_locations', which gets mapped to 'extracted_locations' in main graph state
+                    # But in streaming events, we get the raw subgraph output
+                    locations = output.get("final_locations", output.get("extracted_locations", [])) if isinstance(output, dict) else []
                     logger.debug(f"[LOCATION_SUBGRAPH] Found {len(locations)} locations")
 
                     if locations and isinstance(locations, list) and len(locations) > 0:

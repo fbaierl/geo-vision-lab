@@ -87,14 +87,14 @@ RESPONSE CONTEXT:
 {response_text[:500]}
 
 TASK:
-1. For each location group, select the BEST candidate (or exclude the location entirely)
-2. Assign relevance scores to selected locations
+1. For EACH location group, select the BEST candidate (or mark as excluded)
+2. Assign relevance scores to ALL locations (including 0.0 for excluded ones)
 
 CRITERIA:
 1. PRIMARY (relevance: 1.0): The main subject of the query or response
 2. SECONDARY (relevance: 0.7): Important related locations (major cities in a country, capitals, etc.)
 3. TERTIARY (relevance: 0.4): Mentioned but not central to the query
-4. EXCLUDE (relevance: 0.0): Incidental mentions, overly broad regions, or not relevant
+4. EXCLUDE (relevance: 0.0): Incidental mentions, overly broad regions, wrong country, or not relevant
 
 RULES:
 - For country queries: Include the country + 1-2 major cities max
@@ -104,19 +104,21 @@ RULES:
 - Prefer specificity: If query is about "Munich", don't include all of Germany
 - Disambiguate using display_name and country (e.g., "Iran, country" vs "Iran, Texas")
 - Exclude abbreviations or ambiguous matches (e.g., "IRA" when query is about Iran)
+- ALWAYS provide a relevance score and reason for EVERY location group
 
 Respond ONLY with a JSON array in this format:
 [
   {{"location_index": 0, "candidate_index": 0, "relevance": 1.0, "reason": "Iran country is main subject"}},
-  {{"location_index": 2, "candidate_index": 1, "relevance": 0.7, "reason": "Tehran is capital of Iran"}}
+  {{"location_index": 1, "candidate_index": -1, "relevance": 0.0, "reason": "Excluded: wrong country (USA, not Iran)"}},
+  {{"location_index": 2, "candidate_index": 2, "relevance": 0.7, "reason": "Tehran is capital of Iran"}}
 ]
 
 - location_index: Index of the location group (0-indexed, matches the numbered list above)
-- candidate_index: Index of the candidate within that group (0-indexed)
-- relevance: Score from 0.4 to 1.0
-- reason: Brief explanation
+- candidate_index: Index of the selected candidate (-1 if excluded/no suitable candidate)
+- relevance: Score from 0.0 to 1.0 (use 0.0 for excluded locations)
+- reason: Brief explanation (REQUIRED for debugging - explain WHY selected or excluded)
 
-Only include entries with relevance >= 0.4. Limit to 5 locations max."""
+IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_index: -1 and relevance: 0.0 for excluded locations."""
 
         try:
             response = self.llm.invoke(prompt)
@@ -130,27 +132,55 @@ Only include entries with relevance >= 0.4. Limit to 5 locations max."""
 
             selections = json.loads(json_match.group())
 
-            # Build result from selections
+            # Build result from selections - process ALL locations including excluded ones
             result = []
             location_names = list(candidates_by_name.keys())
-            
+
             for selection in selections:
                 loc_idx = selection.get('location_index')
                 cand_idx = selection.get('candidate_index')
-                relevance = selection.get('relevance', 0.4)
+                relevance = selection.get('relevance', 0.0)
+                reason = selection.get('reason', 'No reason provided')
 
-                if loc_idx is not None and cand_idx is not None and relevance >= 0.4:
-                    if 0 <= loc_idx < len(location_names):
-                        name = location_names[loc_idx]
-                        candidates = candidates_by_name.get(name, [])
-                        if 0 <= cand_idx < len(candidates):
-                            selected = candidates[cand_idx].copy()
-                            selected['relevance'] = relevance
-                            selected['selection_reason'] = selection.get('reason', '')
+                if loc_idx is not None and 0 <= loc_idx < len(location_names):
+                    name = location_names[loc_idx]
+                    candidates = candidates_by_name.get(name, [])
+
+                    # Handle excluded locations (candidate_index: -1)
+                    if cand_idx == -1:
+                        # Create an exclusion entry for debugging
+                        excluded_entry = {
+                            'name': name,
+                            'relevance': 0.0,
+                            'selection_reason': reason,
+                            'excluded': True,
+                            'display_name': f'[EXCLUDED] {name}',
+                            'lat': None,
+                            'lon': None,
+                            'type': 'unknown',
+                            'country': 'N/A'
+                        }
+                        result.append(excluded_entry)
+                        logger.info(
+                            f"[LOCATION_PRIORITIZER] Excluded: {name} - {reason}"
+                        )
+                    elif cand_idx is not None and 0 <= cand_idx < len(candidates):
+                        selected = candidates[cand_idx].copy()
+                        selected['relevance'] = relevance
+                        selected['selection_reason'] = reason
+                        if relevance > 0:
                             result.append(selected)
                             logger.info(
                                 f"[LOCATION_PRIORITIZER] Selected: {selected['name']} → "
-                                f"{selected['display_name']} (relevance: {relevance})"
+                                f"{selected['display_name']} (relevance: {relevance}, reason: {reason})"
+                            )
+                        else:
+                            # Even selected candidates can have 0 relevance if not useful
+                            selected['excluded'] = True
+                            result.append(selected)
+                            logger.info(
+                                f"[LOCATION_PRIORITIZER] Selected but excluded: {selected['name']} → "
+                                f"{selected['display_name']} (relevance: {relevance}, reason: {reason})"
                             )
 
             # Sort by relevance (descending) and limit to 5
