@@ -11,7 +11,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.agents.state import AgentState
 from app.agents.tools import tools
 from app.core.di_llm import get_llm
-from app.core.di_services import get_vector_store, get_location_extractor, get_location_prioritizer
+from app.core.di_services import get_vector_store
 from app.core.constants import (
     NODE_VECTOR_SEARCH, NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
     NODE_LOCATION_EXTRACTOR,

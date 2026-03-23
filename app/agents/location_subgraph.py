@@ -27,9 +27,7 @@ from typing import TypedDict, Dict, Any, List
 from langgraph.graph import StateGraph
 import logging
 
-from langchain_core.messages import HumanMessage
 
-from app.core.di_llm import get_llm
 from app.core.di_services import get_location_extractor, get_location_prioritizer
 from app.services.location_extractor import LocationExtractorService
 from app.services.location_prioritizer import LocationPrioritizerService
