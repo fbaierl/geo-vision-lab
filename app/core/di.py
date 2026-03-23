@@ -39,8 +39,7 @@ from app.core.di_nlp import (  # noqa: F401
     get_geocode_cache,
 )
 from app.core.di_llm import (  # noqa: F401
-    get_reasoning_llm,
-    get_reviewer_llm,
+    get_llm,
 )
 from app.core.di_services import (  # noqa: F401
     get_vector_store,

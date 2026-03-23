@@ -864,20 +864,51 @@
             }
         }
         loadCurrentModel();
-        
+
+        // Chat functions
+        function addMessage(content, isUser = false) {
+            const msg = document.createElement('div');
+            msg.className = `chat-message ${isUser ? 'user' : ''}`;
+            msg.innerHTML = `<div class="chat-message-content markdown-content">${content}</div>`;
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return msg.querySelector('.chat-message-content');
+        }
+
+        function addHistory(q) {
+            if (noHistory) noHistory.remove();
+
+            const entry = document.createElement('div');
+            entry.className = 'history-entry';
+            entry.innerHTML = `
+                <div class="history-entry-label">↻ Replay</div>
+                <div class="history-entry-text">${escapeHtml(q)}</div>
+            `;
+            entry.addEventListener('click', () => {
+                chatInput.value = q;
+                chatInput.focus();
+            });
+            historyList.prepend(entry);
+
+            // Limit to 8 entries
+            while (historyList.children.length > 8) {
+                historyList.lastChild.remove();
+            }
+        }
+
         // GPU status
         async function fetchGpuStatus() {
             try {
                 const res = await fetch('/system/status');
                 const data = await res.json();
-                
+
                 const gpuPill = document.getElementById('pill-gpu');
                 const gpuStatus = document.getElementById('gpu-status');
-                
+
                 if (data.gpu_engaged) {
                     gpuPill.className = 'status-pill gpu-active';
                     gpuStatus.textContent = 'GPU Active';
-                } else if (data.reason === 'no_model_loaded') {
+                } else if (data.gpu_available || data.reason === 'gpu_standby') {
                     gpuPill.className = 'status-pill gpu-standby';
                     gpuStatus.textContent = 'GPU Standby';
                 } else {
@@ -890,37 +921,40 @@
         }
         fetchGpuStatus();
         setInterval(fetchGpuStatus, 3000);
-        
-        // Chat functions
-        function addMessage(content, isUser = false) {
-            const msg = document.createElement('div');
-            msg.className = `chat-message ${isUser ? 'user' : ''}`;
-            msg.innerHTML = `<div class="chat-message-content markdown-content">${content}</div>`;
-            chatMessages.appendChild(msg);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            return msg.querySelector('.chat-message-content');
-        }
-        
-        function addHistory(q) {
-            if (noHistory) noHistory.remove();
-            
-            const entry = document.createElement('div');
-            entry.className = 'history-entry';
-            entry.innerHTML = `
-                <div class="history-entry-label">↻ Replay</div>
-                <div class="history-entry-text">${escapeHtml(q)}</div>
-            `;
-            entry.addEventListener('click', () => {
-                chatInput.value = q;
-                chatInput.focus();
+
+        // Handle option click
+        modelOptions.forEach(opt => {
+            opt.addEventListener('click', async function() {
+                const selectedModel = this.getAttribute('data-value');
+                elModelDropdown.classList.remove('show');
+
+                // Optimistic UI update
+                const previousModel = elModelDisplay.textContent;
+                updateUISelection(selectedModel);
+
+                try {
+                    const res = await fetch('/models/reasoning', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ model: selectedModel })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        updateFooterModel(selectedModel);
+                        elFStatus.textContent = '// Model Switched';
+                        setTimeout(() => { elFStatus.textContent = '// Standby'; }, 2000);
+                    } else {
+                        console.error('Failed to switch model:', data.message);
+                        loadCurrentModel(); // Revert
+                    }
+                } catch (e) {
+                    console.error('Error switching model:', e);
+                    loadCurrentModel(); // Revert
+                }
             });
-            historyList.prepend(entry);
-            
-            // Limit to 8 entries
-            while (historyList.children.length > 8) {
-                historyList.lastChild.remove();
-            }
-        }
+        });
         
         function escapeHtml(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

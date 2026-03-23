@@ -169,7 +169,7 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     mock_llm.invoke.return_value = mock_reviewer_response
 
     # Run the agent
-    with patch("app.agents.graph.get_reasoning_llm", return_value=mock_llm):
+    with patch("app.agents.graph.get_llm", return_value=mock_llm):
         for event in app_graph.stream(inputs, config=config, stream_mode="updates"):
             pass  # Process all events
 

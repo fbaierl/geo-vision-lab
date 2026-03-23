@@ -10,14 +10,15 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
-from app.core.di_llm import get_reasoning_llm
-from app.core.di_services import get_vector_store, get_location_extractor, get_location_prioritizer
+from app.core.di_llm import get_llm
+from app.core.di_services import get_vector_store
 from app.core.constants import (
     NODE_VECTOR_SEARCH, NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
-    NODE_LOCATION_EXTRACTOR, NODE_LOCATION_PRIORITIZER,
+    NODE_LOCATION_EXTRACTOR,
     VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
     STATE_KEY_EXTRACTED_LOCATIONS, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
 )
+from app.agents.location_subgraph import location_subgraph
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -102,7 +103,7 @@ def call_model(state: AgentState):
     logger.info("=" * 80)
     logger.info("[AGENT] Entering reasoning phase")
     logger.info("=" * 80)
-    llm = get_reasoning_llm()
+    llm = get_llm()
     llm_with_tools = llm.bind_tools(tools)
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -171,79 +172,50 @@ def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_LOCATION_EXT
     return NODE_AGENT
 
 
-def extract_locations(state: AgentState) -> Dict[str, Any]:
-    """Extract geographic locations from the agent's response using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation."""
+def run_location_subgraph(state: AgentState) -> Dict[str, Any]:
+    """
+    Run the location processing sub-graph.
+    
+    This wraps the location_subgraph and maps state between main graph and sub-graph.
+    """
     logger.info("=" * 80)
-    logger.info("[LOCATION_EXTRACTOR] Starting location extraction")
+    logger.info("[LOCATION_SUBGRAPH] Starting location processing sub-graph")
     logger.info("=" * 80)
-
+    
     # Get the last assistant message (the final response)
     last_message = state[STATE_KEY_MESSAGES][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
-
+    
     # Get the user query from the first message
     user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else ""
-
+    
     if not assistant_response:
-        logger.info("[LOCATION_EXTRACTOR] No response content to extract locations from")
+        logger.info("[LOCATION_SUBGRAPH] No response content to process")
         return {STATE_KEY_EXTRACTED_LOCATIONS: []}
-
+    
     try:
-        # Use DI to get location extractor service
-        location_extractor = get_location_extractor()
-        locations = location_extractor.extract_and_geocode_locations(
-            assistant_response,
-            query=user_query,
-            response_text=assistant_response
-        )
+        # Prepare sub-graph input
+        subgraph_input = {
+            "user_query": user_query,
+            "assistant_response": assistant_response,
+            "query_target_locations": [],
+            "ner_extracted_locations": [],
+            "final_locations": []
+        }
         
-        # Check for geocoding errors and emit warnings
-        if hasattr(location_extractor, 'geocoding_errors') and location_extractor.geocoding_errors:
-            for error in location_extractor.geocoding_errors:
-                logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error: {error['message']}")
-                # Note: We continue processing - don't fail the entire flow
+        # Run sub-graph
+        subgraph_result = location_subgraph.invoke(subgraph_input)
         
-        logger.info(f"[LOCATION_EXTRACTOR] Extracted {len(locations)} geocoded location(s)")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: locations}
-
+        # Extract final locations from sub-graph output
+        final_locations = subgraph_result.get("final_locations", [])
+        
+        logger.info(f"[LOCATION_SUBGRAPH] Sub-graph complete: {len(final_locations)} location(s)")
+        return {STATE_KEY_EXTRACTED_LOCATIONS: final_locations}
+        
     except Exception as e:
-        logger.error(f"[LOCATION_EXTRACTOR] Extraction failed: {e}")
-        # Return empty list - don't fail the entire flow
-        # The error will be logged and can be displayed in the UI
+        logger.error(f"[LOCATION_SUBGRAPH] Sub-graph failed: {e}")
         return {STATE_KEY_EXTRACTED_LOCATIONS: []}
-
-
-def prioritize_locations_node(state: AgentState) -> Dict[str, Any]:
-    """Filter and prioritize locations based on relevance to the query."""
-    logger.info("=" * 80)
-    logger.info("[LOCATION_PRIORITIZER] Starting location prioritization")
-    logger.info("=" * 80)
-
-    locations = state.get(STATE_KEY_EXTRACTED_LOCATIONS, [])
-
-    if not locations:
-        logger.info("[LOCATION_PRIORITIZER] No locations to prioritize")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: []}
-
-    # Get the user query from the first message
-    user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
-    user_query = user_msgs[0].content if user_msgs else ""
-
-    # Get the assistant response
-    last_message = state[STATE_KEY_MESSAGES][-1]
-    assistant_response = last_message.content if hasattr(last_message, "content") else ""
-
-    try:
-        # Use DI to get location prioritizer service
-        prioritizer = get_location_prioritizer()
-        prioritized = prioritizer.prioritize_locations(user_query, locations, assistant_response)
-        logger.info(f"[LOCATION_PRIORITIZER] Prioritized to {len(prioritized)} location(s)")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: prioritized}
-
-    except Exception as e:
-        logger.error(f"[LOCATION_PRIORITIZER] Prioritization failed: {e}")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: locations}  # Return original on failure
 
 
 def get_graph():
@@ -255,8 +227,7 @@ def get_graph():
     workflow.add_node(NODE_AGENT, call_model)
     workflow.add_node(NODE_TOOLS, ToolNode(tools))
     workflow.add_node(NODE_REVIEWER, review_response)
-    workflow.add_node(NODE_LOCATION_EXTRACTOR, extract_locations)
-    workflow.add_node(NODE_LOCATION_PRIORITIZER, prioritize_locations_node)
+    workflow.add_node(NODE_LOCATION_EXTRACTOR, run_location_subgraph)
 
     # Set entry point to vector_search (mandatory first step)
     workflow.set_entry_point(NODE_VECTOR_SEARCH)
@@ -273,11 +244,8 @@ def get_graph():
     # Reviewer validates or sends back for revision
     workflow.add_conditional_edges(NODE_REVIEWER, check_validation)
 
-    # Location extractor finds all locations
-    workflow.add_edge(NODE_LOCATION_EXTRACTOR, NODE_LOCATION_PRIORITIZER)
-
-    # Location prioritizer filters by relevance, then ends
-    workflow.add_edge(NODE_LOCATION_PRIORITIZER, "__end__")
+    # Location sub-graph processes locations, then ends
+    workflow.add_edge(NODE_LOCATION_EXTRACTOR, "__end__")
 
     return workflow.compile(checkpointer=checkpointer)
 
@@ -357,6 +325,16 @@ async def process_query_stream(
             # Debug logging for event tracing
             logger.debug(f"[STREAM EVENT] kind={kind}, name={event.get('name')}, tags={tags}")
 
+            # Check for Ollama connection/model errors
+            if kind == "on_chain_error" or kind == "on_llm_error":
+                error_msg = event.get("data", {}).get("error", "Unknown error")
+                logger.error(f"[STREAM ERROR] {kind}: {error_msg}")
+                yield {
+                    "type": "error",
+                    "content": f"LLM error: {str(error_msg)}\n\nThis may be due to:\n- Model not loaded in Ollama\n- Ollama service unavailable\n- Request timeout\n\nTry: `docker restart geovision-ollama`"
+                }
+                return  # Stop processing
+
             if kind == "on_chat_model_start":
                 if "reviewer" in tags:
                     from app.core.config import settings
@@ -422,28 +400,15 @@ async def process_query_stream(
                             "content": reviewer_result,
                         }
 
-                # Capture location extractor result - match by node name constant
+                # Capture location sub-graph result (emits final filtered locations)
+                # The sub-graph combines extraction and prioritization
                 if event.get("name") == "location_extractor":
                     output = event.get("data", {}).get("output", {})
-                    locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
-                    logger.debug(f"[LOCATION_EXTRACTOR] Found {len(locations)} locations")
-                    
-                    # Check for extraction errors
-                    if not locations or len(locations) == 0:
-                        # Emit error event if extraction failed
-                        yield {
-                            "type": "location_error",
-                            "tool": "location_extractor",
-                            "content": "Location extraction completed but no locations were found. This may be due to:\n- No geographic locations in the response text\n- Nominatim rate limiting (HTTP 429)\n- Geocoding service unavailable\n\nThe query response is still valid - continuing without map visualization.",
-                        }
-                    # Store for later - we'll emit after prioritization
-                    pass
+                    # The subgraph outputs 'final_locations', which gets mapped to 'extracted_locations' in main graph state
+                    # But in streaming events, we get the raw subgraph output
+                    locations = output.get("final_locations", output.get("extracted_locations", [])) if isinstance(output, dict) else []
+                    logger.debug(f"[LOCATION_SUBGRAPH] Found {len(locations)} locations")
 
-                # Capture location prioritizer result (emits final filtered locations)
-                if event.get("name") == "location_prioritizer":
-                    output = event.get("data", {}).get("output", {})
-                    locations = output.get("extracted_locations", []) if isinstance(output, dict) else []
-                    logger.debug(f"[LOCATION_PRIORITIZER] Prioritized to {len(locations)} locations")
                     if locations and isinstance(locations, list) and len(locations) > 0:
                         # Include relevance scores in the output
                         loc_summary = ", ".join([
@@ -454,16 +419,16 @@ async def process_query_stream(
                             loc_summary += f" +{len(locations) - 3} more"
                         yield {
                             "type": "locations_found",
-                            "tool": "location_prioritizer",
+                            "tool": "location_subgraph",
                             "summary": f"Prioritized {len(locations)} location(s): {loc_summary}",
                             "locations": locations,
                         }
-                    else:
+                    elif not locations:
+                        # Emit error event if no locations found
                         yield {
-                            "type": "locations_found",
-                            "tool": "location_prioritizer",
-                            "summary": "No relevant geographic locations found",
-                            "locations": [],
+                            "type": "location_error",
+                            "tool": "location_subgraph",
+                            "content": "Location processing completed but no locations were found. This may be due to:\n- No geographic locations in the response text\n- Nominatim rate limiting (HTTP 429)\n- Geocoding service unavailable\n\nThe query response is still valid - continuing without map visualization.",
                         }
 
             elif kind == "on_chat_model_end":
@@ -485,8 +450,7 @@ async def process_query_stream(
             elif kind == "on_chat_model_stream":
                 if "reviewer" in tags:
                     continue
-                if "location_prioritizer" in tags:
-                    continue  # Skip streaming for prioritizer
+                # Sub-graph LLM calls are handled internally
 
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
@@ -571,8 +535,17 @@ async def process_query_stream(
                                 break
 
     except Exception as e:
-        logger.error(f"[QUERY-STREAM] Error during streaming: {e}")
-        yield {"type": "error", "content": str(e)}
+        error_msg = str(e)
+        logger.error(f"[QUERY-STREAM] Error during streaming: {error_msg}")
+        
+        # Check for JSON parsing errors from Ollama client
+        if "failed to parse JSON" in error_msg or "unexpected end of JSON input" in error_msg:
+            yield {
+                "type": "error",
+                "content": "LLM response parsing failed. This usually means:\n\n1. Ollama model crashed or timed out\n2. Connection was interrupted\n3. Model returned malformed output\n\nTry:\n- Restart Ollama: `docker restart geovision-ollama`\n- Check model is loaded: `docker exec geovision-ollama ollama ps`\n- Retry your query"
+            }
+        else:
+            yield {"type": "error", "content": f"Streaming error: {error_msg}"}
     finally:
         # Always send done event to signal completion
         if not done_sent:

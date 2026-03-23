@@ -5,14 +5,14 @@ This module provides LLM-related dependency providers.
 Uses the DI container for clean, testable dependency injection.
 
 Usage:
-    from app.core.di_llm import get_reasoning_llm, get_reviewer_llm
+    from app.core.di_llm import get_llm
 
-    def some_operation(reasoning_llm=Depends(get_reasoning_llm)):
+    def some_operation(llm=Depends(get_llm)):
         ...
 
 Testing:
     from app.core.di import container
-    container.override(get_reasoning_llm, mock_llm)
+    container.override(get_llm, mock_llm)
 """
 
 from langchain_ollama import ChatOllama
@@ -30,35 +30,33 @@ def _get_container():
     return container
 
 
-def _create_reasoning_llm() -> ChatOllama:
-    """Factory function to create reasoning LLM."""
-    logger.info(f"[DI] Creating reasoning LLM: {settings.REASONING_LLM_MODEL_NAME}")
+def _create_llm() -> ChatOllama:
+    """Factory function to create LLM.
+
+    Single LLM instance used for all tasks:
+    - Agent reasoning
+    - QA validation
+    - Location prioritization
+    - Query location parsing
+
+    The model is determined by settings.REASONING_LLM_MODEL_NAME.
+    No num_predict limit - let the model generate what it needs.
+    
+    Timeout set to 120 seconds for long responses.
+    """
+    logger.info(f"[DI] Creating LLM: {settings.REASONING_LLM_MODEL_NAME}")
     callback_manager = get_callback_manager()
     return ChatOllama(
         model=settings.REASONING_LLM_MODEL_NAME,
         base_url=settings.OLLAMA_URL,
-        callback_manager=callback_manager
+        callback_manager=callback_manager,
+        timeout=120  # Increased timeout for complex reasoning
     )
 
 
-def _create_reviewer_llm() -> ChatOllama:
-    """Factory function to create reviewer LLM."""
-    logger.info(f"[DI] Creating reviewer LLM: {settings.REVIEWER_LLM_MODEL_NAME}")
-    callback_manager = get_callback_manager()
-    return ChatOllama(
-        model=settings.REVIEWER_LLM_MODEL_NAME,
-        base_url=settings.OLLAMA_URL,
-        num_predict=20,
-        timeout=60,
-        callback_manager=callback_manager
-    )
-
-
-def get_reasoning_llm() -> ChatOllama:
-    """Get reasoning LLM (managed by DI container)."""
-    return _get_container()._get_or_create(get_reasoning_llm, _create_reasoning_llm)
-
-
-def get_reviewer_llm() -> ChatOllama:
-    """Get reviewer LLM (managed by DI container)."""
-    return _get_container()._get_or_create(get_reviewer_llm, _create_reviewer_llm)
+def get_llm() -> ChatOllama:
+    """Get LLM (managed by DI container).
+    
+    Single LLM for all tasks - user's model choice applies everywhere.
+    """
+    return _get_container()._get_or_create(get_llm, _create_llm)

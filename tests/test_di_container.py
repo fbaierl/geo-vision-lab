@@ -9,8 +9,7 @@ from app.core.di import (
     container,
     get_mongo_client,
     get_embeddings,
-    get_reasoning_llm,
-    get_reviewer_llm,
+    get_llm,
     get_ner_pipeline,
     get_vector_store,
     get_location_extractor,
@@ -42,27 +41,27 @@ class TestDIContainer:
     def test_container_caches_instances(self):
         """Test that container caches instances (singleton behavior)."""
         # First call creates instance
-        instance1 = get_reasoning_llm()
-        
+        instance1 = get_llm()
+
         # Second call returns same instance
-        instance2 = get_reasoning_llm()
-        
+        instance2 = get_llm()
+
         assert instance1 is instance2
-        
+
         # Reset for other tests
         container.reset_overrides()
-    
+
     def test_override_affects_subsequent_calls(self):
         """Test that overrides affect all subsequent calls."""
         mock1 = MagicMock()
         mock2 = MagicMock()
-        
-        container.override(get_reasoning_llm, lambda: mock1)
-        assert get_reasoning_llm() is mock1
-        
-        container.override(get_reasoning_llm, lambda: mock2)
-        assert get_reasoning_llm() is mock2
-        
+
+        container.override(get_llm, lambda: mock1)
+        assert get_llm() is mock1
+
+        container.override(get_llm, lambda: mock2)
+        assert get_llm() is mock2
+
         container.reset_overrides()
 
 
@@ -121,13 +120,13 @@ class TestLocationPrioritizerService:
         """Test that get_location_prioritizer uses DI container."""
         mock_llm = MagicMock()
         # Override dependency
-        container.override(get_reviewer_llm, lambda: mock_llm)
-        
+        container.override(get_llm, lambda: mock_llm)
+
         # Get service
         service = get_location_prioritizer()
-        
+
         # Verify service was created with correct dependency
         assert service is not None
-        assert service.reviewer_llm is mock_llm
-        
+        assert service.llm is mock_llm
+
         container.reset_overrides()
