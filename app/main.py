@@ -1,5 +1,6 @@
 import os
 import logging
+import logging.config
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -7,11 +8,26 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import chat, health, models
 
+
+class PollingFilter(logging.Filter):
+    """Filter out repetitive /api/ps polling logs from httpx."""
+    def filter(self, record):
+        msg = record.getMessage()
+        # Allow all logs except successful GET /api/ps calls
+        if record.levelno == logging.INFO and 'GET' in msg and '/api/ps' in msg and '200 OK' in msg:
+            return False
+        return True
+
+
 # Configure logging for Dozzle visibility
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+# Apply filter to httpx logger to suppress repetitive /api/ps polling logs
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.addFilter(PollingFilter())
+
 logger = logging.getLogger("geovision_app")
 logger.info("[APP] Starting GeoVision Lab API server...")
 

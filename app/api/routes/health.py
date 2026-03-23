@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 import httpx
+import logging
 from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/system/status")
@@ -43,6 +45,7 @@ async def system_status():
             }
     except Exception as e:
         # Ollama not reachable - GPU not available
+        logger.warning(f"[OLLAMA] /api/ps call failed: {e}")
         return {
             "gpu_engaged": False,
             "gpu_available": False,
