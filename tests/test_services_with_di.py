@@ -139,7 +139,7 @@ class TestLocationPrioritizerService:
         mock_llm.invoke.return_value = mock_response
 
         # Create service
-        service = LocationPrioritizerService(reviewer_llm=mock_llm)
+        service = LocationPrioritizerService(llm=mock_llm)
 
         # Test locations with full geocoding data (including display_name and country)
         locations = [
@@ -169,7 +169,7 @@ class TestLocationPrioritizerService:
         mock_llm.invoke.side_effect = Exception("LLM error")
 
         # Create service
-        service = LocationPrioritizerService(reviewer_llm=mock_llm)
+        service = LocationPrioritizerService(llm=mock_llm)
 
         # Test locations with full geocoding data
         locations = [

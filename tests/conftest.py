@@ -90,16 +90,16 @@ def override_embeddings(mock_embeddings):
 @pytest.fixture
 def override_reasoning_llm(mock_reasoning_llm):
     """Override reasoning LLM with mock."""
-    from app.core.di import get_reasoning_llm
-    container.override(get_reasoning_llm, lambda: mock_reasoning_llm)
+    from app.core.di import get_llm
+    container.override(get_llm, lambda: mock_reasoning_llm)
     return mock_reasoning_llm
 
 
 @pytest.fixture
 def override_reviewer_llm(mock_reviewer_llm):
     """Override reviewer LLM with mock."""
-    from app.core.di import get_reviewer_llm
-    container.override(get_reviewer_llm, lambda: mock_reviewer_llm)
+    from app.core.di import get_llm
+    container.override(get_llm, lambda: mock_reviewer_llm)
     return mock_reviewer_llm
 
 

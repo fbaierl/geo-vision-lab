@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 from langchain_core.messages import HumanMessage
-from app.agents.graph import should_continue, call_model, vector_search_node, extract_locations
+from app.agents.graph import should_continue, call_model, vector_search_node
 
 
 # --- should_continue node tests ---
@@ -48,15 +48,3 @@ def test_vector_search_node_no_query():
     state = {"messages": []}
     result = vector_search_node(state)
     assert result["vector_search_results"] == "No query provided."
-
-
-# --- extract_locations node tests ---
-
-def test_extract_locations_no_response():
-    """Test extract_locations with empty response."""
-    mock_message = MagicMock()
-    mock_message.content = ""
-    state = {"messages": [mock_message]}
-
-    result = extract_locations(state)
-    assert result["extracted_locations"] == []
