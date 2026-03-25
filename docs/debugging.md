@@ -1,8 +1,9 @@
 # Debugging the GeoVision Lab RAG Chain
 
 > **Related Documentation:**
-> - [Agent Workflow](../AGENT_WORKFLOW.md) — Detailed agent orchestration guide
-> - [Technology Choices](../TECHNOLOGY.md) — Tech stack rationale
+> - [Agent Workflow](agent_workflow.md) — Detailed agent orchestration guide
+> - [Ontology System](ontology.md) — Knowledge graph architecture
+> - [Technology Choices](technology.md) — Tech stack rationale
 > - [README](../README.md) — Quick start guide
 
 ---

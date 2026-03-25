@@ -34,12 +34,17 @@ def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
     *   The graph loops back to the `agent` node.
 4.  **Completion**:
     *   The LLM now sees the tool results in its context and decides if it has enough info.
-    *   If it produces a normal text response (no `tool_calls`), `should_continue` routes the flow to the `reviewer` node for final QA before ending the process.
+    *   If it produces a normal text response (no `tool_calls`), `should_continue` routes the flow to the `reviewer` node for final QA before passing to the `ontology_extractor` node.
+5.  **Ontology Extraction**:
+    *   The `ontology_extractor_node` runs a sub-graph that extracts entities and relationships from the approved response.
+    *   Location entities are automatically geocoded via Nominatim API.
+    *   The session knowledge graph is updated with new entities and links.
 
 ### Why this approach?
 - **Autonomy**: The LLM autonomously decides *when* it needs help.
 - **Stateful**: The `AgentState` ensures that the entire "conversation" with tools is recorded, so the LLM doesn't repeat itself.
-- **Validation**: By routing to a `reviewer` node only *after* the tool loop finishes, we ensure that the final result (even if based on tool data) still meets our strict GeoVision formatting rules (like mandatory map tags).
+- **Validation**: By routing to a `reviewer` node only *after* the tool loop finishes, we ensure that the final result (even if based on tool data) still meets our strict GeoVision formatting rules.
+- **Knowledge Graph**: The `ontology_extractor` node automatically builds a structured knowledge graph from the conversation, enabling entity tracking and relationship mapping across sessions.
 
 ## Reasoning vs. Standard LLMs
 

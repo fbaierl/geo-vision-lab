@@ -131,18 +131,22 @@ vector_index = {
 %%{init: {'theme': 'dark'}}%%
 stateDiagram-v2
     [*] --> UserInput
-    UserInput --> Agent: Process Query
+    UserInput --> VectorSearch: Mandatory Vector Search
+    VectorSearch --> Agent: Process Query + Inject Results
     Agent --> ShouldContinue{Has Tool Calls?}
     ShouldContinue -->|Yes| Tools: Execute Tools
     Tools --> Agent: Loop Back
     ShouldContinue -->|No| Reviewer: QA Check
     Reviewer --> OutputConstraints{Passes?}
-    OutputConstraints -->|Yes| Response: Stream to User
+    OutputConstraints -->|Yes| OntologyExtractor: Extract Entities + Links
     OutputConstraints -->|No| Agent: Revise
+    OntologyExtractor --> Response: Stream to User + Update Knowledge Graph
     Response --> [*]
 ```
 
-**Vector Search First (Structurally Enforced)**: The LangGraph workflow is configured with `vector_search_node` as the **entry point**. Every query automatically executes vector search before reaching the agent. Results are injected into the agent's context. This is enforced at the workflow level, not reliant on prompt instructions. See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for detailed workflow documentation.
+**Vector Search First (Structurally Enforced)**: The LangGraph workflow is configured with `vector_search_node` as the **entry point**. Every query automatically executes vector search before reaching the agent. Results are injected into the agent's context. This is enforced at the workflow level, not reliant on prompt instructions.
+
+**Ontology Extraction (Automatic)**: After the reviewer validates the response, the `ontology_extractor_node` automatically processes the text to extract entities (Location, Person, Organization, Event, Asset, Document, Concept) and relationships. Location entities are geocoded and the entire knowledge graph is updated. See [Agent Workflow](agent_workflow.md) for detailed workflow documentation.
 
 ---
 
@@ -287,13 +291,14 @@ Using **Rajdhani** (Google Fonts) for the tactical/cyberpunk aesthetic:
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) | Core analysis and reasoning |
-| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Constraint validation |
+| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Constraint validation + Ontology extraction |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization |
-| **Vector Database** | MongoDB 8.2+ Vector Search | Semantic search storage |
+| **Vector Database** | MongoDB 8.2+ Vector Search | Semantic search storage + Knowledge graph |
 | **Database GUI** | Mongo Express | Web-based MongoDB browser |
-| **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination |
+| **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination + Ontology subgraph |
 | **Backend API** | FastAPI + uvicorn | REST API with streaming |
-| **Frontend UI** | Vanilla JS + Leaflet.js | Tactical terminal with maps |
+| **Frontend UI** | Vanilla JS + Leaflet.js | Tactical terminal with knowledge graph |
+| **Geocoding** | Nominatim API | Location entity coordinate lookup |
 | **Testing** | PyTest + Testcontainers | Integration and E2E tests |
 | **CI/CD** | GitHub Actions | Automated testing and linting |
 | **Logging** | Grafana + Loki + Dozzle | Log aggregation and monitoring |
@@ -310,3 +315,4 @@ Using **Rajdhani** (Google Fonts) for the tactical/cyberpunk aesthetic:
 - [Leaflet.js](https://leafletjs.com/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Testcontainers](https://testcontainers.com/)
+- [Nominatim Geocoding](https://nominatim.org/)
