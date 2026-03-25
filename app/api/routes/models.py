@@ -24,6 +24,10 @@ async def get_reasoning_models():
 async def set_reasoning_model(request: ModelSwitchRequest):
     """Switch to a different reasoning model."""
     if settings.set_reasoning_model(request.model):
+        # Clear DI container cache so new model is picked up
+        from app.core.di import container
+        container._instances.clear()
+        
         return {
             "success": True,
             "model": settings.REASONING_LLM_MODEL_NAME,

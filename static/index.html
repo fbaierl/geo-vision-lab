@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2315171e'/%3E%3Cpath d='M16 4L28 10v12L16 28 4 22V10L16 4z' fill='none' stroke='%233daee9' stroke-width='2'/%3E%3Cpath d='M16 8l8 4v8l-8 4-8-4V12l8-4z' fill='%233daee9' opacity='0.3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235ec0ff'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="/ui/style.css">
 </head>
@@ -94,18 +95,7 @@
                         <span>▼</span>
                     </div>
                     <div class="model-selector-menu" id="model-menu">
-                        <div class="model-option" data-value="qwen3.5:9b">
-                            <div class="model-option-name">Qwen 3.5 9B</div>
-                            <div class="model-option-desc">High precision, complex analysis</div>
-                        </div>
-                        <div class="model-option active" data-value="qwen3.5:4b">
-                            <div class="model-option-name">Qwen 3.5 4B</div>
-                            <div class="model-option-desc">Balanced speed & quality</div>
-                        </div>
-                        <div class="model-option" data-value="qwen3.5:0.8b">
-                            <div class="model-option-name">Qwen 3.5 0.8B</div>
-                            <div class="model-option-desc">Fastest, basic logic</div>
-                        </div>
+                        <!-- Dynamically populated by JS from backend -->
                     </div>
                 </div>
                 <div class="input-bar">
@@ -269,6 +259,31 @@
             <div class="window-resize-handle bottom"></div>
             <div class="window-resize-handle corner"></div>
         </div>
+
+        <!-- GRAPH WINDOW -->
+        <div class="window graph-window" id="window-graph" data-window="graph">
+            <div class="window-header">
+                <div class="window-title">
+                    <span>▸</span>
+                    <span>Knowledge Graph</span>
+                </div>
+                <div class="window-controls">
+                    <button class="window-btn minimize" title="Minimize">−</button>
+                    <button class="window-btn maximize" title="Maximize">□</button>
+                    <button class="window-btn close" title="Close">×</button>
+                </div>
+            </div>
+            <div class="window-content" style="position: relative;">
+                <div id="graph-container" style="width: 100%; height: 100%;"></div>
+                <div class="loading-spinner graph-loading" id="graph-loading" style="display: none;">
+                    <div class="loading-spinner-icon"></div>
+                    <div class="loading-spinner-text">Updating Graph<span class="loading-dots"><span></span><span></span><span></span></span></div>
+                </div>
+            </div>
+            <div class="window-resize-handle right"></div>
+            <div class="window-resize-handle bottom"></div>
+            <div class="window-resize-handle corner"></div>
+        </div>
     </div>
 
     <!-- BOTTOM SHELF -->
@@ -292,6 +307,10 @@
         <div class="shelf-item" data-target="window-maps" title="Toggle Maps Window">
             <span class="shelf-icon">◈</span>
             <span class="shelf-label">Maps</span>
+        </div>
+        <div class="shelf-item" data-target="window-graph" title="Toggle Knowledge Graph">
+            <span class="shelf-icon">⬡</span>
+            <span class="shelf-label">Graph</span>
         </div>
         
         <button class="snap-layout-btn" id="snap-layout-btn" title="Snap Windows into Tiled Layout">
@@ -645,7 +664,8 @@
                     'window-reasoning': { widthRatio: 0.25, heightRatio: 0.85, name: 'reasoning' },
                     'window-history': { widthRatio: 0.20, heightRatio: 0.35, name: 'history' },
                     'window-services': { widthRatio: 0.20, heightRatio: 0.35, name: 'services' },
-                    'window-maps': { widthRatio: 0.55, heightRatio: 0.70, name: 'maps' }
+                    'window-maps': { widthRatio: 0.55, heightRatio: 0.45, name: 'maps' },
+                    'window-graph': { widthRatio: 0.55, heightRatio: 0.45, name: 'graph' }
                 };
                 
                 // Calculate layout based on number of windows
@@ -697,9 +717,10 @@
                     const rightColWidth = availableWidth * 0.50;
                     const smallHeight = availableHeight * 0.30;
                     const tallHeight = availableHeight * 0.65;
+                    const mapGraphHeight = availableHeight * 0.40;
                     
                     // Sort windows by priority
-                    const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-history', 'window-services'];
+                    const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-graph', 'window-history', 'window-services'];
                     visibleWindows.sort((a, b) => {
                         const aIdx = priorityOrder.indexOf(a.id);
                         const bIdx = priorityOrder.indexOf(b.id);
@@ -709,7 +730,7 @@
                     // Position tracking
                     let leftY = padding;
                     let midY = padding;
-                    const rightY = padding;
+                    let rightY = padding;
                     
                     visibleWindows.forEach((win) => {
                         const config = windowConfigs[win.id];
@@ -747,11 +768,18 @@
                             win.element.style.left = padding + leftColWidth + padding + 'px';
                             win.element.style.top = midY + 'px';
                         } else if (win.id === 'window-maps') {
-                            // Right column - large, takes full height
+                            // Right column - top half
                             win.element.style.width = rightColWidth + 'px';
-                            win.element.style.height = (availableHeight * 0.75) + 'px';
+                            win.element.style.height = mapGraphHeight + 'px';
                             win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                             win.element.style.top = padding + 'px';
+                            rightY = padding + mapGraphHeight + padding;
+                        } else if (win.id === 'window-graph') {
+                            // Right column - bottom half
+                            win.element.style.width = rightColWidth + 'px';
+                            win.element.style.height = mapGraphHeight + 'px';
+                            win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
+                            win.element.style.top = rightY + 'px';
                         }
                         win.element.style.transform = 'none';
                     });
@@ -839,45 +867,66 @@
             }
         });
         
-        modelOptions.forEach(opt => {
-            opt.addEventListener('click', async function() {
-                const selected = this.getAttribute('data-value');
-                modelMenu.classList.remove('show');
-                
-                // Optimistic UI update
-                modelOptions.forEach(o => o.classList.remove('active'));
-                this.classList.add('active');
-                currentModelDisplay.textContent = this.querySelector('.model-option-name').textContent;
-                currentModel = selected;
-                
-                try {
-                    const res = await fetch('/models/reasoning', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model: selected })
-                    });
-                    const data = await res.json();
-                    if (!data.success) {
-                        console.error('Failed to switch model:', data.message);
-                    }
-                } catch (e) {
-                    console.error('Error switching model:', e);
-                }
-            });
-        });
-        
         // Load current model
         async function loadCurrentModel() {
             try {
                 const res = await fetch('/models/reasoning');
                 const data = await res.json();
-                if (data.current_model) {
-                    modelOptions.forEach(opt => {
-                        if (opt.getAttribute('data-value') === data.current_model) {
+                
+                if (data.available_models) {
+                    modelMenu.innerHTML = ''; // Clear default static options
+                    
+                    data.available_models.forEach(modelName => {
+                        const opt = document.createElement('div');
+                        opt.className = 'model-option';
+                        opt.setAttribute('data-value', modelName);
+                        
+                        const nameDiv = document.createElement('div');
+                        nameDiv.className = 'model-option-name';
+                        nameDiv.textContent = modelName;
+                        
+                        // Small description logic could be added here if needed
+                        const descDiv = document.createElement('div');
+                        descDiv.className = 'model-option-desc';
+                        descDiv.textContent = 'Local model';
+                        
+                        opt.appendChild(nameDiv);
+                        opt.appendChild(descDiv);
+                        
+                        // Set active model
+                        if (modelName === data.current_model) {
                             opt.classList.add('active');
-                            currentModelDisplay.textContent = opt.querySelector('.model-option-name').textContent;
-                            currentModel = data.current_model;
+                            currentModelDisplay.textContent = modelName;
+                            currentModel = modelName;
                         }
+                        
+                        // Add click listener
+                        opt.addEventListener('click', async function() {
+                            const selected = this.getAttribute('data-value');
+                            modelMenu.classList.remove('show');
+                            
+                            // Optimistic UI update
+                            modelMenu.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
+                            this.classList.add('active');
+                            currentModelDisplay.textContent = this.querySelector('.model-option-name').textContent;
+                            currentModel = selected;
+                            
+                            try {
+                                const postRes = await fetch('/models/reasoning', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ model: selected })
+                                });
+                                const responseData = await postRes.json();
+                                if (!responseData.success) {
+                                    console.error('Failed to switch model:', responseData.message);
+                                }
+                            } catch (e) {
+                                console.error('Error switching model:', e);
+                            }
+                        });
+                        
+                        modelMenu.appendChild(opt);
                     });
                 }
             } catch (e) {
@@ -1251,6 +1300,106 @@
             });
         }
         
+        // Graph rendering
+        let networkInstance = null;
+        
+        function renderGraph(ontology, container) {
+            if (!container) return;
+            
+            const nodes = [];
+            const edges = [];
+            
+            // Format colors based on type
+            const typeColors = {
+                Person: { background: '#D97706', border: '#B45309', hover: '#F59E0B' },
+                Location: { background: '#2563EB', border: '#1D4ED8', hover: '#3B82F6' },
+                Organization: { background: '#4F46E5', border: '#4338CA', hover: '#6366F1' },
+                Event: { background: '#DC2626', border: '#B91C1C', hover: '#EF4444' },
+                Equipment: { background: '#059669', border: '#047857', hover: '#10B981' },
+                Concept: { background: '#9333EA', border: '#7E22CE', hover: '#A855F7' },
+                default: { background: '#4B5563', border: '#374151', hover: '#6B7280' }
+            };
+            
+            if (ontology.entities) {
+                for (const [id, ent] of Object.entries(ontology.entities)) {
+                    const colors = typeColors[ent.type] || typeColors.default;
+                    const propertiesStr = Object.entries(ent.properties || {})
+                        .map(([k, v]) => `<b>${escapeHtml(k)}</b>: ${escapeHtml(String(v))}`)
+                        .join('<br>');
+                    
+                    // Simple HTML tooltips need element inside 'title' in newer vis-network, 
+                    // or we style vis-tooltip via CSS (the default is plain text browser tooltip unless hover interaction is set)
+                    let tooltipHtml = document.createElement('div');
+                    tooltipHtml.innerHTML = `<b>${escapeHtml(ent.name)}</b><br><i>${escapeHtml(ent.type)}</i><br><br>${propertiesStr}`;
+                    
+                    nodes.push({
+                        id: id,
+                        label: ent.name,
+                        title: tooltipHtml,
+                        color: {
+                            background: colors.background,
+                            border: colors.border,
+                            highlight: {
+                                background: colors.hover,
+                                border: colors.border
+                            }
+                        },
+                        font: { color: '#ffffff' },
+                        shape: 'dot',
+                        size: 20
+                    });
+                }
+            }
+            
+            if (ontology.links) {
+                for (const [id, link] of Object.entries(ontology.links)) {
+                    if (ontology.entities[link.source] && ontology.entities[link.target]) {
+                        edges.push({
+                            id: id,
+                            from: link.source,
+                            to: link.target,
+                            label: link.relation_type,
+                            title: link.description || link.relation_type,
+                            color: '#9CA3AF',
+                            font: { color: '#D1D5DB', size: 12, strokeWidth: 0, align: 'middle' },
+                            arrows: 'to',
+                            smooth: { type: 'continuous' }
+                        });
+                    }
+                }
+            }
+            
+            const data = {
+                nodes: new vis.DataSet(nodes),
+                edges: new vis.DataSet(edges)
+            };
+            
+            const options = {
+                physics: {
+                    forceAtlas2Based: {
+                        gravitationalConstant: -50,
+                        centralGravity: 0.01,
+                        springLength: 100,
+                        springConstant: 0.08
+                    },
+                    maxVelocity: 50,
+                    solver: 'forceAtlas2Based',
+                    timestep: 0.35,
+                    stabilization: { iterations: 150 }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200
+                }
+            };
+            
+            if (!networkInstance) {
+                networkInstance = new vis.Network(container, data, options);
+            } else {
+                networkInstance.setData(data);
+            }
+        }
+        
         // Send query
         async function sendQuery() {
             const q = chatInput.value.trim();
@@ -1269,6 +1418,8 @@
             if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
             if (reasoningLoading) reasoningLoading.style.display = 'flex';
             if (mapsLoading) mapsLoading.style.display = 'flex';
+            const graphLoading = document.getElementById('graph-loading');
+            if (graphLoading) graphLoading.style.display = 'flex';
 
             const responseEl = addMessage('');
             rawStreamBuffer = '';
@@ -1318,18 +1469,39 @@
                             } else if (evt.type === 'tool_result') {
                                 // Display tool result in reasoning step
                                 addReasoningResult(evt.tool, evt.summary, evt.content);
-                            } else if (evt.type === 'locations_found') {
-                                // Handle extracted locations - render map
-                                // Hide maps loading
+                            } else if (evt.type === 'ontology_updated') {
+                                // Handle ontology updates - render graph & map
                                 if (mapsLoading) mapsLoading.style.display = 'none';
+                                const graphLoading = document.getElementById('graph-loading');
+                                if (graphLoading) graphLoading.style.display = 'none';
+                                
+                                const ontology = evt.ontology || {entities: {}, links: {}};
+                                console.log("[DEBUG] Current SessionOntology data:", ontology);
+                                
+                                // Render vis-network knowledge graph
+                                const graphContainer = document.getElementById('graph-container');
+                                if (graphContainer) {
+                                    renderGraph(ontology, graphContainer);
+                                    const winData = windowManager.windows.get('window-graph');
+                                    if (winData && winData.minimized) {
+                                        windowManager.restoreWindow('window-graph');
+                                    }
+                                }
 
+                                // Extract map locations and render map
                                 const mapContainer = document.getElementById('map-container');
-
-                                if (evt.locations && evt.locations.length > 0) {
-                                    // Render the map (includes building legend)
-                                    renderMap(evt.locations, mapContainer);
-
-                                    // Show maps window if minimized
+                                const locations = Object.values(ontology.entities || {}).filter(
+                                    e => e.type === 'Location' && e.properties && e.properties.lat && e.properties.lon
+                                ).map(e => ({
+                                    name: e.name,
+                                    type: e.type,
+                                    lat: e.properties.lat,
+                                    lon: e.properties.lon,
+                                    relevance: e.properties.relevance || 0.5
+                                }));
+                                
+                                if (locations && locations.length > 0) {
+                                    renderMap(locations, mapContainer);
                                     const winData = windowManager.windows.get('window-maps');
                                     if (winData && winData.minimized) {
                                         windowManager.restoreWindow('window-maps');
@@ -1342,14 +1514,14 @@
                                 responseEl.innerHTML = `<div class="error-message">Error: ${escapeHtml(evt.content)}</div>`;
                                 // Also show error in reasoning window
                                 addReasoningError(evt.tool || 'unknown', evt.content);
-                            } else if (evt.type === 'location_error') {
-                                // Handle location extraction errors gracefully
-                                addReasoningError('location_extractor', evt.content);
-                                // Hide maps loading
+                            } else if (evt.type === 'ontology_error') {
+                                addReasoningError('ontology_subgraph', evt.content);
                                 if (mapsLoading) mapsLoading.style.display = 'none';
+                                const graphLoading = document.getElementById('graph-loading');
+                                if (graphLoading) graphLoading.style.display = 'none';
                                 const mapLegend = document.getElementById('map-legend');
                                 if (mapLegend) {
-                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Location extraction failed - continuing without maps</span>';
+                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Ontology extraction failed - continuing without map and graph updates</span>';
                                 }
                             }
                         } catch (parseErr) {

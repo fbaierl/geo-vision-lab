@@ -8,4 +8,4 @@ class AgentState(TypedDict):
     validation_attempts: Annotated[int, operator.add]
     is_valid: bool
     vector_search_results: Optional[str]
-    extracted_locations: Optional[List[Dict[str, Any]]]
+    ontology: Optional[Any] # Will store SessionOntology.Dict since TypedDict serializes easier

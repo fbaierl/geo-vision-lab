@@ -14,11 +14,12 @@ from app.core.di_llm import get_llm
 from app.core.di_services import get_vector_store
 from app.core.constants import (
     NODE_VECTOR_SEARCH, NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
-    NODE_LOCATION_EXTRACTOR,
+    NODE_ONTOLOGY_EXTRACTOR,
     VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
-    STATE_KEY_EXTRACTED_LOCATIONS, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
+    STATE_KEY_ONTOLOGY, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
 )
-from app.agents.location_subgraph import location_subgraph
+from app.agents.ontology_subgraph import ontology_subgraph
+from app.models.ontology import SessionOntology
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -157,11 +158,11 @@ def review_response(state: AgentState, config: RunnableConfig):
     return {STATE_KEY_IS_VALID: True, STATE_KEY_VALIDATION_ATTEMPTS: 1, "reviewer_result": VALIDATION_VALID}
 
 
-def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_LOCATION_EXTRACTOR]:
-    # If it's valid, proceed to location extraction
+def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_ONTOLOGY_EXTRACTOR]:
+    # If it's valid, proceed to ontology extraction
     if state.get(STATE_KEY_IS_VALID):
-        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to 'location_extractor'.")
-        return NODE_LOCATION_EXTRACTOR
+        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to 'ontology_extractor'.")
+        return NODE_ONTOLOGY_EXTRACTOR
 
     attempts = state.get(STATE_KEY_VALIDATION_ATTEMPTS, 0)
     if attempts >= 3:
@@ -172,14 +173,14 @@ def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_LOCATION_EXT
     return NODE_AGENT
 
 
-def run_location_subgraph(state: AgentState) -> Dict[str, Any]:
+def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
     """
-    Run the location processing sub-graph.
+    Run the ontology processing sub-graph.
     
-    This wraps the location_subgraph and maps state between main graph and sub-graph.
+    This wraps the ontology_subgraph and maps state between main graph and sub-graph.
     """
     logger.info("=" * 80)
-    logger.info("[LOCATION_SUBGRAPH] Starting location processing sub-graph")
+    logger.info("[ONTOLOGY_SUBGRAPH] Starting ontology processing sub-graph")
     logger.info("=" * 80)
     
     # Get the last assistant message (the final response)
@@ -191,31 +192,70 @@ def run_location_subgraph(state: AgentState) -> Dict[str, Any]:
     user_query = user_msgs[0].content if user_msgs else ""
     
     if not assistant_response:
-        logger.info("[LOCATION_SUBGRAPH] No response content to process")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: []}
+        logger.info("[ONTOLOGY_SUBGRAPH] No response content to process")
+        return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
     
     try:
         # Prepare sub-graph input
         subgraph_input = {
             "user_query": user_query,
             "assistant_response": assistant_response,
-            "query_target_locations": [],
-            "ner_extracted_locations": [],
-            "final_locations": []
+            "query_id": "default"
         }
         
         # Run sub-graph
-        subgraph_result = location_subgraph.invoke(subgraph_input)
+        subgraph_result = ontology_subgraph.invoke(subgraph_input)
+        delta = subgraph_result.get("extracted_delta")
         
-        # Extract final locations from sub-graph output
-        final_locations = subgraph_result.get("final_locations", [])
+        # Merge with existing session ontology
+        current_ontology = state.get(STATE_KEY_ONTOLOGY)
+        if not current_ontology:
+            current_ontology = SessionOntology().model_dump()
+        elif isinstance(current_ontology, SessionOntology):
+            current_ontology = current_ontology.model_dump()
+            
+        if delta:
+            entities = delta.get("entities", {}) if isinstance(delta, dict) else delta.entities
+            links = delta.get("links", {}) if isinstance(delta, dict) else delta.links
+            
+            # Merge Entities
+            for k, v in entities.items():
+                new_ent_data = v if isinstance(v, dict) else v.model_dump()
+                
+                if k not in current_ontology["entities"]:
+                    current_ontology["entities"][k] = new_ent_data
+                else:
+                    # Merge properties and mentions
+                    existing = current_ontology["entities"][k]
+                    
+                    # Add new mentions
+                    if "mentions" in new_ent_data:
+                        existing.setdefault("mentions", []).extend(new_ent_data["mentions"])
+                    
+                    # Merge properties (new info takes precedence if non-null)
+                    if "properties" in new_ent_data:
+                        for p_k, p_v in new_ent_data["properties"].items():
+                            if p_v is not None:
+                                existing.setdefault("properties", {})[p_k] = p_v
+            
+            # Merge Links
+            for k, v in links.items():
+                new_link_data = v if isinstance(v, dict) else v.model_dump()
+                if k not in current_ontology["links"]:
+                    current_ontology["links"][k] = new_link_data
+                else:
+                    # Append new mentions to existing link
+                    existing_link = current_ontology["links"][k]
+                    if "mentions" in new_link_data:
+                        existing_link.setdefault("mentions", []).extend(new_link_data["mentions"])
         
-        logger.info(f"[LOCATION_SUBGRAPH] Sub-graph complete: {len(final_locations)} location(s)")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: final_locations}
+        entity_count = len(current_ontology.get("entities", {}))
+        logger.info(f"[ONTOLOGY_SUBGRAPH] Sub-graph complete: {entity_count} entities accumulated.")
+        return {STATE_KEY_ONTOLOGY: current_ontology}
         
     except Exception as e:
-        logger.error(f"[LOCATION_SUBGRAPH] Sub-graph failed: {e}")
-        return {STATE_KEY_EXTRACTED_LOCATIONS: []}
+        logger.error(f"[ONTOLOGY_SUBGRAPH] Sub-graph failed: {e}")
+        return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
 
 
 def get_graph():
@@ -227,7 +267,7 @@ def get_graph():
     workflow.add_node(NODE_AGENT, call_model)
     workflow.add_node(NODE_TOOLS, ToolNode(tools))
     workflow.add_node(NODE_REVIEWER, review_response)
-    workflow.add_node(NODE_LOCATION_EXTRACTOR, run_location_subgraph)
+    workflow.add_node(NODE_ONTOLOGY_EXTRACTOR, run_ontology_subgraph)
 
     # Set entry point to vector_search (mandatory first step)
     workflow.set_entry_point(NODE_VECTOR_SEARCH)
@@ -244,8 +284,8 @@ def get_graph():
     # Reviewer validates or sends back for revision
     workflow.add_conditional_edges(NODE_REVIEWER, check_validation)
 
-    # Location sub-graph processes locations, then ends
-    workflow.add_edge(NODE_LOCATION_EXTRACTOR, "__end__")
+    # Ontology sub-graph processes entities, then ends
+    workflow.add_edge(NODE_ONTOLOGY_EXTRACTOR, "__end__")
 
     return workflow.compile(checkpointer=checkpointer)
 
@@ -339,9 +379,9 @@ async def process_query_stream(
                 if "reviewer" in tags:
                     from app.core.config import settings
                     yield {"type": "status", "phase": "reviewing", "model": settings.REVIEWER_LLM_MODEL_NAME}
-                elif "location_extractor" in tags:
+                elif "ontology_extractor" in tags:
                     from app.core.config import settings
-                    yield {"type": "status", "phase": "extracting_locations", "model": settings.REVIEWER_LLM_MODEL_NAME}
+                    yield {"type": "status", "phase": "extracting_ontology", "model": settings.REVIEWER_LLM_MODEL_NAME}
                 else:
                     from app.core.config import settings
                     if streaming_started:
@@ -400,44 +440,27 @@ async def process_query_stream(
                             "content": reviewer_result,
                         }
 
-                # Capture location sub-graph result (emits final filtered locations)
-                # The sub-graph combines extraction and prioritization
-                if event.get("name") == "location_extractor":
+                # Capture ontology sub-graph result
+                if event.get("name") == "ontology_extractor":
                     output = event.get("data", {}).get("output", {})
-                    # The subgraph outputs 'final_locations', which gets mapped to 'extracted_locations' in main graph state
-                    # But in streaming events, we get the raw subgraph output
-                    locations = output.get("final_locations", output.get("extracted_locations", [])) if isinstance(output, dict) else []
-                    logger.info(f"[LOCATION_SUBGRAPH] Location extraction completed: {len(locations)} location(s) found")
-                    logger.debug(f"[LOCATION_SUBGRAPH] Found {len(locations)} locations")
-
-                    if locations and isinstance(locations, list) and len(locations) > 0:
-                        # Include relevance scores in the output
-                        loc_summary = ", ".join([
-                            f"{loc['name']} ({loc.get('relevance', 1.0):.1f})"
-                            for loc in locations[:3]
-                        ])
-                        if len(locations) > 3:
-                            loc_summary += f" +{len(locations) - 3} more"
-                        logger.info(f"[LOCATION_SUBGRAPH] Successfully prioritized {len(locations)} location(s)")
+                    ontology_state = output.get(STATE_KEY_ONTOLOGY, {})
+                    
+                    if ontology_state and isinstance(ontology_state, dict):
+                        entities = ontology_state.get("entities", {})
+                        links = ontology_state.get("links", {})
+                        logger.info(f"[ONTOLOGY_SUBGRAPH] Extracted {len(entities)} entities")
+                        
                         yield {
-                            "type": "locations_found",
-                            "tool": "location_subgraph",
-                            "summary": f"Prioritized {len(locations)} location(s): {loc_summary}",
-                            "locations": locations,
+                            "type": "ontology_updated",
+                            "tool": "ontology_subgraph",
+                            "summary": f"Graph updated: {len(entities)} entities, {len(links)} relationships",
+                            "ontology": ontology_state,
                         }
-                    elif not locations:
-                        # Log the error before yielding to frontend
-                        logger.warning(
-                            "[LOCATION_SUBGRAPH] No locations found. Possible causes: "
-                            "1) No geographic locations in response text, "
-                            "2) Nominatim rate limiting (HTTP 429), "
-                            "3) Geocoding service unavailable"
-                        )
-                        # Emit error event if no locations found
+                    else:
                         yield {
-                            "type": "location_error",
-                            "tool": "location_subgraph",
-                            "content": "Location processing completed but no locations were found. This may be due to:\n- No geographic locations in the response text\n- Nominatim rate limiting (HTTP 429)\n- Geocoding service unavailable\n\nThe query response is still valid - continuing without map visualization.",
+                            "type": "ontology_error",
+                            "tool": "ontology_subgraph",
+                            "content": "Ontology extraction completed but failed to return data."
                         }
 
             elif kind == "on_chat_model_end":

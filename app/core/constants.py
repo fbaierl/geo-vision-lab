@@ -13,7 +13,7 @@ NODE_VECTOR_SEARCH = "vector_search"
 NODE_AGENT = "agent"
 NODE_TOOLS = "tools"
 NODE_REVIEWER = "reviewer"
-NODE_LOCATION_EXTRACTOR = "location_extractor"
+NODE_ONTOLOGY_EXTRACTOR = "ontology_extractor"
 NODE_LOCATION_PRIORITIZER = "location_prioritizer"
 
 
@@ -26,7 +26,7 @@ EVENT_TYPE_TOOL_RESULT = "tool_result"
 EVENT_TYPE_TOKEN = "token"
 EVENT_TYPE_DONE = "done"
 EVENT_TYPE_ERROR = "error"
-EVENT_TYPE_LOCATIONS_FOUND = "locations_found"
+EVENT_TYPE_ONTOLOGY_UPDATED = "ontology_updated"
 
 
 # =============================================================================
@@ -37,7 +37,7 @@ PHASE_VECTOR_SEARCH = "vector_search"
 PHASE_REASONING = "reasoning"
 PHASE_REVIEWING = "reviewing"
 PHASE_ONLINE_SEARCH = "online_search"
-PHASE_EXTRACTING_LOCATIONS = "extracting_locations"
+PHASE_EXTRACTING_ONTOLOGY = "extracting_ontology"
 PHASE_STREAMING = "streaming"
 PHASE_REVISING = "revising"
 
@@ -69,4 +69,4 @@ STATE_KEY_MESSAGES = "messages"
 STATE_KEY_VALIDATION_ATTEMPTS = "validation_attempts"
 STATE_KEY_IS_VALID = "is_valid"
 STATE_KEY_VECTOR_SEARCH_RESULTS = "vector_search_results"
-STATE_KEY_EXTRACTED_LOCATIONS = "extracted_locations"
+STATE_KEY_ONTOLOGY = "ontology"

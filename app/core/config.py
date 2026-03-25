@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         return self.OLLAMA_BASE_URL
 
     # --- LLM Models ---
-    REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
+    REASONING_LLM_MODEL_NAME: str = "llama3.2"  # Switchable: llama3.2, qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
     REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Using 4B for more reliable validation
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"  # EU endpoint
 
     # --- Available Reasoning Models ---
-    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
+    AVAILABLE_REASONING_MODELS: list[str] = ["llama3.2", "qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
 
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000
