@@ -57,7 +57,7 @@ graph TB
     end
 
     subgraph Critic["Critic Agent"]
-        REVIEW["QA Reviewer<br/>(Qwen 2.5 0.5B)"]
+        REVIEW["QA Reviewer<br/>(Qwen 3.5 4B)"]
     end
 
     subgraph Ontology["Ontology Extractor Sub-Graph"]
@@ -277,7 +277,7 @@ If any constraint is violated, explain the issue and request revision.
 %%{init: {'theme': 'dark'}}%%
 flowchart LR
     subgraph EXT["Entity & Link Extraction"]
-        TEXT[Response Text] --> LLM["LLM Structured Output<br/>(Qwen 2.5 0.5B)"]
+        TEXT[Response Text] --> LLM["LLM Structured Output<br/>(Qwen 3.5 4B)"]
         LLM --> ENTITIES["Extract Entities<br/>Location, Person, Organization,<br/>Event, Asset, Document, Concept"]
         LLM --> LINKS["Extract Relationships<br/>Source → Target<br/>with Type + Context"]
     end

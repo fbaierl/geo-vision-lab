@@ -32,7 +32,7 @@ graph TB
     end
 
     subgraph Extract ["Extraction Layer"]
-        LLM["LLM Structured Output<br/>(Qwen 2.5 0.5B)"]
+        LLM["LLM Structured Output<br/>(Qwen 3.5 4B)"]
         ENT_PARSER["Entity Parser"]
         LINK_PARSER["Link Parser"]
     end

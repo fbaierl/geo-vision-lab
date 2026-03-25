@@ -62,8 +62,7 @@ class VectorStoreService:
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  get_mongo_client()     → MongoClient                │   │
 │  │  get_embeddings()       → HuggingFaceEmbeddings      │   │
-│  │  get_reasoning_llm()    → ChatOllama                 │   │
-│  │  get_reviewer_llm()     → ChatOllama                 │   │
+│  │  get_llm()              → ChatOllama                 │   │
 │  │  get_ner_pipeline()     → HuggingFace NER Pipeline   │   │
 │  │  get_vector_store()     → VectorStoreService         │   │
 │  │  get_location_extractor() → LocationExtractorService │   │
@@ -77,13 +76,13 @@ class VectorStoreService:
 │  │ VectorStore      │  │ LocationExtractor    │            │
 │  │ Service          │  │ Service              │            │
 │  │ - embeddings     │  │ - ner_pipeline       │            │
-│  │ - client         │  │ - reviewer_llm       │            │
-│  │ - collection     │  │ - geocode_cache      │            │
+│  │ - client         │  │ - geocode_cache      │            │
+│  │ - collection     │  │                      │            │
 │  └──────────────────┘  └──────────────────────┘            │
 │  ┌──────────────────┐                                      │
 │  │ LocationPrior....│                                      │
 │  │ Service          │                                      │
-│  │ - reviewer_llm   │                                      │
+│  │ - llm            │                                      │
 │  └──────────────────┘                                      │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -178,7 +177,6 @@ service = get_location_extractor()
 # Or create manually
 service = LocationExtractorService(
     ner_pipeline=ner_model,
-    reviewer_llm=llm,
     geocode_cache={}
 )
 
@@ -199,7 +197,7 @@ from app.services.location_prioritizer import LocationPrioritizerService, get_lo
 service = get_location_prioritizer()
 
 # Or create manually
-service = LocationPrioritizerService(reviewer_llm=llm)
+service = LocationPrioritizerService(llm=get_llm())
 
 # Use
 prioritized = service.prioritize_locations(

@@ -11,13 +11,13 @@ We use the Qwen 2.5 series (tagged as `qwen3.5` in our environment for internal 
 | Role | Model Name | Description |
 | :--- | :--- | :--- |
 | **Main LLM** | `qwen3.5:4b` | Handling general application requests and transformations. |
-| **Reasoning LLM** | `qwen3.5:4b` | Dedicated to complex reasoning tasks. Switchable to `9b` or `0.8b`. |
-| **Reviewer LLM** | `qwen3.5:0.8b` | Efficient model used for QA and validation steps. |
+| **Reasoning LLM** | `qwen3.5:4b` | Dedicated to complex reasoning tasks. Switchable to `9b`. |
 
 ### Available Reasoning Models
 - `qwen3.5:9b`: Highest quality, requires more VRAM.
 - `qwen3.5:4b`: Balanced performance and speed (Default).
-- `qwen3.5:0.8b`: Lightest version, useful for low-resource environments.
+
+**Single LLM Strategy:** Qwen 3.5 handles all tasks (reasoning, validation, ontology extraction). Switch between 9B and 4B based on complexity vs. speed requirements.
 
 ---
 

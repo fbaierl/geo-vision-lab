@@ -107,7 +107,7 @@ vector_index = {
 | **Qwen 3.5 9B** | 9 billion | ~6 GB | Slower | Highest | Complex analysis, detailed reports |
 | **Qwen 3.5 4B** | 4 billion | ~3 GB | Balanced | High | Default — general purpose queries |
 
-**Note**: The QA/Reviewer model remains fixed at Qwen 2.5:0.5b for consistent constraint checking.
+**Single LLM Strategy:** Qwen 3.5 handles all tasks (reasoning, validation, ontology extraction). Switch between 9B and 4B based on complexity vs. speed requirements.
 
 ---
 
@@ -290,8 +290,7 @@ Using **Rajdhani** (Google Fonts) for the tactical/cyberpunk aesthetic:
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) | Core analysis and reasoning |
-| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b | Constraint validation + Ontology extraction |
+| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) | Single model for all tasks (reasoning, validation, ontology) |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization |
 | **Vector Database** | MongoDB 8.2+ Vector Search | Semantic search storage + Knowledge graph |
 | **Database GUI** | Mongo Express | Web-based MongoDB browser |

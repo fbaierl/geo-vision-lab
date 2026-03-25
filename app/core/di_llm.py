@@ -36,12 +36,12 @@ def _create_llm() -> ChatOllama:
     Single LLM instance used for all tasks:
     - Agent reasoning
     - QA validation
+    - Ontology extraction
     - Location prioritization
-    - Query location parsing
 
     The model is determined by settings.REASONING_LLM_MODEL_NAME.
-    No num_predict limit - let the model generate what it needs.
-    
+    Default: qwen3.5:4b, switchable to qwen3.5:9b via UI.
+
     Timeout set to 120 seconds for long responses.
     """
     logger.info(f"[DI] Creating LLM: {settings.REASONING_LLM_MODEL_NAME}")
@@ -56,7 +56,7 @@ def _create_llm() -> ChatOllama:
 
 def get_llm() -> ChatOllama:
     """Get LLM (managed by DI container).
-    
-    Single LLM for all tasks - user's model choice applies everywhere.
+
+    Single LLM for all tasks - Qwen 3.5 family (4B default, 9B optional).
     """
     return _get_container()._get_or_create(get_llm, _create_llm)

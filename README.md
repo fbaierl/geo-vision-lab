@@ -247,7 +247,7 @@ GeoVision Lab supports **dynamic switching between different Qwen 3.5 LLM models
 2. Use the model selector dropdown above the chat input
 3. Selection takes effect immediately
 
-The QA/Reviewer model remains fixed at `Qwen 2.5:0.5b` for consistent constraint checking.
+**Single LLM Strategy:** Qwen 3.5 handles all tasks (reasoning, validation, ontology extraction). Switch between 9B (complex analysis) and 4B (general use) as needed.
 
 ---
 
@@ -321,8 +321,7 @@ geo-vision-lab/
 
 | Layer | Technology |
 |-------|------------|
-| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) |
-| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b (also used for ontology extraction) |
+| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) - single model for all tasks |
 | **Ontology Extraction** | LLM structured output + Nominatim geocoding |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
