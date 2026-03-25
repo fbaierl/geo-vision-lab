@@ -69,8 +69,8 @@ class LocationExtractorService:
                 entity_label = entity.get("entity_group", entity.get("label", ""))
                 entity_text = entity.get("word", entity.get("entity_text", ""))
 
-                # Skip entities shorter than 3 characters (filters out abbreviations)
-                if len(entity_text) < 3:
+                # Skip entities shorter than 4 characters (filters out abbreviations like IRA, UAE, USA)
+                if len(entity_text) < 4:
                     continue
 
                 if entity_label in ["LOC", "GPE", "FAC"]:

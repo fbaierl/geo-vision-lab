@@ -121,15 +121,11 @@ Respond ONLY with a JSON array in this format:
 IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_index: -1 and relevance: 0.0 for excluded locations."""
 
         try:
-            # Enable reasoning mode to separate thinking from JSON response
-            # This prevents Qwen from wrapping JSON in <think>...</think> tags
-            response = self.llm.invoke(prompt, reasoning=True)
+            # Disable reasoning mode for this structured JSON task.
+            # The shared LLM still uses reasoning for the main agent graph.
+            # num_predict caps output — a JSON array for 5 locations needs <512 tokens.
+            response = self.llm.invoke(prompt, reasoning=False)
             response_content = response.content if hasattr(response, 'content') else str(response)
-            
-            # Log reasoning content for debugging (if available)
-            reasoning_content = response.additional_kwargs.get("reasoning_content", "") if hasattr(response, 'additional_kwargs') else ""
-            if reasoning_content:
-                logger.debug(f"[LOCATION_PRIORITIZER] Reasoning: {reasoning_content[:200]}...")
 
             # Parse JSON from response
             json_match = re.search(r'\[.*\]', response_content, re.DOTALL)
