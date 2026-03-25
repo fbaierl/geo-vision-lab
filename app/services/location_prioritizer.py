@@ -123,7 +123,6 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
         try:
             # Disable reasoning mode for this structured JSON task.
             # The shared LLM still uses reasoning for the main agent graph.
-            # num_predict caps output — a JSON array for 5 locations needs <512 tokens.
             response = self.llm.invoke(prompt, reasoning=False)
             response_content = response.content if hasattr(response, 'content') else str(response)
 
