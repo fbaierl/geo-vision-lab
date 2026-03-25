@@ -407,6 +407,7 @@ async def process_query_stream(
                     # The subgraph outputs 'final_locations', which gets mapped to 'extracted_locations' in main graph state
                     # But in streaming events, we get the raw subgraph output
                     locations = output.get("final_locations", output.get("extracted_locations", [])) if isinstance(output, dict) else []
+                    logger.info(f"[LOCATION_SUBGRAPH] Location extraction completed: {len(locations)} location(s) found")
                     logger.debug(f"[LOCATION_SUBGRAPH] Found {len(locations)} locations")
 
                     if locations and isinstance(locations, list) and len(locations) > 0:
@@ -417,6 +418,7 @@ async def process_query_stream(
                         ])
                         if len(locations) > 3:
                             loc_summary += f" +{len(locations) - 3} more"
+                        logger.info(f"[LOCATION_SUBGRAPH] Successfully prioritized {len(locations)} location(s)")
                         yield {
                             "type": "locations_found",
                             "tool": "location_subgraph",
@@ -424,6 +426,13 @@ async def process_query_stream(
                             "locations": locations,
                         }
                     elif not locations:
+                        # Log the error before yielding to frontend
+                        logger.warning(
+                            "[LOCATION_SUBGRAPH] No locations found. Possible causes: "
+                            "1) No geographic locations in response text, "
+                            "2) Nominatim rate limiting (HTTP 429), "
+                            "3) Geocoding service unavailable"
+                        )
                         # Emit error event if no locations found
                         yield {
                             "type": "location_error",

@@ -1,6 +1,7 @@
 import os
 import logging
 import logging.config
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +14,6 @@ class PollingFilter(logging.Filter):
     """Filter out repetitive /api/ps polling logs from httpx."""
     def filter(self, record):
         msg = record.getMessage()
-        # Allow all logs except successful GET /api/ps calls
         if record.levelno == logging.INFO and 'GET' in msg and '/api/ps' in msg and '200 OK' in msg:
             return False
         return True
@@ -24,17 +24,36 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-# Apply filter to httpx logger to suppress repetitive /api/ps polling logs
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.addFilter(PollingFilter())
 
 logger = logging.getLogger("geovision_app")
-logger.info("[APP] Starting GeoVision Lab API server...")
 
-app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
-logger.info(f"[APP] App initialized: {settings.APP_NAME} v{settings.VERSION}")
 
-# Enable CORS or other middlewares if needed in the future
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI lifespan context manager.
+
+    Kicks off model warm-up immediately in the background so the UI
+    is available while models are still loading / being downloaded.
+    """
+    import asyncio
+    from app.core.startup import warm_up_models
+
+    logger.info("[APP] Starting GeoVision Lab API server…")
+    logger.info("[APP] UI available immediately — models loading in background.")
+
+    # Fire-and-forget: warmup runs concurrently with request handling
+    asyncio.create_task(warm_up_models())
+
+    yield  # app is running
+
+    logger.info("[APP] Shutting down GeoVision Lab.")
+
+
+app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
+logger.info(f"[APP] App initialised: {settings.APP_NAME} v{settings.VERSION}")
 
 # Include API routes
 app.include_router(chat.router, tags=["chat"])
@@ -43,8 +62,6 @@ app.include_router(models.router, tags=["models"])
 
 # Ensure static directories exist
 os.makedirs("static", exist_ok=True)
-
-# Mount static files to serve the frontend with no caching
 
 
 class NoCacheStaticFiles(StaticFiles):
