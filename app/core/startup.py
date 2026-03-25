@@ -43,7 +43,6 @@ def _set_model_status(name: str, status: str, label: str | None = None) -> None:
 def get_warmup_status() -> Dict[str, Any]:
     """Get current model warm-up status (safe copy for API responses)."""
     models = _warmup_status["models"]
-    results = {k: v["status"] for k, v in models.items()}
     all_ready = all(v["status"] == "ready" for v in models.values())
     any_error = any(v["status"] == "error" for v in models.values())
 
