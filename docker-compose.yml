@@ -63,6 +63,7 @@ services:
     container_name: geovision-ingest
     volumes:
       - ./documents:/app/documents
+      - hf_cache:/root/.cache/huggingface
     environment:
       - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
       - OLLAMA_HOST=http://geovision-ollama:11434
@@ -79,6 +80,7 @@ services:
     container_name: geovision-app
     volumes:
       - .:/app
+      - hf_cache:/root/.cache/huggingface
     environment:
       - OLLAMA_HOST=http://geovision-ollama:11434
       - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
@@ -90,7 +92,7 @@ services:
       mongodb:
         condition: service_healthy
       ollama:
-        condition: service_healthy
+        condition: service_started
       ingest:
         condition: service_completed_successfully
     ports:
@@ -148,5 +150,6 @@ volumes:
   mongodb_configdb:
   mongodb_mongot:
   ollama_data:
+  hf_cache:
   loki_data:
   grafana_data:

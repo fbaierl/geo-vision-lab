@@ -1284,3 +1284,73 @@ html, body {
 .status-item-value.amber { color: var(--amber); }
 .status-item-value.red { color: var(--red); }
 .status-item-value.accent { color: var(--accent-bright); }
+
+/* ═══ MODEL LOADING STATUS BANNER ═══ */
+
+.model-loading-banner {
+    border-left: 3px solid var(--amber) !important;
+    background: linear-gradient(135deg,
+        rgba(255, 179, 0, 0.06) 0%,
+        var(--bg-panel) 60%
+    ) !important;
+    animation: bannerPulse 3s ease-in-out infinite;
+}
+
+.model-loading-banner.models-ready {
+    border-left-color: var(--green) !important;
+    background: linear-gradient(135deg,
+        rgba(76, 175, 80, 0.08) 0%,
+        var(--bg-panel) 60%
+    ) !important;
+    animation: none;
+}
+
+@keyframes bannerPulse {
+    0%, 100% { border-left-color: var(--amber); }
+    50%       { border-left-color: var(--accent-bright); }
+}
+
+/* Individual per-model status row */
+.model-status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding: 2px 0;
+}
+
+/* Animated spinner dot */
+.msi-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.msi-dot.loading {
+    border: 2px solid rgba(255, 179, 0, 0.3);
+    border-top-color: var(--amber);
+    animation: msiSpin 0.9s linear infinite;
+}
+
+.msi-dot.ready {
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: none;
+}
+
+.msi-dot.error {
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+    animation: none;
+}
+
+@keyframes msiSpin {
+    to { transform: rotate(360deg); }
+}
+
+.msi-label {
+    transition: color 0.3s ease;
+}
+

@@ -10,6 +10,14 @@ from app.core.di import container
 
 
 @pytest.fixture(autouse=True)
+def disable_langsmith_tracing(monkeypatch):
+    """Disable LangSmith tracing for all tests to avoid cluttering the dashboard."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "LANGSMITH_TRACING", False)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def reset_di_container():
     """Reset DI container overrides after each test."""
     yield

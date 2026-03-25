@@ -1,8 +1,11 @@
 from fastapi import APIRouter
 import httpx
+import logging
 from app.core.config import settings
+from app.core.startup import get_warmup_status
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/system/status")
@@ -13,7 +16,7 @@ async def system_status():
             resp = await client.get(f"{settings.OLLAMA_URL}/api/ps")
             data = resp.json()
             models = data.get("models", [])
-            
+
             if models:
                 # Model is currently loaded
                 model_info = models[0]
@@ -29,7 +32,7 @@ async def system_status():
                     "vram_bytes": vram_bytes,
                     "reason": "gpu" if vram_bytes > 0 else "gpu_standby",
                 }
-            
+
             # No model currently loaded - GPU is available if Ollama responded
             # (Ollama container has GPU configured in docker-compose.yml)
             return {
@@ -43,6 +46,7 @@ async def system_status():
             }
     except Exception as e:
         # Ollama not reachable - GPU not available
+        logger.warning(f"[OLLAMA] /api/ps call failed: {e}")
         return {
             "gpu_engaged": False,
             "gpu_available": False,
@@ -52,3 +56,9 @@ async def system_status():
             "vram_bytes": 0,
             "reason": str(e),
         }
+
+
+@router.get("/system/models/status")
+async def models_status():
+    """Return model warm-up status."""
+    return get_warmup_status()

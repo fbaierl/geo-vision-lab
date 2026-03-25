@@ -121,7 +121,9 @@ Respond ONLY with a JSON array in this format:
 IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_index: -1 and relevance: 0.0 for excluded locations."""
 
         try:
-            response = self.llm.invoke(prompt)
+            # Disable reasoning mode for this structured JSON task.
+            # The shared LLM still uses reasoning for the main agent graph.
+            response = self.llm.invoke(prompt, reasoning=False)
             response_content = response.content if hasattr(response, 'content') else str(response)
 
             # Parse JSON from response
