@@ -1503,13 +1503,18 @@
             
             if (ontology.links) {
                 for (const [id, link] of Object.entries(ontology.links)) {
-                    if (ontology.entities[link.source] && ontology.entities[link.target]) {
+                    const sourceId = link.source_id || link.source;
+                    const targetId = link.target_id || link.target;
+                    const relationType = link.type || link.relation_type;
+                    const description = link.description || link.relation_type;
+                    
+                    if (ontology.entities[sourceId] && ontology.entities[targetId]) {
                         edges.push({
                             id: id,
-                            from: link.source,
-                            to: link.target,
-                            label: link.relation_type,
-                            title: link.description || link.relation_type,
+                            from: sourceId,
+                            to: targetId,
+                            label: relationType,
+                            title: description || relationType,
                             color: '#9CA3AF',
                             font: { color: '#D1D5DB', size: 12, strokeWidth: 0, align: 'middle' },
                             arrows: 'to',
