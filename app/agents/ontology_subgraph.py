@@ -4,11 +4,9 @@ Ontology Processing Sub-Graph
 Replaces the location sub-graph to extract full graphs (Entities + Links).
 """
 
-from typing import TypedDict, Dict, Any, List
+from typing import TypedDict, Dict, Any
 from langgraph.graph import StateGraph
 import logging
-import uuid
-import time
 
 from app.models.ontology import SessionOntology, OntologyEntity, OntologyLink, Mention
 from app.services.ontology_extractor import get_ontology_extractor
@@ -27,13 +25,12 @@ class OntologySubGraphState(TypedDict):
 
 
 def extract_ontology_node(state: OntologySubGraphState) -> Dict[str, Any]:
-    """ Extracts the ontology from the assistant response. """
+    """Extracts the ontology from the assistant response."""
     logger.info("[ONTOLOGY_SUBGRAPH] Extracting entities and links")
-    
+
     assistant_response = state.get("assistant_response", "")
     query = state.get("user_query", "")
-    query_id = state.get("query_id", str(uuid.uuid4()))
-    
+
     if not assistant_response:
         return {"extracted_delta": SessionOntology()}
         

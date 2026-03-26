@@ -21,6 +21,91 @@ We use the Qwen 2.5 series (tagged as `qwen3.5` in our environment for internal 
 
 ---
 
+## Online LLM (Groq)
+
+For complex analytical queries that exceed local model capabilities, GeoVision Lab supports online LLMs via Groq.
+
+### Available Online Models
+
+| Model | Provider | Description |
+| :--- | :--- | :--- |
+| `meta-llama/llama-4-scout-17b-16e-instruct` | Groq | Llama 4 Scout 17B - Fast, high-quality reasoning |
+
+### Setup
+
+1. **Get Groq API Key**
+   - Visit [console.groq.com](https://console.groq.com)
+   - Create an account and generate an API key
+
+2. **Configure Environment**
+   Add to your `.env` file:
+   ```bash
+   GROQ_API_KEY=gsk_your-api-key-here
+   USE_ONLINE_LLM=false  # Set to true to enable online LLM
+   ONLINE_LLM_MODEL_NAME=meta-llama/llama-4-scout-17b-16e-instruct
+   ```
+
+3. **Restart Application**
+   ```bash
+   docker compose restart app
+   ```
+
+### Usage
+
+**Via UI:**
+1. Click the model selector in the chat window
+2. Toggle "Use Online LLM" switch to enable Groq
+3. Select an online model from the dropdown (marked with `[Online]` badge)
+
+**Via API:**
+```bash
+# Get current settings
+curl http://localhost:8000/settings
+
+# Enable online LLM
+curl -X POST http://localhost:8000/settings \
+  -H "Content-Type: application/json" \
+  -d '{"use_online_llm": true}'
+
+# Switch to specific model
+curl -X POST http://localhost:8000/settings \
+  -H "Content-Type: application/json" \
+  -d '{"model": "meta-llama/llama-4-scout-17b-16e-instruct"}'
+```
+
+### When to Use Online LLM
+
+**Use Online LLM for:**
+- Complex geopolitical analysis requiring deep reasoning
+- Multi-hop question answering
+- Tasks where local models produce inconsistent results
+- When you need faster inference (Groq's LPU is extremely fast)
+
+**Use Local LLM for:**
+- Simple queries and fact retrieval
+- Development and testing (no API costs)
+- Offline operation
+- Privacy-sensitive deployments
+
+### Troubleshooting
+
+**"GROQ_API_KEY not configured" error:**
+- Ensure `GROQ_API_KEY` is set in `.env`
+- Restart the application after adding the key
+- Check that the key is valid (no extra spaces)
+
+**Online models not appearing:**
+- Verify `USE_ONLINE_LLM` is set to `true`
+- Check application logs for API key validation errors
+- Ensure network connectivity to Groq API
+
+**Rate limiting:**
+- Groq has rate limits based on your API tier
+- Check usage at [console.groq.com](https://console.groq.com)
+- Consider upgrading your plan for higher limits
+
+---
+
 ## Docker Operations
 
 The project relies on Docker to manage the model lifecycle via Ollama.

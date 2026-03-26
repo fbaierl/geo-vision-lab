@@ -1,7 +1,6 @@
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime
-import uuid
 
 class Mention(BaseModel):
     source_text: str                       # The exact snippet or summary it was extracted from
