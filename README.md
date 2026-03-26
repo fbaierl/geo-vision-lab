@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="static/demo_presentation.gif" alt="GeoVision Lab Demo" width="900" />
+  <img src="static/demo_screenshot.png" alt="GeoVision Lab Demo" width="1200" />
 </p>
 
 
@@ -21,7 +21,12 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 
 - **Multi-Agent AI** — Worker + Critic + Ontology Extractor architecture with autonomous tool selection
 - **Hybrid Search** — Vector search (archival) + Web search (live events)
-- **Automatic Knowledge Graph** — LLM-based entity extraction + relationship mapping + location geocoding
+- **Automatic Knowledge Graph** — Real-time entity extraction and relationship mapping with interactive visualization
+  - **7 Entity Types**: Location, Person, Organization, Event, Asset, Document, Concept
+  - **Relationship Extraction**: LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, LEADS, PART_OF, etc.
+  - **Automatic Geocoding**: Locations are geocoded via Nominatim API with coordinates displayed on map
+  - **Interactive Graph**: Curved edges, color-coded nodes by type, hover tooltips with entity properties
+  - **Accumulative Graph**: Relationships build up during conversation sessions for context awareness
 - **3-Panel UI** — Reasoning Chain | Text Result | Knowledge Graph with resizable panels
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
 - **Privacy-First** — All inference runs locally — no data leaves your machine
