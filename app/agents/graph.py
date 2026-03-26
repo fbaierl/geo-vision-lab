@@ -182,23 +182,38 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
     logger.info("=" * 80)
     logger.info("[ONTOLOGY_SUBGRAPH] Starting ontology processing sub-graph")
     logger.info("=" * 80)
-    
+
     # Get the last assistant message (the final response)
     last_message = state[STATE_KEY_MESSAGES][-1]
     assistant_response = last_message.content if hasattr(last_message, "content") else ""
-    
-    # Get the user query from the first message
+
+    # Build full conversation context from ALL messages (not just the first query)
     user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
-    user_query = user_msgs[0].content if user_msgs else ""
+    assistant_msgs = [m for m in state[STATE_KEY_MESSAGES] if hasattr(m, "content") and not isinstance(m, HumanMessage)]
     
+    # Build conversation history for context
+    full_context_parts = []
+    for i, (user_msg, assistant_msg) in enumerate(zip(user_msgs, assistant_msgs), 1):
+        user_content = user_msg.content if hasattr(user_msg, "content") else str(user_msg)
+        assistant_content = assistant_msg.content if hasattr(assistant_msg, "content") else str(assistant_msg)
+        full_context_parts.append(f"Turn {i}:\nUser: {user_content}\nAssistant: {assistant_content}")
+    
+    # Include any remaining user messages without assistant responses (current query)
+    if len(user_msgs) > len(assistant_msgs):
+        remaining_user_msg = user_msgs[-1]
+        user_content = remaining_user_msg.content if hasattr(remaining_user_msg, "content") else str(remaining_user_msg)
+        full_context_parts.append(f"Current Query:\nUser: {user_content}")
+    
+    full_context = "\n\n".join(full_context_parts) if full_context_parts else ""
+
     if not assistant_response:
         logger.info("[ONTOLOGY_SUBGRAPH] No response content to process")
         return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
-    
+
     try:
-        # Prepare sub-graph input
+        # Prepare sub-graph input with full conversation context
         subgraph_input = {
-            "user_query": user_query,
+            "user_query": full_context,
             "assistant_response": assistant_response,
             "query_id": "default"
         }
