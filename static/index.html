@@ -1713,6 +1713,17 @@
                                     if (mapEmptyState) mapEmptyState.style.display = 'flex';
                                 }
                             } else if (evt.type === 'token') {
+                                // Skip ontology JSON that leaks from ontology extractor LLM stream
+                                // The ontology extractor outputs JSON with "entities" and "links" arrays
+                                if (evt.content) {
+                                    const content = evt.content.trim();
+                                    // Skip if it looks like ontology JSON (starts with { or contains ontology keys)
+                                    if (content.startsWith('{') || content.startsWith('"entities"') || 
+                                        content.startsWith('"links"') || content.startsWith('[') ||
+                                        content.includes('"entities":') || content.includes('"links":')) {
+                                        continue;
+                                    }
+                                }
                                 typingIndicator.classList.remove('show');
                                 appendToMessageLive(responseEl, evt.content);
                             } else if (evt.type === 'error') {

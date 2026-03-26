@@ -1,7 +1,7 @@
 <h1 align="center">GeoVision Lab</h1>
 
 <p align="center">
-  <em>Hybrid RAG platform for geopolitical analysis — online/offline LLM support, fully containerized</em>
+  <em>AI-powered geopolitical analysis platform — hybrid LLM, automatic knowledge graphs, browser-style desktop UI</em>
 </p>
 
 <p align="center">
