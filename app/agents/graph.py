@@ -444,12 +444,12 @@ async def process_query_stream(
                 if event.get("name") == "ontology_extractor":
                     output = event.get("data", {}).get("output", {})
                     ontology_state = output.get(STATE_KEY_ONTOLOGY, {})
-                    
+
                     if ontology_state and isinstance(ontology_state, dict):
                         entities = ontology_state.get("entities", {})
                         links = ontology_state.get("links", {})
                         logger.info(f"[ONTOLOGY_SUBGRAPH] Extracted {len(entities)} entities")
-                        
+
                         yield {
                             "type": "ontology_updated",
                             "tool": "ontology_subgraph",
