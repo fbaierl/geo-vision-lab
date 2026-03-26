@@ -148,6 +148,24 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 **Relationship Types:**
 - LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, LEADS, PART_OF, etc.
 
+#### Knowledge Graph Visualization
+
+The ontology system automatically extracts entities and relationships from the AI's reasoning output and displays them in an interactive knowledge graph:
+
+**Visual Features:**
+- **Color-coded nodes** by entity type (blue=Location, orange=Person, purple=Organization, red=Event, green=Asset, etc.)
+- **Curved edges** with clear relationship labels (e.g., CONFLICT_WITH, LOCATED_IN, TARGETS)
+- **Hover tooltips** showing entity properties and metadata
+- **Dynamic layout** using force-directed physics for optimal spacing
+- **Accumulative graph** that grows as the conversation progresses
+
+**Example Output:**
+When querying "What happened in Iran last week?", the knowledge graph automatically builds a network showing:
+- Countries and cities (Iran, Israel, Qatar, Gulf states)
+- Key figures (President Trump, military leaders)
+- Military bases and infrastructure (Ras Laffan Industrial City, Meyssam Tammar Basij base)
+- Relationships between entities (ATTACKED, LOCATED_IN, SENT_PLAN_TO, etc.)
+
 ### System Architecture
 
 ```mermaid
@@ -276,8 +294,12 @@ The platform includes a sample document (`documents/fantasy.md`) about the **Duc
 2. **Vector Search** — Ask about DuckyDucks; watch `vector_search` tool trigger
 3. **Live Search** — Ask about breaking news; verify `duckduckgo_search` execution
 4. **Time Awareness** — Ask "What exact date and time is it right now?"
-5. **Ontology Extraction** — Ask about real geopolitical entities (e.g., "Tell me about the conflict in Ukraine"); verify entities and relationships appear in Knowledge Graph panel
-6. **Location Geocoding** — Ask about specific cities/countries; verify coordinates are extracted
+5. **Ontology Extraction** — Ask about real geopolitical entities (e.g., "What happened in Iran last week?"); verify entities and relationships appear in Knowledge Graph panel with:
+   - Color-coded nodes (blue locations, orange people, purple organizations)
+   - Clear curved edge labels showing relationship types (ATTACKED, LOCATED_IN, etc.)
+   - Hover tooltips with entity details
+   - Proper node spacing without overlapping labels
+6. **Location Geocoding** — Ask about specific cities/countries; verify coordinates are extracted and displayed on the map panel
 7. **Model Switching** — Switch between Qwen variants; observe quality/speed differences
 8. **3-Panel UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Knowledge Graph shows entities and relationships
 9. **Resizable Panels** — Drag the vertical handles between panels to adjust widths
