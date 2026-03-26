@@ -1724,12 +1724,12 @@
                                 if (mapsLoading) mapsLoading.style.display = 'none';
                                 const graphLoading = document.getElementById('graph-loading');
                                 if (graphLoading) graphLoading.style.display = 'none';
-                                
+
                                 // Show empty states for both map and graph
                                 const mapEmptyState = document.getElementById('map-empty-state');
                                 const graphEmptyState = document.getElementById('graph-empty-state');
                                 const mapLegend = document.getElementById('map-legend');
-                                
+
                                 if (mapEmptyState) {
                                     mapEmptyState.style.display = 'flex';
                                     mapEmptyState.querySelector('.empty-state-text').textContent = '⚠ Ontology extraction failed';
@@ -1742,6 +1742,15 @@
                                 }
                                 if (mapLegend) {
                                     mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Ontology extraction failed</span>';
+                                }
+                            } else if (evt.type === 'done') {
+                                // Finalize response - clear cursor and ensure markdown is rendered
+                                if (markdownRenderTimeout) clearTimeout(markdownRenderTimeout);
+                                const cursor = responseEl.querySelector('.cursor-blink');
+                                if (cursor) cursor.remove();
+                                // Ensure markdown is rendered if we have content
+                                if (rawStreamBuffer && !responseEl.classList.contains('md-rendered')) {
+                                    renderMarkdown(responseEl);
                                 }
                             }
                         } catch (parseErr) {

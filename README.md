@@ -153,7 +153,15 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 - Location, Person, Organization, Event, Asset, Document, Concept
 
 **Relationship Types:**
-- LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, LEADS, PART_OF, etc.
+- Spatial: LOCATED_IN, STATIONED_IN, OPERATES_IN, HEADQUARTERED_IN, DEPLOYS_TO
+- Organizational: AFFILIATED_WITH, PART_OF, LEADS, COMMANDS, REPORTS_TO, FOUNDED
+- Political/Military: SUPPORTS, TARGETS, CONFLICT_WITH, ATTACKED, DEFENDS, ALLIES_WITH, SANCTIONS, ARMS, TRAINS
+- Territorial: OCCUPIES, CONTROLS, LIBERATES, CAPTURES, SEIZES, FORTIFIES, BLOCKADES
+- Diplomatic: NEGOTIATES_WITH, MET_WITH, VISITED, SIGNATORY_TO, RATIFIES, MEDIATES
+- Legal/Judicial: INVESTIGATES, INDICTS, PROSECUTES, ARRESTS, EXTRADITES, SANCTIONED_BY
+- Economic: OWNS, ACQUIRES, MERGES_WITH, PARTNERS_WITH, FUNDS, BOYCOTTS, GRANTS_AID_TO
+- Generic: USES, RELATED_TO, COLLABORATES_WITH, INFLUENCED_BY, DERIVED_FROM
+- **Note:** The system can discover and extract additional relationship types beyond this predefined list based on the text content.
 
 #### Knowledge Graph Visualization
 
