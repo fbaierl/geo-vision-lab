@@ -1507,7 +1507,7 @@
                     const targetId = link.target_id || link.target;
                     const relationType = link.type || link.relation_type;
                     const description = link.description || link.relation_type;
-                    
+
                     if (ontology.entities[sourceId] && ontology.entities[targetId]) {
                         edges.push({
                             id: id,
@@ -1515,10 +1515,39 @@
                             to: targetId,
                             label: relationType,
                             title: description || relationType,
-                            color: '#9CA3AF',
-                            font: { color: '#D1D5DB', size: 12, strokeWidth: 0, align: 'middle' },
-                            arrows: 'to',
-                            smooth: { type: 'continuous' }
+                            color: {
+                                color: '#9CA3AF',
+                                highlight: '#5ec0ff'
+                            },
+                            font: { 
+                                color: '#ffffff', 
+                                size: 13, 
+                                strokeWidth: 3,
+                                strokeColor: '#15171e',
+                                align: 'middle',
+                                face: 'sans-serif',
+                                bold: true
+                            },
+                            arrows: {
+                                to: {
+                                    enabled: true,
+                                    type: 'arrow',
+                                    scaleFactor: 1.2,
+                                    color: { inherit: 'from' }
+                                }
+                            },
+                            smooth: {
+                                type: 'curvedCW',
+                                roundness: 0.2
+                            },
+                            width: 2,
+                            shadow: {
+                                enabled: true,
+                                color: 'rgba(0, 0, 0, 0.5)',
+                                size: 4,
+                                x: 2,
+                                y: 2
+                            }
                         });
                     }
                 }
@@ -1532,19 +1561,23 @@
             const options = {
                 physics: {
                     forceAtlas2Based: {
-                        gravitationalConstant: -50,
-                        centralGravity: 0.01,
-                        springLength: 100,
-                        springConstant: 0.08
+                        gravitationalConstant: -100,
+                        centralGravity: 0.005,
+                        springLength: 200,
+                        springConstant: 0.04
                     },
                     maxVelocity: 50,
                     solver: 'forceAtlas2Based',
                     timestep: 0.35,
-                    stabilization: { iterations: 150 }
+                    stabilization: { iterations: 200 }
                 },
                 interaction: {
                     hover: true,
-                    tooltipDelay: 200
+                    tooltipDelay: 200,
+                    hoverConnectedEdges: true
+                },
+                edges: {
+                    hoverWidth: 3
                 }
             };
             

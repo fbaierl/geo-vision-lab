@@ -1655,3 +1655,25 @@ html, body {
     transition: color 0.3s ease;
 }
 
+/* ═══ VIS-NETWORK KNOWLEDGE GRAPH ═══ */
+.vis-network canvas {
+    border-radius: var(--radius-window);
+}
+
+.vis-tooltip {
+    background: var(--bg-window) !important;
+    border: 1px solid var(--border-active) !important;
+    border-radius: var(--radius-control) !important;
+    padding: 10px 12px !important;
+    font-family: var(--font-ui) !important;
+    font-size: 0.85rem !important;
+    color: var(--text) !important;
+    box-shadow: var(--shadow-window) !important;
+    pointer-events: none !important;
+    z-index: 10000 !important;
+}
+
+.vis-network-edge:hover {
+    cursor: pointer;
+}
+
