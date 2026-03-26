@@ -1,25 +1,49 @@
 graph TD
     subgraph Infrastructure ["Core Infrastructure (Docker)"]
-        PG[("PostgreSQL<br/>(pgvector)")]
-        OL["Ollama<br/>(Qwen 2.5)"]
+        MDB[("MongoDB 8.2+<br/>(Vector Search)")]
+        OL["Ollama<br/>(Qwen 3.5 9B/4B)"]
         LK["Loki + Promtail<br/>(Logs)"]
         GF["Grafana<br/>(Monitoring)"]
-        PA["pgAdmin<br/>(DB Admin)"]
+        ME["Mongo Express<br/>(DB Admin)"]
     end
 
     subgraph Pipeline ["Ingestion Pipeline"]
-        PDF["PDF Reports<br/>(./documents/pdf)"] --> ING["ingest.py<br/>(RecursiveCharacterSplitter)"]
-        ING -->|"Vector Embeddings<br/>(all-MiniLM-L6-v2)"| PG
+        PDF["PDF/MD Reports<br/>(./documents/)"] --> ING["ingest.py<br/>(RecursiveCharacterSplitter)"]
+        ING -->|"Vector Embeddings<br/>(all-MiniLM-L6-v2)"| MDB
     end
 
-    subgraph Agent ["GeoVision Intelligence Agent"]
-        UI["Terminal Interface<br/>(Vanilla JS/CSS)"] <--> APP["FastAPI Backend<br/>(main.py)"]
-        APP <--> LG["LangGraph Controller<br/>(agent.py)"]
-        
-        LG -->|"Context Retrieval"| PG
-        LG -->|"LLM Reasoning"| OL
-        LG -.->|"Future: Live Tooling"| WEB["Wikipedia/Web Scraper"]
+    subgraph Agent ["GeoVision Intelligence Agent (LangGraph)"]
+        UI["Tactical Terminal<br/>(Vanilla JS + Leaflet)"] <--> APP["FastAPI Backend<br/>(main.py)"]
+        APP <--> LG["LangGraph Controller<br/>(graph.py)"]
+
+        subgraph Workflow ["Agent Workflow"]
+            VS["vector_search_node<br/>(Mandatory First Step)"]
+            AG["agent_node<br/>(Worker LLM + Tools)"]
+            RV["reviewer_node<br/>(QA Critic LLM)"]
+            ONT["ontology_extractor_node<br/>(Sub-Graph)"]
+        end
+
+        LG --> VS
+        VS --> AG
+        AG -->|"Tool Calls"| TN["tool_node<br/>(DuckDuckGo, Wikipedia)"]
+        TN --> AG
+        AG -->|"Final Draft"| RV
+        RV -->|"VALID"| ONT
+        RV -->|"INVALID (retry)| AG
+
+        ONT -->|"Entity/Link Extraction"| OL
+        ONT -->|"Geocoding"| NOM["Nominatim API"]
+        ONT -->|"Graph Storage"| MDB
     end
+
+    subgraph Tools ["External Services"]
+        DDG["DuckDuckGo<br/>(Live Web)"]
+        WIKI["Wikipedia API"]
+        NOM
+    end
+
+    TN --> DDG
+    TN --> WIKI
 
     %% Observability
     APP -.->|"Stream Logs"| LK

@@ -28,7 +28,6 @@ async def system_status():
                     "gpu_available": gpu_available,
                     "model": model_info.get("name", "unknown"),
                     "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
-                    "reviewer_model": settings.REVIEWER_LLM_MODEL_NAME,
                     "vram_bytes": vram_bytes,
                     "reason": "gpu" if vram_bytes > 0 else "gpu_standby",
                 }
@@ -40,7 +39,6 @@ async def system_status():
                 "gpu_available": True,
                 "model": None,
                 "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
-                "reviewer_model": settings.REVIEWER_LLM_MODEL_NAME,
                 "vram_bytes": 0,
                 "reason": "gpu_standby",
             }
@@ -52,7 +50,6 @@ async def system_status():
             "gpu_available": False,
             "model": None,
             "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
-            "reviewer_model": settings.REVIEWER_LLM_MODEL_NAME,
             "vram_bytes": 0,
             "reason": str(e),
         }

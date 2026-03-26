@@ -1,8 +1,23 @@
 import uuid
 import json
+from datetime import datetime
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 from app.agents.graph import process_query, process_query_stream
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects."""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def json_dumps(obj):
+    """Serialize object to JSON, handling datetime objects."""
+    return json.dumps(obj, cls=DateTimeEncoder)
+
 
 router = APIRouter()
 
@@ -41,16 +56,16 @@ async def chat_stream_endpoint(
 
     async def event_generator():
         # Send session metadata first
-        meta = json.dumps({"type": "meta", "thread_id": session_id})
+        meta = json_dumps({"type": "meta", "thread_id": session_id})
         yield f"data: {meta}\n\n"
 
         try:
             async for evt in process_query_stream(query, thread_id=session_id):
-                data = json.dumps(evt)
+                data = json_dumps(evt)
                 yield f"data: {data}\n\n"
         except Exception as e:
             print(f"[ERROR] Stream failed: {e}")
-            err = json.dumps({"type": "error", "content": str(e)})
+            err = json_dumps({"type": "error", "content": str(e)})
             yield f"data: {err}\n\n"
 
     return StreamingResponse(

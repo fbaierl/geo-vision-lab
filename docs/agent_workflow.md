@@ -10,7 +10,7 @@ GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The syste
 
 1. **Worker Agent** — The primary reasoning engine that handles user queries, performs tool calls, and synthesizes responses
 2. **Critic Agent** — A QA reviewer that validates outputs before delivery
-3. **Location Extractor** — Automatic geographic entity recognition using Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
+3. **Ontology Extractor** — Automatic knowledge graph construction extracting entities (Locations, Persons, Organizations, Events, Assets, Documents, Concepts) and their relationships, with integrated geocoding for location entities
 
 ## Mandatory Vector Search First Protocol
 
@@ -27,7 +27,7 @@ GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The syste
 ### Execution Flow
 
 ```
-User Query → [Vector Search] → Worker Agent → Critic Agent → Location Extractor → Response + Maps
+User Query → [Vector Search] → Worker Agent → Critic Agent → Ontology Extractor → Response + Knowledge Graph
 ```
 
 ### Decision Tree
@@ -37,7 +37,7 @@ User Query → [Vector Search] → Worker Agent → Critic Agent → Location Ex
 - **Step 3**: Worker Agent reviews archival results, decides if additional tools needed
 - **Step 4**: If additional intel needed → execute web search tools
 - **Step 5**: Submit draft to Critic Agent for validation
-- **Step 6 (Automatic)**: Location Extractor identifies geographic entities and renders maps
+- **Step 6 (Automatic)**: Ontology Extractor identifies entities and relationships, geocodes locations, updates session knowledge graph
 
 
 ```mermaid
@@ -57,13 +57,13 @@ graph TB
     end
 
     subgraph Critic["Critic Agent"]
-        REVIEW["QA Reviewer<br/>(Qwen 2.5 0.5B)"]
+        REVIEW["QA Reviewer<br/>(Qwen 3.5 4B)"]
     end
 
-    subgraph Location["Location Extractor"]
-        NER["Hugging Face NER<br/>(dslim/bert-base-NER)"]
-        GEO["Nominatim<br/>Multi-Candidate Geocoding"]
-        LLM["LLM Selection<br/>(Context-Aware)"]
+    subgraph Ontology["Ontology Extractor Sub-Graph"]
+        EXT["Entity Extraction<br/>(LLM Structured Output)"]
+        GEO["Location Geocoding<br/>(Nominatim API)"]
+        LINK["Link Extraction<br/>(Relationship Mapping)"]
     end
 
     subgraph Tools["Available Tools"]
@@ -72,7 +72,7 @@ graph TB
     end
 
     subgraph Output["Output Layer"]
-        RESP[("Streaming Response<br/>3-Lane UI: Reasoning | Text | Maps)")]
+        RESP[("Streaming Response<br/>3-Lane UI: Reasoning | Text | Knowledge Graph)")]
     end
 
     UQ --> VS
@@ -84,8 +84,9 @@ graph TB
     DDG --> REASON
     WIKI --> REASON
     REASON -->|Final Draft| REVIEW
-    REVIEW -->|Validated| NER
-    NER --> GEO
+    REVIEW -->|Validated| EXT
+    EXT --> GEO
+    EXT --> LINK
     GEO --> RESP
 ```
 
@@ -270,55 +271,73 @@ If any constraint is violated, explain the issue and request revision.
 
 ---
 
-### Stage 5: Location Extraction (Automatic)
+### Stage 5: Ontology Extraction (Automatic)
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart LR
-    subgraph NER["Hugging Face NER Pipeline"]
-        TEXT[Response Text] --> MODEL["dslim/bert-base-NER<br/>NER Model"]
-        MODEL --> ENTITIES["Extract Entities<br/>GPE/LOC/FAC"]
+    subgraph EXT["Entity & Link Extraction"]
+        TEXT[Response Text] --> LLM["LLM Structured Output<br/>(Qwen 3.5 4B)"]
+        LLM --> ENTITIES["Extract Entities<br/>Location, Person, Organization,<br/>Event, Asset, Document, Concept"]
+        LLM --> LINKS["Extract Relationships<br/>Source → Target<br/>with Type + Context"]
     end
 
-    subgraph GEO["Multi-Candidate Geocoding"]
-        ENTITIES --> GEOCODE["Geocode Each<br/>Get ALL Candidates"]
-        GEOCODE --> CANDIDATES["Multiple Options<br/>per Location"]
+    subgraph GEO["Location Geocoding"]
+        ENTITIES --> LOC_ENT["Filter Location Entities"]
+        LOC_ENT --> NOMINATIM["Nominatim API<br/>Multi-Candidate Search"]
+        NOMINATIM --> CANDIDATES["Geocoding Results<br/>lat, lon, display_name,<br/>country, type"]
     end
 
-    subgraph LLM["LLM Disambiguation"]
-        CANDIDATES --> SELECT["LLM Reviews<br/>All Options"]
-        SELECT --> VALID["Select Valid<br/>Locations"]
+    subgraph MERGE["Knowledge Graph Merge"]
+        CANDIDATES --> MERGE_ENT["Merge Entities<br/>into Session Ontology"]
+        LINKS --> MERGE_LINK["Merge Links<br/>into Session Ontology"]
     end
 
-    VALID --> MAPS["Render Maps<br/>in UI"]
+    MERGE_ENT --> UI["Update UI<br/>Knowledge Graph Panel"]
+    MERGE_LINK --> UI
 ```
 
 **What happens:**
-1. `extract_locations_node` receives the approved response text
-2. Hugging Face's `dslim/bert-base-NER` model identifies named entities:
-   - **GPE** (Geopolitical Entity): Countries, cities, states
-   - **LOC** (Location): Mountains, bodies of water, regions
-   - **FAC** (Facility): Airports, buildings, landmarks
-3. Each extracted location is geocoded via Nominatim with `exactly_one=False` to get ALL candidates
-4. LLM reviews all candidates in query context and selects correct matches
-5. Results include: name, type, latitude, longitude, display_name, country
-6. Locations are streamed to frontend for automatic map rendering
+1. `ontology_extractor_node` receives the approved response text
+2. LLM extracts structured entities and relationships using few-shot prompting:
+   - **Entity Types**: Location, Person, Organization, Event, Asset, Document, Concept
+   - **Relationship Types**: LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, etc.
+   - Each extraction includes the original source text as context (mention)
+3. For Location entities, automatic geocoding via Nominatim API:
+   - Returns coordinates (lat, lon), display name, country
+   - Results attached to entity properties
+4. Entities and links are merged into the session ontology:
+   - Deterministic IDs prevent duplicates
+   - New mentions are appended to existing entities
+   - Properties are updated with fresh information
+5. Updated ontology is streamed to frontend for knowledge graph visualization
 
-**Key Point:** This step is **fully automatic** — the Worker Agent does NOT need to request maps or provide coordinates. The Location Extractor handles everything.
+**Key Point:** This step is **fully automatic** — the Worker Agent does NOT need to request ontology extraction. The ontology sub-graph handles everything after the reviewer approves.
 
 **Example Extraction:**
 ```
-Input: "The conflict in Kyiv has escalated..."
+Input: "The conflict in Kyiv, Ukraine has escalated. 
+        President Zelensky met with NATO representatives."
 
-Extracted:
-- GPE: "Kyiv" → geocode → multiple candidates → LLM selects → (50.4501, 30.5234) → type: city, country: Ukraine
+Extracted Entities:
+- Location: "Kyiv" → geocode → (50.4501, 30.5234) → country: Ukraine
+- Location: "Ukraine" → geocode → (48.3794, 31.1656) → country: Ukraine  
+- Person: "Zelensky" → properties: {title: "President"}
+- Organization: "NATO"
+
+Extracted Links:
+- (Kyiv) -[LOCATED_IN]-> (Ukraine)
+- (Zelensky) -[AFFILIATED_WITH]-> (NATO)
+- (Zelensky) -[LEADS]-> (Ukraine)
 ```
 
-**Disambiguation Example:**
-```
-Query: "iran vs israel"
-Extracted: "IRA" → geocode → [Town of Ira NY, Ira VT] → LLM rejects (no Iran country option)
-Extracted: "Iran" → geocode → [Iran (country), Iran TX] → LLM selects Iran (country)
+**Entity ID Strategy:**
+```python
+# Entities are normalized by lowercase name for deduplication
+ent_id = ext_ent.name.lower().strip()  # e.g., "kyiv", "united_nations"
+
+# Links use deterministic composite IDs
+link_id = f"{src_id}_{relationship_type}_{tgt_id}"  # e.g., "kyiv_located_in_ukraine"
 ```
 
 ---
@@ -424,8 +443,11 @@ config = {
 | Storage | Duration | Purpose |
 |---------|----------|---------|
 | **MemorySaver** | Session lifetime | Conversation history within a chat thread |
+| **Session Ontology** | Session lifetime | Accumulated knowledge graph (entities + links) |
 | **MongoDB** | Permanent | Document archival for vector search |
 | **Browser localStorage** | User preference | UI settings (model selection, theme) |
+
+**Future Enhancement:** Persist ontology to MongoDB for long-term knowledge accumulation across sessions.
 
 ---
 
@@ -494,11 +516,23 @@ services:
 ### Inspect Agent State
 
 ```python
-# Add to agent.py for debugging
+# Add to graph.py for debugging
 def debug_state(state: AgentState):
     print(f"Messages: {len(state['messages'])}")
     print(f"Last message: {state['messages'][-1]}")
-    print(f"Model: {state.get('model', 'unknown')}")
+    print(f"Vector Search Results: {state.get('vector_search_results', 'N/A')[:100]}...")
+    print(f"Ontology Entities: {len(state.get('ontology', {}).get('entities', {}))}")
+    print(f"Ontology Links: {len(state.get('ontology', {}).get('links', {}))}")
+```
+
+### Inspect Ontology
+
+```python
+# In the streaming handler, watch for ontology_updated events
+if event.get("type") == "ontology_updated":
+    ontology = event["data"]["ontology"]
+    print(f"Entities: {list(ontology['entities'].keys())}")
+    print(f"Links: {list(ontology['links'].keys())}")
 ```
 
 ### Visualize Graph
@@ -514,9 +548,10 @@ graph.get_graph().draw_mermaid()
 
 ## Related Documentation
 
-- [Technology Choices](TECHNOLOGY.md) — Detailed rationale for tech stack decisions
+- [Technology Choices](technology.md) — Detailed rationale for tech stack decisions
 - [Agent Learnings](learnings.md) — Technical insights on reasoning LLMs and decision logic
-- [Debugging Guide](docs/debugging.md) — Troubleshooting common issues
+- [Ontology System](ontology.md) — Knowledge graph architecture and entity extraction
+- [Debugging Guide](debugging.md) — Troubleshooting common issues
 
 ---
 

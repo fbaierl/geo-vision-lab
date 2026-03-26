@@ -49,23 +49,13 @@ def mock_embeddings():
 
 @pytest.fixture
 def mock_reasoning_llm():
-    """Create a mock reasoning LLM for testing."""
+    """Create a mock LLM for testing (single LLM for all tasks)."""
     mock_llm = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = "Mock reasoning response"
+    mock_response.content = "Mock response"
     mock_response.tool_calls = []
     mock_llm.invoke.return_value = mock_response
     mock_llm.bind_tools.return_value = mock_llm
-    return mock_llm
-
-
-@pytest.fixture
-def mock_reviewer_llm():
-    """Create a mock reviewer LLM for testing."""
-    mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = '[{"name": "Test", "relevance": 1.0}]'
-    mock_llm.invoke.return_value = mock_response
     return mock_llm
 
 
@@ -97,18 +87,10 @@ def override_embeddings(mock_embeddings):
 
 @pytest.fixture
 def override_reasoning_llm(mock_reasoning_llm):
-    """Override reasoning LLM with mock."""
+    """Override LLM with mock (single LLM for all tasks)."""
     from app.core.di import get_llm
     container.override(get_llm, lambda: mock_reasoning_llm)
     return mock_reasoning_llm
-
-
-@pytest.fixture
-def override_reviewer_llm(mock_reviewer_llm):
-    """Override reviewer LLM with mock."""
-    from app.core.di import get_llm
-    container.override(get_llm, lambda: mock_reviewer_llm)
-    return mock_reviewer_llm
 
 
 @pytest.fixture

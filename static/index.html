@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2315171e'/%3E%3Cpath d='M16 4L28 10v12L16 28 4 22V10L16 4z' fill='none' stroke='%233daee9' stroke-width='2'/%3E%3Cpath d='M16 8l8 4v8l-8 4-8-4V12l8-4z' fill='%233daee9' opacity='0.3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235ec0ff'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="/ui/style.css">
 </head>
@@ -94,18 +95,7 @@
                         <span>▼</span>
                     </div>
                     <div class="model-selector-menu" id="model-menu">
-                        <div class="model-option" data-value="qwen3.5:9b">
-                            <div class="model-option-name">Qwen 3.5 9B</div>
-                            <div class="model-option-desc">High precision, complex analysis</div>
-                        </div>
-                        <div class="model-option active" data-value="qwen3.5:4b">
-                            <div class="model-option-name">Qwen 3.5 4B</div>
-                            <div class="model-option-desc">Balanced speed & quality</div>
-                        </div>
-                        <div class="model-option" data-value="qwen3.5:0.8b">
-                            <div class="model-option-name">Qwen 3.5 0.8B</div>
-                            <div class="model-option-desc">Fastest, basic logic</div>
-                        </div>
+                        <!-- Dynamically populated by JS from backend -->
                     </div>
                 </div>
                 <div class="input-bar">
@@ -259,10 +249,49 @@
                     <div class="map-legend" id="map-legend">
                         <span>No locations mapped</span>
                     </div>
+                    <!-- Empty state indicator -->
+                    <div class="empty-state" id="map-empty-state" style="display: none;">
+                        <div class="empty-state-icon">◈</div>
+                        <div class="empty-state-text">No locations extracted</div>
+                        <div class="empty-state-subtext">The response did not contain any geographic locations</div>
+                    </div>
+                    <!-- Loading spinner - unified style -->
                     <div class="loading-spinner maps-loading" id="maps-loading" style="display: none;">
                         <div class="loading-spinner-icon"></div>
                         <div class="loading-spinner-text">Extracting Locations<span class="loading-dots"><span></span><span></span><span></span></span></div>
                     </div>
+                </div>
+            </div>
+            <div class="window-resize-handle right"></div>
+            <div class="window-resize-handle bottom"></div>
+            <div class="window-resize-handle corner"></div>
+        </div>
+
+        <!-- GRAPH WINDOW -->
+        <div class="window graph-window" id="window-graph" data-window="graph">
+            <div class="window-header">
+                <div class="window-title">
+                    <span>▸</span>
+                    <span>Knowledge Graph</span>
+                </div>
+                <div class="window-controls">
+                    <button class="window-btn minimize" title="Minimize">−</button>
+                    <button class="window-btn maximize" title="Maximize">□</button>
+                    <button class="window-btn close" title="Close">×</button>
+                </div>
+            </div>
+            <div class="window-content" style="position: relative;">
+                <div id="graph-container" style="width: 100%; height: 100%;"></div>
+                <!-- Empty state indicator -->
+                <div class="empty-state" id="graph-empty-state" style="display: none;">
+                    <div class="empty-state-icon">⬡</div>
+                    <div class="empty-state-text">No knowledge graph</div>
+                    <div class="empty-state-subtext">No entities or relationships extracted yet</div>
+                </div>
+                <!-- Loading spinner - unified style -->
+                <div class="loading-spinner graph-loading" id="graph-loading" style="display: none;">
+                    <div class="loading-spinner-icon"></div>
+                    <div class="loading-spinner-text">Updating Graph<span class="loading-dots"><span></span><span></span><span></span></span></div>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -292,6 +321,10 @@
         <div class="shelf-item" data-target="window-maps" title="Toggle Maps Window">
             <span class="shelf-icon">◈</span>
             <span class="shelf-label">Maps</span>
+        </div>
+        <div class="shelf-item" data-target="window-graph" title="Toggle Knowledge Graph">
+            <span class="shelf-icon">⬡</span>
+            <span class="shelf-label">Graph</span>
         </div>
         
         <button class="snap-layout-btn" id="snap-layout-btn" title="Snap Windows into Tiled Layout">
@@ -645,7 +678,8 @@
                     'window-reasoning': { widthRatio: 0.25, heightRatio: 0.85, name: 'reasoning' },
                     'window-history': { widthRatio: 0.20, heightRatio: 0.35, name: 'history' },
                     'window-services': { widthRatio: 0.20, heightRatio: 0.35, name: 'services' },
-                    'window-maps': { widthRatio: 0.55, heightRatio: 0.70, name: 'maps' }
+                    'window-maps': { widthRatio: 0.55, heightRatio: 0.45, name: 'maps' },
+                    'window-graph': { widthRatio: 0.55, heightRatio: 0.45, name: 'graph' }
                 };
                 
                 // Calculate layout based on number of windows
@@ -697,9 +731,10 @@
                     const rightColWidth = availableWidth * 0.50;
                     const smallHeight = availableHeight * 0.30;
                     const tallHeight = availableHeight * 0.65;
+                    const mapGraphHeight = availableHeight * 0.40;
                     
                     // Sort windows by priority
-                    const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-history', 'window-services'];
+                    const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-graph', 'window-history', 'window-services'];
                     visibleWindows.sort((a, b) => {
                         const aIdx = priorityOrder.indexOf(a.id);
                         const bIdx = priorityOrder.indexOf(b.id);
@@ -709,7 +744,7 @@
                     // Position tracking
                     let leftY = padding;
                     let midY = padding;
-                    const rightY = padding;
+                    let rightY = padding;
                     
                     visibleWindows.forEach((win) => {
                         const config = windowConfigs[win.id];
@@ -747,11 +782,18 @@
                             win.element.style.left = padding + leftColWidth + padding + 'px';
                             win.element.style.top = midY + 'px';
                         } else if (win.id === 'window-maps') {
-                            // Right column - large, takes full height
+                            // Right column - top half
                             win.element.style.width = rightColWidth + 'px';
-                            win.element.style.height = (availableHeight * 0.75) + 'px';
+                            win.element.style.height = mapGraphHeight + 'px';
                             win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                             win.element.style.top = padding + 'px';
+                            rightY = padding + mapGraphHeight + padding;
+                        } else if (win.id === 'window-graph') {
+                            // Right column - bottom half
+                            win.element.style.width = rightColWidth + 'px';
+                            win.element.style.height = mapGraphHeight + 'px';
+                            win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
+                            win.element.style.top = rightY + 'px';
                         }
                         win.element.style.transform = 'none';
                     });
@@ -832,58 +874,215 @@
             e.stopPropagation();
             modelMenu.classList.toggle('show');
         });
-        
+
         document.addEventListener('click', (e) => {
             if (!modelToggle.contains(e.target) && !modelMenu.contains(e.target)) {
                 modelMenu.classList.remove('show');
             }
         });
-        
-        modelOptions.forEach(opt => {
-            opt.addEventListener('click', async function() {
-                const selected = this.getAttribute('data-value');
-                modelMenu.classList.remove('show');
-                
-                // Optimistic UI update
-                modelOptions.forEach(o => o.classList.remove('active'));
-                this.classList.add('active');
-                currentModelDisplay.textContent = this.querySelector('.model-option-name').textContent;
-                currentModel = selected;
-                
-                try {
-                    const res = await fetch('/models/reasoning', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model: selected })
-                    });
-                    const data = await res.json();
-                    if (!data.success) {
-                        console.error('Failed to switch model:', data.message);
-                    }
-                } catch (e) {
-                    console.error('Error switching model:', e);
-                }
-            });
-        });
-        
-        // Load current model
+
+        // Load current model and settings
         async function loadCurrentModel() {
             try {
-                const res = await fetch('/models/reasoning');
+                const res = await fetch('/settings');
                 const data = await res.json();
-                if (data.current_model) {
-                    modelOptions.forEach(opt => {
-                        if (opt.getAttribute('data-value') === data.current_model) {
-                            opt.classList.add('active');
-                            currentModelDisplay.textContent = opt.querySelector('.model-option-name').textContent;
-                            currentModel = data.current_model;
-                        }
+
+                if (data.all_models) {
+                    modelMenu.innerHTML = ''; // Clear default static options
+
+                    // Add Online LLM toggle at the top
+                    const toggleContainer = document.createElement('div');
+                    toggleContainer.className = 'model-llm-toggle';
+                    toggleContainer.innerHTML = `
+                        <div class="llm-toggle-row">
+                            <div class="llm-toggle-info">
+                                <span class="llm-toggle-label">Use Online LLM</span>
+                                <span class="llm-toggle-provider">Groq</span>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="online-llm-toggle" ${data.online_llm_enabled ? 'checked' : ''} ${!data.groq_api_key_configured ? 'disabled' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        ${!data.groq_api_key_configured ? '<div class="llm-toggle-warning">⚠️ GROQ_API_KEY not configured</div>' : ''}
+                    `;
+                    modelMenu.appendChild(toggleContainer);
+
+                    // Add separator
+                    const separator = document.createElement('div');
+                    separator.className = 'model-separator';
+                    separator.textContent = 'Available Models';
+                    modelMenu.appendChild(separator);
+
+                    // Add model options grouped by type
+                    const localModels = data.all_models.filter(m => m.type === 'local');
+                    const onlineModels = data.all_models.filter(m => m.type === 'online');
+
+                    // Local models
+                    localModels.forEach(model => {
+                        const opt = createModelOption(model, data.online_llm_enabled);
+                        modelMenu.appendChild(opt);
                     });
+
+                    // Online models (if API key configured or already enabled)
+                    if (data.groq_api_key_configured || data.online_llm_enabled) {
+                        onlineModels.forEach(model => {
+                            const opt = createModelOption(model, data.online_llm_enabled);
+                            modelMenu.appendChild(opt);
+                        });
+                    }
+
+                    // Set up toggle listener
+                    const toggle = document.getElementById('online-llm-toggle');
+                    if (toggle) {
+                        toggle.addEventListener('change', async function() {
+                            const enabled = this.checked;
+                            
+                            if (enabled && !data.groq_api_key_configured) {
+                                // Show error modal
+                                showErrorModal();
+                                this.checked = false;
+                                return;
+                            }
+
+                            try {
+                                const postRes = await fetch('/settings', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ use_online_llm: enabled })
+                                });
+                                const responseData = await postRes.json();
+                                
+                                if (!responseData.success && responseData.error === 'groq_api_key_missing') {
+                                    showErrorModal();
+                                    this.checked = false;
+                                } else {
+                                    // Refresh model list
+                                    loadCurrentModel();
+                                }
+                            } catch (e) {
+                                console.error('Error toggling online LLM:', e);
+                                this.checked = !enabled;
+                            }
+                        });
+                    }
                 }
             } catch (e) {
-                console.warn('Failed to load current model:', e);
+                console.warn('Failed to load settings:', e);
             }
         }
+
+        // Helper function to create model option element
+        function createModelOption(model, isOnlineEnabled) {
+            const opt = document.createElement('div');
+            opt.className = 'model-option';
+            opt.setAttribute('data-value', model.id);
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'model-option-name';
+            nameDiv.textContent = model.name;
+
+            // Add type badge
+            const badge = document.createElement('span');
+            badge.className = `model-type-badge ${model.type}`;
+            badge.textContent = model.type === 'online' ? 'Online' : 'Local';
+
+            const nameContainer = document.createElement('div');
+            nameContainer.className = 'model-name-container';
+            nameContainer.appendChild(nameDiv);
+            nameContainer.appendChild(badge);
+
+            // Provider info
+            const providerDiv = document.createElement('div');
+            providerDiv.className = 'model-option-provider';
+            providerDiv.textContent = model.provider;
+
+            opt.appendChild(nameContainer);
+            opt.appendChild(providerDiv);
+
+            // Set active state
+            if (model.current) {
+                opt.classList.add('active');
+                currentModelDisplay.textContent = model.name;
+                currentModel = model.id;
+            }
+
+            // Disable online models if online LLM is not enabled
+            if (model.type === 'online' && !isOnlineEnabled) {
+                opt.classList.add('disabled');
+                opt.title = 'Enable "Use Online LLM" toggle to select online models';
+            } else {
+                // Add click listener
+                opt.addEventListener('click', async function() {
+                    const selected = this.getAttribute('data-value');
+                    modelMenu.classList.remove('show');
+
+                    // Optimistic UI update
+                    modelMenu.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
+                    this.classList.add('active');
+                    currentModelDisplay.textContent = this.querySelector('.model-option-name').textContent;
+                    currentModel = selected;
+
+                    try {
+                        const postRes = await fetch('/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ model: selected })
+                        });
+                        const responseData = await postRes.json();
+                        if (!responseData.success) {
+                            console.error('Failed to switch model:', responseData.message);
+                            if (responseData.error === 'groq_api_key_missing') {
+                                showErrorModal();
+                            }
+                            loadCurrentModel(); // Revert UI
+                        }
+                    } catch (e) {
+                        console.error('Error switching model:', e);
+                        loadCurrentModel(); // Revert UI
+                    }
+                });
+            }
+
+            return opt;
+        }
+
+        // Error modal for missing API key
+        function showErrorModal() {
+            // Check if modal already exists
+            let modal = document.getElementById('api-key-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                return;
+            }
+
+            modal = document.createElement('div');
+            modal.id = 'api-key-modal';
+            modal.className = 'api-key-modal';
+            modal.innerHTML = `
+                <div class="api-key-modal-content">
+                    <div class="api-key-modal-header">
+                        <h3>⚠️ Groq API Key Required</h3>
+                        <button class="api-key-modal-close" onclick="this.closest('.api-key-modal').style.display='none'">×</button>
+                    </div>
+                    <div class="api-key-modal-body">
+                        <p>To use online LLM models, you need to configure your Groq API key.</p>
+                        <ol>
+                            <li>Get your API key from <a href="https://console.groq.com" target="_blank">console.groq.com</a></li>
+                            <li>Add it to your <code>.env</code> file:</li>
+                        </ol>
+                        <pre>GROQ_API_KEY=gsk_...</pre>
+                        <p>Then restart the application.</p>
+                    </div>
+                    <div class="api-key-modal-footer">
+                        <button class="api-key-modal-btn" onclick="this.closest('.api-key-modal').style.display='none'">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.style.display = 'flex';
+        }
+
         loadCurrentModel();
 
         // Chat functions
@@ -1251,6 +1450,144 @@
             });
         }
         
+        // Graph rendering
+        let networkInstance = null;
+        
+        function renderGraph(ontology, container) {
+            if (!container) return;
+            
+            const nodes = [];
+            const edges = [];
+            
+            // Format colors based on type
+            const typeColors = {
+                Person: { background: '#D97706', border: '#B45309', hover: '#F59E0B' },
+                Location: { background: '#2563EB', border: '#1D4ED8', hover: '#3B82F6' },
+                Organization: { background: '#4F46E5', border: '#4338CA', hover: '#6366F1' },
+                Event: { background: '#DC2626', border: '#B91C1C', hover: '#EF4444' },
+                Equipment: { background: '#059669', border: '#047857', hover: '#10B981' },
+                Concept: { background: '#9333EA', border: '#7E22CE', hover: '#A855F7' },
+                default: { background: '#4B5563', border: '#374151', hover: '#6B7280' }
+            };
+            
+            if (ontology.entities) {
+                for (const [id, ent] of Object.entries(ontology.entities)) {
+                    const colors = typeColors[ent.type] || typeColors.default;
+                    const propertiesStr = Object.entries(ent.properties || {})
+                        .map(([k, v]) => `<b>${escapeHtml(k)}</b>: ${escapeHtml(String(v))}`)
+                        .join('<br>');
+                    
+                    // Simple HTML tooltips need element inside 'title' in newer vis-network, 
+                    // or we style vis-tooltip via CSS (the default is plain text browser tooltip unless hover interaction is set)
+                    let tooltipHtml = document.createElement('div');
+                    tooltipHtml.innerHTML = `<b>${escapeHtml(ent.name)}</b><br><i>${escapeHtml(ent.type)}</i><br><br>${propertiesStr}`;
+                    
+                    nodes.push({
+                        id: id,
+                        label: ent.name,
+                        title: tooltipHtml,
+                        color: {
+                            background: colors.background,
+                            border: colors.border,
+                            highlight: {
+                                background: colors.hover,
+                                border: colors.border
+                            }
+                        },
+                        font: { color: '#ffffff' },
+                        shape: 'dot',
+                        size: 20
+                    });
+                }
+            }
+            
+            if (ontology.links) {
+                for (const [id, link] of Object.entries(ontology.links)) {
+                    const sourceId = link.source_id || link.source;
+                    const targetId = link.target_id || link.target;
+                    const relationType = link.type || link.relation_type;
+                    const description = link.description || link.relation_type;
+
+                    if (ontology.entities[sourceId] && ontology.entities[targetId]) {
+                        edges.push({
+                            id: id,
+                            from: sourceId,
+                            to: targetId,
+                            label: relationType,
+                            title: description || relationType,
+                            color: {
+                                color: '#9CA3AF',
+                                highlight: '#5ec0ff'
+                            },
+                            font: { 
+                                color: '#ffffff', 
+                                size: 13, 
+                                strokeWidth: 3,
+                                strokeColor: '#15171e',
+                                align: 'middle',
+                                face: 'sans-serif',
+                                bold: true
+                            },
+                            arrows: {
+                                to: {
+                                    enabled: true,
+                                    type: 'arrow',
+                                    scaleFactor: 1.2,
+                                    color: { inherit: 'from' }
+                                }
+                            },
+                            smooth: {
+                                type: 'curvedCW',
+                                roundness: 0.2
+                            },
+                            width: 2,
+                            shadow: {
+                                enabled: true,
+                                color: 'rgba(0, 0, 0, 0.5)',
+                                size: 4,
+                                x: 2,
+                                y: 2
+                            }
+                        });
+                    }
+                }
+            }
+            
+            const data = {
+                nodes: new vis.DataSet(nodes),
+                edges: new vis.DataSet(edges)
+            };
+            
+            const options = {
+                physics: {
+                    forceAtlas2Based: {
+                        gravitationalConstant: -100,
+                        centralGravity: 0.005,
+                        springLength: 200,
+                        springConstant: 0.04
+                    },
+                    maxVelocity: 50,
+                    solver: 'forceAtlas2Based',
+                    timestep: 0.35,
+                    stabilization: { iterations: 200 }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200,
+                    hoverConnectedEdges: true
+                },
+                edges: {
+                    hoverWidth: 3
+                }
+            };
+            
+            if (!networkInstance) {
+                networkInstance = new vis.Network(container, data, options);
+            } else {
+                networkInstance.setData(data);
+            }
+        }
+        
         // Send query
         async function sendQuery() {
             const q = chatInput.value.trim();
@@ -1269,6 +1606,8 @@
             if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
             if (reasoningLoading) reasoningLoading.style.display = 'flex';
             if (mapsLoading) mapsLoading.style.display = 'flex';
+            const graphLoading = document.getElementById('graph-loading');
+            if (graphLoading) graphLoading.style.display = 'flex';
 
             const responseEl = addMessage('');
             rawStreamBuffer = '';
@@ -1318,22 +1657,60 @@
                             } else if (evt.type === 'tool_result') {
                                 // Display tool result in reasoning step
                                 addReasoningResult(evt.tool, evt.summary, evt.content);
-                            } else if (evt.type === 'locations_found') {
-                                // Handle extracted locations - render map
-                                // Hide maps loading
+                            } else if (evt.type === 'ontology_updated') {
+                                // Handle ontology updates - render graph & map
                                 if (mapsLoading) mapsLoading.style.display = 'none';
+                                const graphLoading = document.getElementById('graph-loading');
+                                if (graphLoading) graphLoading.style.display = 'none';
 
+                                const ontology = evt.ontology || {entities: {}, links: {}};
+                                console.log("[DEBUG] Current SessionOntology data:", ontology);
+
+                                // Check if ontology has any data
+                                const entityCount = Object.keys(ontology.entities || {}).length;
+                                const linkCount = Object.keys(ontology.links || {}).length;
+                                const hasData = entityCount > 0 || linkCount > 0;
+
+                                // Render vis-network knowledge graph
+                                const graphContainer = document.getElementById('graph-container');
+                                const graphEmptyState = document.getElementById('graph-empty-state');
+                                if (graphContainer) {
+                                    if (hasData) {
+                                        renderGraph(ontology, graphContainer);
+                                        if (graphEmptyState) graphEmptyState.style.display = 'none';
+                                        const winData = windowManager.windows.get('window-graph');
+                                        if (winData && winData.minimized) {
+                                            windowManager.restoreWindow('window-graph');
+                                        }
+                                    } else {
+                                        // Show empty state
+                                        if (graphEmptyState) graphEmptyState.style.display = 'flex';
+                                    }
+                                }
+
+                                // Extract map locations and render map
                                 const mapContainer = document.getElementById('map-container');
+                                const mapEmptyState = document.getElementById('map-empty-state');
+                                const locations = Object.values(ontology.entities || {}).filter(
+                                    e => e.type === 'Location' && e.properties && e.properties.lat && e.properties.lon
+                                ).map(e => ({
+                                    name: e.name,
+                                    type: e.type,
+                                    lat: e.properties.lat,
+                                    lon: e.properties.lon,
+                                    relevance: e.properties.relevance || 0.5
+                                }));
 
-                                if (evt.locations && evt.locations.length > 0) {
-                                    // Render the map (includes building legend)
-                                    renderMap(evt.locations, mapContainer);
-
-                                    // Show maps window if minimized
+                                if (locations && locations.length > 0) {
+                                    renderMap(locations, mapContainer);
+                                    if (mapEmptyState) mapEmptyState.style.display = 'none';
                                     const winData = windowManager.windows.get('window-maps');
                                     if (winData && winData.minimized) {
                                         windowManager.restoreWindow('window-maps');
                                     }
+                                } else {
+                                    // Show empty state for map
+                                    if (mapEmptyState) mapEmptyState.style.display = 'flex';
                                 }
                             } else if (evt.type === 'token') {
                                 typingIndicator.classList.remove('show');
@@ -1342,14 +1719,29 @@
                                 responseEl.innerHTML = `<div class="error-message">Error: ${escapeHtml(evt.content)}</div>`;
                                 // Also show error in reasoning window
                                 addReasoningError(evt.tool || 'unknown', evt.content);
-                            } else if (evt.type === 'location_error') {
-                                // Handle location extraction errors gracefully
-                                addReasoningError('location_extractor', evt.content);
-                                // Hide maps loading
+                            } else if (evt.type === 'ontology_error') {
+                                addReasoningError('ontology_subgraph', evt.content);
                                 if (mapsLoading) mapsLoading.style.display = 'none';
+                                const graphLoading = document.getElementById('graph-loading');
+                                if (graphLoading) graphLoading.style.display = 'none';
+                                
+                                // Show empty states for both map and graph
+                                const mapEmptyState = document.getElementById('map-empty-state');
+                                const graphEmptyState = document.getElementById('graph-empty-state');
                                 const mapLegend = document.getElementById('map-legend');
+                                
+                                if (mapEmptyState) {
+                                    mapEmptyState.style.display = 'flex';
+                                    mapEmptyState.querySelector('.empty-state-text').textContent = '⚠ Ontology extraction failed';
+                                    mapEmptyState.querySelector('.empty-state-subtext').textContent = 'Continuing without map and graph updates';
+                                }
+                                if (graphEmptyState) {
+                                    graphEmptyState.style.display = 'flex';
+                                    graphEmptyState.querySelector('.empty-state-text').textContent = '⚠ Ontology extraction failed';
+                                    graphEmptyState.querySelector('.empty-state-subtext').textContent = 'Continuing without map and graph updates';
+                                }
                                 if (mapLegend) {
-                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Location extraction failed - continuing without maps</span>';
+                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Ontology extraction failed</span>';
                                 }
                             }
                         } catch (parseErr) {

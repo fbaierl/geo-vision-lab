@@ -36,9 +36,14 @@ class Settings(BaseSettings):
         return self.OLLAMA_BASE_URL
 
     # --- LLM Models ---
-    REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Switchable: qwen3.5:9b, qwen3.5:4b, qwen3.5:0.8b
-    REVIEWER_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Using 4B for more reliable validation
+    REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Default: qwen3.5:4b, switchable to qwen3.5:9b
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
+
+    # --- Online LLM (Groq) ---
+    GROQ_API_KEY: Optional[str] = None
+    USE_ONLINE_LLM: bool = False
+    ONLINE_LLM_MODEL_NAME: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    AVAILABLE_ONLINE_MODELS: list[str] = ["meta-llama/llama-4-scout-17b-16e-instruct"]
 
     # --- LangSmith Tracing (Cloud) ---
     # Get free API key at: https://smith.langchain.com
@@ -48,7 +53,7 @@ class Settings(BaseSettings):
     LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"  # EU endpoint
 
     # --- Available Reasoning Models ---
-    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "qwen3.5:0.8b"]
+    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b"]
 
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000
@@ -73,6 +78,24 @@ class Settings(BaseSettings):
             self.REASONING_LLM_MODEL_NAME = model_name
             return True
         return False
+
+    def set_online_llm_enabled(self, enabled: bool) -> bool:
+        """Enable or disable online LLM mode."""
+        if enabled and not self.GROQ_API_KEY:
+            return False  # Cannot enable without API key
+        self.USE_ONLINE_LLM = enabled
+        return True
+
+    def set_online_llm_model(self, model_name: str) -> bool:
+        """Set the online LLM model name."""
+        if model_name in self.AVAILABLE_ONLINE_MODELS:
+            self.ONLINE_LLM_MODEL_NAME = model_name
+            return True
+        return False
+
+    def is_groq_api_key_configured(self) -> bool:
+        """Check if Groq API key is configured."""
+        return bool(self.GROQ_API_KEY and self.GROQ_API_KEY.strip())
 
 
 @lru_cache()

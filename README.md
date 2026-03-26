@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="static/demo_presentation.gif" alt="GeoVision Lab Demo" width="900" />
+  <img src="static/demo_screenshot.png" alt="GeoVision Lab Demo" width="1200" />
 </p>
 
 
@@ -19,10 +19,15 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
 
 ### Key Features
 
-- **Multi-Agent AI** — Worker + Critic + Location Extractor architecture with autonomous tool selection
+- **Multi-Agent AI** — Worker + Critic + Ontology Extractor architecture with autonomous tool selection
 - **Hybrid Search** — Vector search (archival) + Web search (live events)
-- **Automatic Map Rendering** — Hugging Face NER + Multi-candidate geocoding + LLM disambiguation
-- **3-Panel UI** — Reasoning Chain | Text Result | Maps Result with resizable panels
+- **Automatic Knowledge Graph** — Real-time entity extraction and relationship mapping with interactive visualization
+  - **7 Entity Types**: Location, Person, Organization, Event, Asset, Document, Concept
+  - **Relationship Extraction**: LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, LEADS, PART_OF, etc.
+  - **Automatic Geocoding**: Locations are geocoded via Nominatim API with coordinates displayed on map
+  - **Interactive Graph**: Curved edges, color-coded nodes by type, hover tooltips with entity properties
+  - **Accumulative Graph**: Relationships build up during conversation sessions for context awareness
+- **3-Panel UI** — Reasoning Chain | Text Result | Knowledge Graph with resizable panels
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
 - **Privacy-First** — All inference runs locally — no data leaves your machine
 - **Observability** — Grafana + Loki logging, Dozzle real-time monitoring
@@ -78,96 +83,88 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
               │         │                        │
               │         ▼                        ▼
               │   ┌─────────────┐      ┌─────────────────────┐
-              │   │   Retry     │      │ LOCATION_EXTRACTOR  │
+              │   │   Retry     │      │ ONTOLOGY_EXTRACTOR  │
               │   │   Agent     │      │   (Sub-Graph)       │
-              │   └─────────────┘      └──────────┬──────────┘
-              │                                   │
-              └───────────────────────────────────┘
+              │   └─────────────┘      │  - Entity Extraction│
+              │                        │  - Link Extraction  │
+              │                        │  - Geocoding        │
+              └────────────────────────┘      └──────────┬──────────┘
                                       │
                                       ▼
                               ┌───────────────┐
                               │  FINAL OUTPUT │
-                              │  + Locations  │
+                              │  + Knowledge  │
+                              │    Graph      │
                               └───────────────┘
 ```
 
-### Location Processing Sub-Graph (Phase 1 - Current)
+### Ontology Processing Sub-Graph
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      LOCATION_SUBGRAPH (Internal Flow)                       │
+│                    ONTOLOGY_SUBGRAPH (Internal Flow)                         │
 └─────────────────────────────────────────────────────────────────────────────┘
 
     ┌──────────────────────┐
-    │  user_query          │
     │  assistant_response  │
+    │  (Approved Text)     │
     └──────────┬───────────┘
                │
                ▼
     ┌─────────────────────────┐
-    │  PARSE_QUERY_LOCS       │◄─── Future: Extract target locations from query
-    │  (Placeholder)          │
+    │  LLM EXTRACTION         │
+    │  - Structured Output    │
+    │  - 7 Entity Types       │
+    │  - Relationship Types   │
     └──────────┬──────────────┘
                │
-               ▼
-    ┌─────────────────────────┐
-    │  EXTRACT_NER_LOCS       │
-    │  - Hugging Face NER     │
-    │  - Nominatim Geocoding  │
-    │  - Multi-candidate fetch│
-    └──────────┬──────────────┘
-               │
-               ▼
-    ┌─────────────────────────┐
-    │  GEOCODE_WITH_CTX       │◄─── Future: Bias geocoding with query context
-    │  (Passthrough)          │
-    └──────────┬──────────────┘
-               │
-               ▼
-    ┌─────────────────────────┐
-    │  FILTER_RELEVANCE       │
-    │  - LLM prioritization   │
-    │  - Relevance scoring    │
-    │  - Exclusion reasoning  │
-    └──────────┬──────────────┘
-               │
-               ▼
-    ┌─────────────────────────┐
-    │  final_locations        │
-    │  (sorted by relevance)  │
-    └─────────────────────────┘
+               ├─────────────────┬─────────────────┐
+               ▼                 ▼                 ▼
+    ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+    │  LOCATIONS      │ │  OTHER ENTITIES │ │  RELATIONSHIPS  │
+    │  - Geocode      │ │  - Normalize    │ │  - Link         │
+    │  - Nominatim    │ │  - ID Gen       │ │  - Merge        │
+    └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
+             │                   │                   │
+             └───────────────────┼───────────────────┘
+                                 ▼
+                    ┌─────────────────────────┐
+                    │  MERGE INTO SESSION     │
+                    │  - Upsert Entities      │
+                    │  - Upsert Links         │
+                    │  - Append Mentions      │
+                    └──────────┬──────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────────┐
+                    │  Session Ontology       │
+                    │  (Accumulated Graph)    │
+                    └─────────────────────────┘
 ```
 
-### Location Prioritization Detail
+**Entity Types Extracted:**
+- Location, Person, Organization, Event, Asset, Document, Concept
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    FILTER_RELEVANCE (LLM Decision Process)                   │
-└─────────────────────────────────────────────────────────────────────────────┘
+**Relationship Types:**
+- LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, LEADS, PART_OF, etc.
 
-    Input: All geocoded candidates (may have multiple per location name)
+#### Knowledge Graph Visualization
 
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │  For EACH location group:                                           │
-    │  1. Select BEST candidate (or mark excluded with candidate_index=-1)│
-    │  2. Assign relevance score (0.0 to 1.0)                             │
-    │  3. Provide reason (REQUIRED for debugging)                         │
-    └─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │  Relevance Criteria:                                                │
-    │  - PRIMARY (1.0):   Main subject of query/response                  │
-    │  - SECONDARY (0.7): Important related (capitals, major cities)      │
-    │  - TERTIARY (0.4):  Mentioned but not central                       │
-    │  - EXCLUDED (0.0):  Wrong country, ambiguous, incidental            │
-    └─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-    Output: All locations with relevance + reason (sorted desc, max 5)
-            - Included: relevance > 0.0
-            - Excluded: relevance = 0.0, excluded: true, reason provided
-```
+The ontology system automatically extracts entities and relationships from the AI's reasoning output and displays them in an interactive knowledge graph:
+
+**Visual Features:**
+- **Color-coded nodes** by entity type (blue=Location, orange=Person, purple=Organization, red=Event, green=Asset, etc.)
+- **Curved edges** with clear relationship labels (e.g., CONFLICT_WITH, LOCATED_IN, TARGETS)
+- **Hover tooltips** showing entity properties and metadata
+- **Dynamic layout** using force-directed physics for optimal spacing
+- **Accumulative graph** that grows as the conversation progresses
+
+**Example Output:**
+When querying "What happened in Iran last week?", the knowledge graph automatically builds a network showing:
+- Countries and cities (Iran, Israel, Qatar, Gulf states)
+- Key figures (President Trump, military leaders)
+- Military bases and infrastructure (Ras Laffan Industrial City, Meyssam Tammar Basij base)
+- Relationships between entities (ATTACKED, LOCATED_IN, SENT_PLAN_TO, etc.)
 
 ### System Architecture
 
@@ -175,17 +172,16 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 %%{init: {'theme': 'dark'}}%%
 graph TB
     subgraph User["User Interface"]
-        UI["Web Interface<br/>(3-Panel UI + Leaflet)"]
+        UI["Web Interface<br/>(3-Panel UI + Knowledge Graph)"]
     end
 
     subgraph Backend["Backend Services"]
         API["FastAPI<br/>(REST + Streaming)"]
-        AGENT["LangGraph Agent<br/>(Worker + Critic)"]
-        LOC["Location Sub-Graph<br/>(NER + Geocode + Filter)"]
+        AGENT["LangGraph Agent<br/>(Worker + Critic + Ontology)"]
     end
 
     subgraph Data["Data Layer"]
-        MDB[("MongoDB 8.2+<br/>(Vector Search)")]
+        MDB[("MongoDB 8.2+<br/>(Vector Search + Ontology)")]
         OL["Ollama<br/>(Qwen 3.5 LLM)"]
     end
 
@@ -201,13 +197,14 @@ graph TB
     AGENT --> OL
     AGENT --> WEB
     AGENT --> WIKI
-    AGENT --> LOC
-    LOC --> NOM
+    AGENT --> NOM
 ```
 
-For detailed technology decisions, see [Technology Choices](TECHNOLOGY.md).
+For detailed technology decisions, see [Technology Choices](docs/technology.md).
 
-For agent orchestration details, see [Agent Workflow](AGENT_WORKFLOW.md).
+For agent orchestration details, see [Agent Workflow](docs/agent_workflow.md).
+
+For ontology system details, see [Ontology System](docs/ontology.md).
 
 ---
 
@@ -273,7 +270,7 @@ GeoVision Lab supports **dynamic switching between different Qwen 3.5 LLM models
 2. Use the model selector dropdown above the chat input
 3. Selection takes effect immediately
 
-The QA/Reviewer model remains fixed at `Qwen 2.5:0.5b` for consistent constraint checking.
+**Single LLM Strategy:** Qwen 3.5 handles all tasks (reasoning, validation, ontology extraction). Switch between 9B (complex analysis) and 4B (general use) as needed.
 
 ---
 
@@ -297,11 +294,16 @@ The platform includes a sample document (`documents/fantasy.md`) about the **Duc
 2. **Vector Search** — Ask about DuckyDucks; watch `vector_search` tool trigger
 3. **Live Search** — Ask about breaking news; verify `duckduckgo_search` execution
 4. **Time Awareness** — Ask "What exact date and time is it right now?"
-5. **Map Rendering** — Ask about any real location (e.g., "Tell me about Paris"); verify automatic map appears in Maps panel
-6. **Model Switching** — Switch between Qwen variants; observe quality/speed differences
-7. **3-Panel UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Maps Result shows geocoded locations
-8. **Resizable Panels** — Drag the vertical handles between panels to adjust widths
-9. **GPU Status** — Check the top panel shows correct GPU status (Active/Standby/CPU Only)
+5. **Ontology Extraction** — Ask about real geopolitical entities (e.g., "What happened in Iran last week?"); verify entities and relationships appear in Knowledge Graph panel with:
+   - Color-coded nodes (blue locations, orange people, purple organizations)
+   - Clear curved edge labels showing relationship types (ATTACKED, LOCATED_IN, etc.)
+   - Hover tooltips with entity details
+   - Proper node spacing without overlapping labels
+6. **Location Geocoding** — Ask about specific cities/countries; verify coordinates are extracted and displayed on the map panel
+7. **Model Switching** — Switch between Qwen variants; observe quality/speed differences
+8. **3-Panel UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Knowledge Graph shows entities and relationships
+9. **Resizable Panels** — Drag the vertical handles between panels to adjust widths
+10. **GPU Status** — Check the top panel shows correct GPU status (Active/Standby/CPU Only)
 
 ---
 
@@ -335,6 +337,7 @@ geo-vision-lab/
 |----------|-------------|
 | [Technology Choices](docs/technology.md) | Detailed rationale for each technology decision |
 | [Agent Workflow](docs/agent_workflow.md) | Deep dive into multi-agent orchestration |
+| [Ontology System](docs/ontology.md) | Knowledge graph architecture and entity extraction |
 | [Agent Learnings](docs/learnings.md) | Technical insights on reasoning LLMs |
 | [Debugging Guide](docs/debugging.md) | Troubleshooting common issues |
 | [MongoDB Vector Search](docs/mongodb_vector_search.md) | Vector search implementation details |
@@ -345,14 +348,14 @@ geo-vision-lab/
 
 | Layer | Technology |
 |-------|------------|
-| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) |
-| **QA/Review LLM** | Ollama + Qwen 2.5:0.5b |
-| **NER/Location** | Hugging Face (dslim/bert-base-NER) + LLM disambiguation |
+| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) - single model for all tasks |
+| **Ontology Extraction** | LLM structured output + Nominatim geocoding |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
-| **Agent Framework** | LangGraph + MemorySaver |
+| **Agent Framework** | LangGraph + MemorySaver (with ontology subgraph) |
 | **Backend API** | FastAPI + uvicorn |
-| **Frontend UI** | Vanilla JS + Leaflet.js (3-Lane) |
+| **Frontend UI** | Vanilla JS + Knowledge Graph visualization |
+| **Geocoding** | Nominatim API |
 | **Testing** | PyTest + Testcontainers |
 | **CI/CD** | GitHub Actions |
 | **Observability** | Grafana + Loki + Dozzle |

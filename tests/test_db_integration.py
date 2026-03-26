@@ -42,7 +42,7 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     monkeypatch.setattr(settings, "CHUNK_OVERLAP", 20)
     monkeypatch.setattr(settings, "VECTOR_COLLECTION_NAME", "test_collection")
     monkeypatch.setattr(settings, "EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-    monkeypatch.setattr(settings, "REASONING_LLM_MODEL_NAME", "qwen2.5:0.5b")
+    monkeypatch.setattr(settings, "REASONING_LLM_MODEL_NAME", "qwen3.5:4b")
     monkeypatch.setattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434")
 
     # Get the collection directly from the test MongoDB container

@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api.routes import chat, health, models
+from app.api.routes import settings as settings_router
 
 
 class PollingFilter(logging.Filter):
@@ -59,6 +60,7 @@ logger.info(f"[APP] App initialised: {settings.APP_NAME} v{settings.VERSION}")
 app.include_router(chat.router, tags=["chat"])
 app.include_router(health.router, tags=["health"])
 app.include_router(models.router, tags=["models"])
+app.include_router(settings_router.router, tags=["settings"])
 
 # Ensure static directories exist
 os.makedirs("static", exist_ok=True)
