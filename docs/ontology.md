@@ -139,18 +139,19 @@ class OntologyLink(BaseModel):
 
 ### Common Relationship Types
 
-| Relationship | Direction | Example |
-|--------------|-----------|---------|
-| **LOCATED_IN** | Entity → Location | "Kyiv" → "Ukraine" |
-| **AFFILIATED_WITH** | Person/Org → Organization | "Zelensky" → "NATO" |
-| **SUPPORTS** | Entity → Entity | "United States" → "Ukraine" |
-| **TARGETS** | Entity → Entity | "Russian Forces" → "Kyiv" |
-| **CONFLICT_WITH** | Entity → Entity | "Russia" → "Ukraine" |
-| **LEADS** | Person → Organization/Country | "Zelensky" → "Ukraine" |
-| **PART_OF** | Entity → Entity | "Crimea" → "Ukraine" |
-| **OCCUPIED_BY** | Location → Entity | "Crimea" → "Russian Forces" |
-| **SIGNED** | Person/Org → Document | "Russia" → "Budapest Memorandum" |
-| **MENTIONS** | Document → Entity | "UN Report" → "Human Rights Violations" |
+| Relationship Category | Relationship Types | Direction | Example |
+|-----------------------|-------------------|-----------|---------|
+| **Spatial** | LOCATED_IN, STATIONED_IN, OPERATES_IN, HEADQUARTERED_IN, BRANCH_IN, ORIGINATES_FROM, DEPLOYS_TO | Entity → Location | "Kyiv" → "Ukraine" |
+| **Organizational** | AFFILIATED_WITH, PART_OF, LEADS, COMMANDS, SUBORDINATE_TO, REPORTS_TO, REPRESENTS, SPEAKS_FOR, FOUNDED, ESTABLISHED, DISSOLVED | Person/Org → Organization | "Zelensky" → "Ukraine" |
+| **Political/Military** | SUPPORTS, TARGETS, CONFLICT_WITH, ATTACKED, DEFENDS, ALLIES_WITH, HOSTILE_TO, SANCTIONS, EMBARGOES, ARMS, TRAINS, FUNDS | Entity → Entity | "United States" → "Ukraine" |
+| **Territorial** | OCCUPIES, CONTROLS, LIBERATES, CAPTURES, SEIZES, RECAPTURES, OVERRUNS, FORTIFIES, BLOCKADES | Entity → Location | "Russian Forces" → "Crimea" |
+| **Diplomatic** | NEGOTIATES_WITH, MET_WITH, VISITED, SIGNATORY_TO, RATIFIES, VIOLATES, WITHDRAWS_FROM, REJOINS, MEDIATES, ARBITRATES | Entity → Entity/Document | "Russia" → "Budapest Memorandum" |
+| **Informational** | MENTIONS, MENTIONED_IN, REPORTS, INVESTIGATES, CONFIRMS, DENIES, CLAIMS, ALLEGES, ACCUSES_OF | Document/Entity → Entity | "UN Report" → "Human Rights Violations" |
+| **Legal/Judicial** | INVESTIGATES, INDICTS, CHARGES, PROSECUTES, ARRESTS, DETAINS, RELEASES, PARDONS, EXTRADITES, SANCTIONED_BY | Entity → Entity | "ICC" → "War Criminals" |
+| **Economic** | OWNS, ACQUIRES, MERGES_WITH, PARTNERS_WITH, FUNDS, SPONSORS, BOYCOTTS, IMPOSES_TARIFFS_ON, GRANTS_AID_TO | Entity → Entity | "Company A" → "Subsidiary B" |
+| **Generic** | USES, RELATED_TO, PARTICIPATED_IN, COLLABORATES_WITH, COORDINATES_WITH, INFLUENCED_BY, DERIVED_FROM | Entity → Entity | Various contexts |
+
+**Note:** The relationship types listed above are predefined examples, but the ontology extractor is designed to discover and use additional relationship types that accurately capture semantic connections in the text. The system uses CAPS_SNAKE_CASE format for all relationship types (e.g., `MARRIED_TO`, `SIBLING_OF`, `STUDIED_AT`).
 
 ---
 

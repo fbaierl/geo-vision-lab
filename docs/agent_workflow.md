@@ -301,7 +301,16 @@ flowchart LR
 1. `ontology_extractor_node` receives the approved response text
 2. LLM extracts structured entities and relationships using few-shot prompting:
    - **Entity Types**: Location, Person, Organization, Event, Asset, Document, Concept
-   - **Relationship Types**: LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, CONFLICT_WITH, etc.
+   - **Relationship Types**: Comprehensive predefined set including:
+     - Spatial: LOCATED_IN, STATIONED_IN, OPERATES_IN, HEADQUARTERED_IN, DEPLOYS_TO
+     - Organizational: AFFILIATED_WITH, PART_OF, LEADS, COMMANDS, REPORTS_TO
+     - Political/Military: SUPPORTS, TARGETS, CONFLICT_WITH, ATTACKED, DEFENDS, ALLIES_WITH, SANCTIONS
+     - Territorial: OCCUPIES, CONTROLS, LIBERATES, CAPTURES, SEIZES, FORTIFIES
+     - Diplomatic: NEGOTIATES_WITH, MET_WITH, VISITED, SIGNATORY_TO, RATIFIES
+     - Legal/Judicial: INVESTIGATES, INDICTS, PROSECUTES, ARRESTS, EXTRADITES
+     - Economic: OWNS, ACQUIRES, MERGES_WITH, PARTNERS_WITH, FUNDS, BOYCOTTS
+     - Generic: USES, RELATED_TO, COLLABORATES_WITH, INFLUENCED_BY
+     - **Important:** The LLM can discover and use additional relationship types beyond this predefined list based on the semantic content of the text
    - Each extraction includes the original source text as context (mention)
 3. For Location entities, automatic geocoding via Nominatim API:
    - Returns coordinates (lat, lon), display name, country
