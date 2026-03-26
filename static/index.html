@@ -249,6 +249,13 @@
                     <div class="map-legend" id="map-legend">
                         <span>No locations mapped</span>
                     </div>
+                    <!-- Empty state indicator -->
+                    <div class="empty-state" id="map-empty-state" style="display: none;">
+                        <div class="empty-state-icon">◈</div>
+                        <div class="empty-state-text">No locations extracted</div>
+                        <div class="empty-state-subtext">The response did not contain any geographic locations</div>
+                    </div>
+                    <!-- Loading spinner - unified style -->
                     <div class="loading-spinner maps-loading" id="maps-loading" style="display: none;">
                         <div class="loading-spinner-icon"></div>
                         <div class="loading-spinner-text">Extracting Locations<span class="loading-dots"><span></span><span></span><span></span></span></div>
@@ -275,6 +282,13 @@
             </div>
             <div class="window-content" style="position: relative;">
                 <div id="graph-container" style="width: 100%; height: 100%;"></div>
+                <!-- Empty state indicator -->
+                <div class="empty-state" id="graph-empty-state" style="display: none;">
+                    <div class="empty-state-icon">⬡</div>
+                    <div class="empty-state-text">No knowledge graph</div>
+                    <div class="empty-state-subtext">No entities or relationships extracted yet</div>
+                </div>
+                <!-- Loading spinner - unified style -->
                 <div class="loading-spinner graph-loading" id="graph-loading" style="display: none;">
                     <div class="loading-spinner-icon"></div>
                     <div class="loading-spinner-text">Updating Graph<span class="loading-dots"><span></span><span></span><span></span></span></div>
@@ -1474,22 +1488,35 @@
                                 if (mapsLoading) mapsLoading.style.display = 'none';
                                 const graphLoading = document.getElementById('graph-loading');
                                 if (graphLoading) graphLoading.style.display = 'none';
-                                
+
                                 const ontology = evt.ontology || {entities: {}, links: {}};
                                 console.log("[DEBUG] Current SessionOntology data:", ontology);
-                                
+
+                                // Check if ontology has any data
+                                const entityCount = Object.keys(ontology.entities || {}).length;
+                                const linkCount = Object.keys(ontology.links || {}).length;
+                                const hasData = entityCount > 0 || linkCount > 0;
+
                                 // Render vis-network knowledge graph
                                 const graphContainer = document.getElementById('graph-container');
+                                const graphEmptyState = document.getElementById('graph-empty-state');
                                 if (graphContainer) {
-                                    renderGraph(ontology, graphContainer);
-                                    const winData = windowManager.windows.get('window-graph');
-                                    if (winData && winData.minimized) {
-                                        windowManager.restoreWindow('window-graph');
+                                    if (hasData) {
+                                        renderGraph(ontology, graphContainer);
+                                        if (graphEmptyState) graphEmptyState.style.display = 'none';
+                                        const winData = windowManager.windows.get('window-graph');
+                                        if (winData && winData.minimized) {
+                                            windowManager.restoreWindow('window-graph');
+                                        }
+                                    } else {
+                                        // Show empty state
+                                        if (graphEmptyState) graphEmptyState.style.display = 'flex';
                                     }
                                 }
 
                                 // Extract map locations and render map
                                 const mapContainer = document.getElementById('map-container');
+                                const mapEmptyState = document.getElementById('map-empty-state');
                                 const locations = Object.values(ontology.entities || {}).filter(
                                     e => e.type === 'Location' && e.properties && e.properties.lat && e.properties.lon
                                 ).map(e => ({
@@ -1499,13 +1526,17 @@
                                     lon: e.properties.lon,
                                     relevance: e.properties.relevance || 0.5
                                 }));
-                                
+
                                 if (locations && locations.length > 0) {
                                     renderMap(locations, mapContainer);
+                                    if (mapEmptyState) mapEmptyState.style.display = 'none';
                                     const winData = windowManager.windows.get('window-maps');
                                     if (winData && winData.minimized) {
                                         windowManager.restoreWindow('window-maps');
                                     }
+                                } else {
+                                    // Show empty state for map
+                                    if (mapEmptyState) mapEmptyState.style.display = 'flex';
                                 }
                             } else if (evt.type === 'token') {
                                 typingIndicator.classList.remove('show');
@@ -1519,9 +1550,24 @@
                                 if (mapsLoading) mapsLoading.style.display = 'none';
                                 const graphLoading = document.getElementById('graph-loading');
                                 if (graphLoading) graphLoading.style.display = 'none';
+                                
+                                // Show empty states for both map and graph
+                                const mapEmptyState = document.getElementById('map-empty-state');
+                                const graphEmptyState = document.getElementById('graph-empty-state');
                                 const mapLegend = document.getElementById('map-legend');
+                                
+                                if (mapEmptyState) {
+                                    mapEmptyState.style.display = 'flex';
+                                    mapEmptyState.querySelector('.empty-state-text').textContent = '⚠ Ontology extraction failed';
+                                    mapEmptyState.querySelector('.empty-state-subtext').textContent = 'Continuing without map and graph updates';
+                                }
+                                if (graphEmptyState) {
+                                    graphEmptyState.style.display = 'flex';
+                                    graphEmptyState.querySelector('.empty-state-text').textContent = '⚠ Ontology extraction failed';
+                                    graphEmptyState.querySelector('.empty-state-subtext').textContent = 'Continuing without map and graph updates';
+                                }
                                 if (mapLegend) {
-                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Ontology extraction failed - continuing without map and graph updates</span>';
+                                    mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Ontology extraction failed</span>';
                                 }
                             }
                         } catch (parseErr) {
