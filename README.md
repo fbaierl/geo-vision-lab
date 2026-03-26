@@ -1,7 +1,7 @@
 <h1 align="center">GeoVision Lab</h1>
 
 <p align="center">
-  <em>Local-first RAG platform for geopolitical analysis — fully containerized, privacy-first</em>
+  <em>Hybrid RAG platform for geopolitical analysis — online/offline LLM support, fully containerized</em>
 </p>
 
 <p align="center">
@@ -12,10 +12,14 @@
   <img src="static/demo_screenshot.png" alt="GeoVision Lab Demo" width="1200" />
 </p>
 
+<p align="center">
+  <strong>Version:</strong> v0.3.0
+</p>
+
 
 ## Overview
 
-GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for geopolitical intelligence analysis. It ingests documents (PDF, Markdown), vectorizes them using semantic embeddings, and lets you query them through an AI-powered chat interface — all running entirely within Docker without cloud dependencies.
+GeoVision Lab is a RAG (Retrieval-Augmented Generation) platform for geopolitical intelligence analysis. It ingests documents (PDF, Markdown), vectorizes them using semantic embeddings, and lets you query them through an AI-powered chat interface. Supports both **local LLM inference** (Ollama with qwen3.5 models) and **cloud LLM fallback** (Groq with Llama 4 Scout) — switch between online/offline modes as needed.
 
 ### Key Features
 
@@ -27,11 +31,14 @@ GeoVision Lab is a local-first RAG (Retrieval-Augmented Generation) platform for
   - **Automatic Geocoding**: Locations are geocoded via Nominatim API with coordinates displayed on map
   - **Interactive Graph**: Curved edges, color-coded nodes by type, hover tooltips with entity properties
   - **Accumulative Graph**: Relationships build up during conversation sessions for context awareness
-- **3-Panel UI** — Reasoning Chain | Text Result | Knowledge Graph with resizable panels
+- **Browser-Style OS UI** — Web desktop interface with resizable, draggable, overlapping windows that snap into place
+  - **Reasoning Chain Window** — Real-time workflow step visualization
+  - **Chat Result Window** — AI response display
+  - **Knowledge Graph Window** — Interactive entity/relationship visualization
+  - **Free Positioning** — Windows can be moved, resized, and arranged freely
 - **Conversational Memory** — Context-aware follow-up questions via LangGraph MemorySaver
-- **Privacy-First** — All inference runs locally — no data leaves your machine
-- **Observability** — Grafana + Loki logging, Dozzle real-time monitoring
-- **Model Switching** — Dynamic Qwen 3.5 selection (9B/4B) at runtime
+- **Hybrid LLM Support** — Switch between local Ollama (qwen3.5:9b/4b) and cloud Groq (Llama 4 Scout) at runtime
+- **Model Switching** — Dynamic qwen3.5 selection (9b/4b) at runtime for local inference
 - **GPU Status Indicator** — Real-time display of GPU acceleration status
 
 ### Test Data Included
@@ -172,7 +179,7 @@ When querying "What happened in Iran last week?", the knowledge graph automatica
 %%{init: {'theme': 'dark'}}%%
 graph TB
     subgraph User["User Interface"]
-        UI["Web Interface<br/>(3-Panel UI + Knowledge Graph)"]
+        UI["Web Interface<br/>(Browser OS UI + Knowledge Graph)"]
     end
 
     subgraph Backend["Backend Services"]
@@ -182,7 +189,7 @@ graph TB
 
     subgraph Data["Data Layer"]
         MDB[("MongoDB 8.2+<br/>(Vector Search + Ontology)")]
-        OL["Ollama<br/>(Qwen 3.5 LLM)"]
+        OL["Ollama<br/>(qwen3.5 LLM)"]
     end
 
     subgraph Tools["External Tools"]
@@ -214,6 +221,7 @@ For ontology system details, see [Ontology System](docs/ontology.md).
 
 - Docker and Docker Compose installed
 - Optional: NVIDIA GPU + Container Toolkit for accelerated inference
+- Optional: Groq API key for cloud LLM fallback (get free key at [console.groq.com](https://console.groq.com))
 
 #### GPU Acceleration (Recommended)
 
@@ -226,11 +234,24 @@ sudo systemctl restart docker
 docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
 ```
 
-### 1. Add Your Documents
+### 1. Configure Environment (Optional)
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+# For cloud LLM fallback (optional)
+GROQ_API_KEY=your-groq-api-key
+USE_ONLINE_LLM=false
+
+# For self-hosted Nominatim (optional - avoids rate limiting)
+NOMINATIM_URL=http://nominatim:8080/search
+```
+
+### 2. Add Your Documents
 
 Place PDF files into `./documents/pdf/` for the RAG archival pipeline.
 
-### 2. Launch the Stack
+### 3. Launch the Stack
 
 ```bash
 docker compose up --build
@@ -238,12 +259,12 @@ docker compose up --build
 
 This orchestrates:
 - MongoDB with vector search index
-- Ollama pulling the Qwen 3.5 LLM
+- Ollama pulling qwen3.5:9b and qwen3.5:4b models
 - Document ingestion and chunking
 - FastAPI backend with streaming
 - Grafana + Loki observability stack
 
-### 3. Access the Dashboards
+### 4. Access the Dashboards
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
@@ -258,19 +279,33 @@ This orchestrates:
 
 ## Model Switching
 
-GeoVision Lab supports **dynamic switching between different Qwen 3.5 LLM models**:
+GeoVision Lab supports **hybrid LLM deployment** with both local and cloud models:
+
+### Local Models (Ollama)
 
 | Model | Size | Speed | Quality | Best For |
 |-------|------|-------|---------|----------|
-| **Qwen 3.5 9B** | 9B | Slower | Highest | Complex analysis, detailed reports |
-| **Qwen 3.5 4B** | 4B | Balanced | High | Default — general purpose |
+| **qwen3.5:9b** | 9B | Slower | Highest | Complex analysis, detailed reports |
+| **qwen3.5:4b** | 4B | Balanced | High | Default — general purpose |
 
-**To switch models:**
+**To switch local models:**
 1. Open the Web Interface at [localhost:8000](http://localhost:8000)
 2. Use the model selector dropdown above the chat input
 3. Selection takes effect immediately
 
-**Single LLM Strategy:** Qwen 3.5 handles all tasks (reasoning, validation, ontology extraction). Switch between 9B (complex analysis) and 4B (general use) as needed.
+### Cloud Models (Groq)
+
+| Model | Provider | Speed | Quality | Best For |
+|-------|----------|-------|---------|----------|
+| **meta-llama/llama-4-scout-17b-16e-instruct** | Groq | Fast | High | Live events, current affairs |
+
+**To enable cloud LLM:**
+1. Get a Groq API key at [console.groq.com](https://console.groq.com)
+2. Add `GROQ_API_KEY=your-api-key` to your `.env` file
+3. Set `USE_ONLINE_LLM=true` in `.env`
+4. Restart the application or toggle via Web Interface (if available)
+
+**Hybrid Strategy:** Use local qwen3.5 models for privacy-sensitive analysis and cloud Groq models for live events requiring up-to-date information. Switch between modes as needed.
 
 ---
 
@@ -300,10 +335,10 @@ The platform includes a sample document (`documents/fantasy.md`) about the **Duc
    - Hover tooltips with entity details
    - Proper node spacing without overlapping labels
 6. **Location Geocoding** — Ask about specific cities/countries; verify coordinates are extracted and displayed on the map panel
-7. **Model Switching** — Switch between Qwen variants; observe quality/speed differences
-8. **3-Panel UI** — Verify Reasoning Chain shows workflow steps, Text Result shows response, Knowledge Graph shows entities and relationships
-9. **Resizable Panels** — Drag the vertical handles between panels to adjust widths
-10. **GPU Status** — Check the top panel shows correct GPU status (Active/Standby/CPU Only)
+7. **Model Switching** — Switch between qwen3.5:9b and qwen3.5:4b; observe quality/speed differences
+8. **Browser OS UI** — Verify windows can be dragged, resized, and snapped; check Reasoning Chain shows workflow steps, Chat Result shows response, Knowledge Graph shows entities and relationships
+9. **GPU Status** — Check the top panel shows correct GPU status (Active/Standby/CPU Only)
+10. **Online LLM** — If Groq API key configured, verify cloud model responses for current events
 
 ---
 
@@ -316,14 +351,18 @@ geo-vision-lab/
 │   ├── api/routes/         # FastAPI REST endpoints
 │   ├── core/               # Global settings & config
 │   ├── ingestion/          # RAG data processing pipeline
+│   ├── models/             # Pydantic models & schemas
 │   └── services/           # LLM & MongoDB connectors
 ├── static/                 # Vanilla JS / CSS Web Interface
 ├── documents/
-│   ├── pdf/                # Your source PDFs
-│   └── fantasy.md          # Sample test data
+│   ├── pdf/                # Your source PDFs (includes Iran - Wikipedia.pdf)
+│   ├── ignore/             # Documents excluded from ingestion
+│   └── fantasy.md          # Sample test data (DuckyDucks & FrogyFrogs)
 ├── monitoring/             # Grafana, Loki, Promtail config
 ├── docs/                   # Additional documentation
+├── learnings/              # Technical insights & deployment guides
 ├── migrations/             # Database migration scripts
+├── tests/                  # PyTest test suite
 ├── docker-compose.yml      # Full stack orchestration
 ├── Dockerfile              # Application container
 └── requirements.txt        # Python dependencies
@@ -339,8 +378,11 @@ geo-vision-lab/
 | [Agent Workflow](docs/agent_workflow.md) | Deep dive into multi-agent orchestration |
 | [Ontology System](docs/ontology.md) | Knowledge graph architecture and entity extraction |
 | [Agent Learnings](docs/learnings.md) | Technical insights on reasoning LLMs |
-| [Debugging Guide](docs/debugging.md) | Troubleshooting common issues |
+| [Debugging Guide](debugging.md) | Troubleshooting common issues |
 | [MongoDB Vector Search](docs/mongodb_vector_search.md) | Vector search implementation details |
+| [LangSmith Tracing](docs/langsmith.md) | Setup guide for LLM tracing and debugging |
+| [Dependency Injection](docs/dependency_injection.md) | DI pattern implementation details |
+| [Error Handling](docs/error_handling_improvements.md) | Error handling improvements and patterns |
 
 ---
 
@@ -348,18 +390,19 @@ geo-vision-lab/
 
 | Layer | Technology |
 |-------|------------|
-| **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) - single model for all tasks |
+| **LLM Inference (Local)** | Ollama + qwen3.5 (9b/4b) - switchable models |
+| **LLM Inference (Cloud)** | Groq + Llama 4 Scout (17B) - optional fallback |
 | **Ontology Extraction** | LLM structured output + Nominatim geocoding |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
 | **Agent Framework** | LangGraph + MemorySaver (with ontology subgraph) |
 | **Backend API** | FastAPI + uvicorn |
-| **Frontend UI** | Vanilla JS + Knowledge Graph visualization |
-| **Geocoding** | Nominatim API |
+| **Frontend UI** | Vanilla JS + Browser OS-style window manager + Knowledge Graph visualization |
+| **Geocoding** | Nominatim API (public or self-hosted) |
 | **Testing** | PyTest + Testcontainers |
 | **CI/CD** | GitHub Actions |
 | **Observability** | Grafana + Loki + Dozzle |
-| **Tracing & Debugging** | LangSmith (self-hosted) |
+| **Tracing & Debugging** | LangSmith (cloud or self-hosted) |
 | **Containerization** | Docker + Docker Compose |
 
 ---
