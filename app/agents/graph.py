@@ -493,6 +493,12 @@ async def process_query_stream(
                         "summary": "Reasoning steps completed",
                         "content": content.strip()
                     }
+                elif content and not tool_calls:
+                    # Final response without tool calls - yield as token
+                    yield {
+                        "type": "token",
+                        "content": content.strip()
+                    }
 
             elif kind == "on_chat_model_stream":
                 if "reviewer" in tags:
@@ -584,7 +590,7 @@ async def process_query_stream(
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[QUERY-STREAM] Error during streaming: {error_msg}")
-        
+
         # Check for JSON parsing errors from Ollama client
         if "failed to parse JSON" in error_msg or "unexpected end of JSON input" in error_msg:
             yield {
@@ -598,5 +604,13 @@ async def process_query_stream(
         if not done_sent:
             if buffer and not in_think:
                 yield {"type": "token", "content": buffer}
+            elif buffer and in_think and think_buffer:
+                # Flush think buffer if we're still in think mode
+                yield {
+                    "type": "tool_result",
+                    "tool": "reasoning",
+                    "summary": "Reasoning steps completed",
+                    "content": (think_buffer + buffer).strip()
+                }
             yield {"type": "done"}
             done_sent = True
