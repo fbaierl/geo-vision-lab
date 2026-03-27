@@ -2037,11 +2037,11 @@
                 const container = document.getElementById('json-tree-container');
                 if (!container) return;
 
-                const treeHtml = this.buildJsonTree(ontology);
+                const treeHtml = this.buildJsonTree(ontology, null, 0, null, ontology);
                 container.innerHTML = treeHtml;
             }
 
-            buildJsonTree(data, key = null, depth = 0) {
+            buildJsonTree(data, key = null, depth = 0, parentKey = null, fullOntology = null) {
                 if (data === null) {
                     return `<li class="json-tree-node">
                         ${key !== null ? `<span class="json-tree-key">"${key}"</span><span class="json-tree-separator">:</span> ` : ''}
@@ -2079,7 +2079,23 @@
 
                 if (key !== null) {
                     html += `<span class="json-tree-toggle collapsed" onclick="this.parentElement.classList.toggle('collapsed')"></span>`;
-                    html += `<span class="json-tree-key">"${key}"</span><span class="json-tree-separator">:</span> `;
+                    
+                    // Custom display for entities and links - show name instead of UUID
+                    let displayKey = key;
+                    if (parentKey === 'entities' && typeof data === 'object' && data !== null && data.name) {
+                        displayKey = `${data.name} (${data.type || 'Entity'})`;
+                    } else if (parentKey === 'links' && typeof data === 'object' && data !== null && data.type && fullOntology) {
+                        // Look up entity names from UUIDs
+                        const sourceUuid = data.source_uuid || data.source_id || data.source;
+                        const targetUuid = data.target_uuid || data.target_id || data.target;
+                        const sourceEntity = fullOntology.entities && fullOntology.entities[sourceUuid];
+                        const targetEntity = fullOntology.entities && fullOntology.entities[targetUuid];
+                        const sourceName = sourceEntity ? sourceEntity.name : 'Unknown';
+                        const targetName = targetEntity ? targetEntity.name : 'Unknown';
+                        displayKey = `${sourceName} → ${targetName} [${data.type}]`;
+                    }
+                    
+                    html += `<span class="json-tree-key">"${displayKey}"</span><span class="json-tree-separator">:</span> `;
                 } else {
                     html += `<span class="json-tree-toggle collapsed" onclick="this.parentElement.classList.toggle('collapsed')"></span>`;
                 }
@@ -2095,11 +2111,11 @@
 
                 if (isArray) {
                     data.forEach((item, index) => {
-                        html += this.buildJsonTree(item, index, depth + 1);
+                        html += this.buildJsonTree(item, index, depth + 1, key, fullOntology);
                     });
                 } else {
                     for (const [k, v] of items) {
-                        html += this.buildJsonTree(v, k, depth + 1);
+                        html += this.buildJsonTree(v, k, depth + 1, key, fullOntology);
                     }
                 }
 
