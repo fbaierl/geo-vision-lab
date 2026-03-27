@@ -19,6 +19,25 @@
             <span class="logo-icon">◈</span>
             <span>GEOVISION LAB</span>
         </div>
+        
+        <!-- File Menu -->
+        <div class="top-menu">
+            <div class="menu-item" id="file-menu">
+                <span>File</span>
+                <span class="menu-arrow">▼</span>
+                <div class="menu-dropdown">
+                    <button class="menu-dropdown-item" id="export-project-global">
+                        <span class="menu-icon">⬇</span>
+                        Export Project
+                    </button>
+                    <button class="menu-dropdown-item" id="import-project-global">
+                        <span class="menu-icon">⬆</span>
+                        Import Project
+                    </button>
+                </div>
+            </div>
+        </div>
+        
         <div class="header-right">
             <div class="status-pill processing" id="pill-processing">
                 <div class="dot"></div>
@@ -2214,12 +2233,12 @@
             }
 
             init() {
-                // Export button
+                // Ontology window export button
                 document.getElementById('ontology-export-btn')?.addEventListener('click', () => {
-                    this.exportOntology();
+                    this.exportProject();
                 });
 
-                // Import button
+                // Ontology window import button
                 document.getElementById('ontology-import-btn')?.addEventListener('click', () => {
                     document.getElementById('ontology-import-input').click();
                 });
@@ -2230,9 +2249,39 @@
                         this.showImportModal(e.target.files[0]);
                     }
                 });
+
+                // Global menu - File > Export Project
+                document.getElementById('export-project-global')?.addEventListener('click', () => {
+                    this.exportProject();
+                    this.closeFileMenu();
+                });
+
+                // Global menu - File > Import Project
+                document.getElementById('import-project-global')?.addEventListener('click', () => {
+                    document.getElementById('ontology-import-input').click();
+                    this.closeFileMenu();
+                });
+
+                // File menu toggle
+                const fileMenu = document.getElementById('file-menu');
+                if (fileMenu) {
+                    fileMenu.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        fileMenu.classList.toggle('open');
+                    });
+                }
+
+                // Close menu when clicking outside
+                document.addEventListener('click', () => {
+                    this.closeFileMenu();
+                });
             }
 
-            async exportOntology() {
+            closeFileMenu() {
+                document.getElementById('file-menu')?.classList.remove('open');
+            }
+
+            async exportProject() {
                 try {
                     const threadId = window.currentThreadId || 'default';
                     const response = await fetch(`/api/ontology/${threadId}/export`);
@@ -2243,13 +2292,13 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `ontology_${threadId}_${new Date().toISOString().split('T')[0]}.json`;
+                    a.download = `geovision_project_${threadId}_${new Date().toISOString().split('T')[0]}.json`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
                     window.URL.revokeObjectURL(url);
 
-                    this.showToast('Ontology exported successfully');
+                    this.showToast('Project exported successfully');
                 } catch (error) {
                     this.showToast(`Export failed: ${error.message}`, 'error');
                 }
@@ -2281,7 +2330,7 @@
                     const result = await response.json();
 
                     this.closeImportModal();
-                    this.showToast(`Imported ${result.imported_entities} entities, ${result.imported_links} links (${mode} mode)`);
+                    this.showToast(`Project imported: ${result.imported_entities} entities, ${result.imported_links} relationships (${mode} mode)`);
 
                     // Reload page to show imported ontology
                     setTimeout(() => window.location.reload(), 1000);
@@ -2334,24 +2383,24 @@
     <div id="ontology-import-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Import Ontology</h3>
+                <h3>Import Project</h3>
                 <button class="modal-close" onclick="closeImportModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p>How should the imported ontology be merged?</p>
+                <p>How should the imported project data be merged?</p>
                 <div class="import-mode-options">
                     <label class="import-mode-option">
                         <input type="radio" name="import-mode" value="merge" checked>
                         <div class="mode-info">
                             <strong>Merge</strong> (recommended)
-                            <p>Combine with existing ontology. Entities with matching UUIDs will be merged.</p>
+                            <p>Combine with existing data. Entities with matching UUIDs will be merged.</p>
                         </div>
                     </label>
                     <label class="import-mode-option">
                         <input type="radio" name="import-mode" value="replace">
                         <div class="mode-info">
                             <strong>Replace</strong>
-                            <p>Replace current ontology entirely. Existing data will be lost.</p>
+                            <p>Replace current project data entirely. Existing data will be lost.</p>
                         </div>
                     </label>
                 </div>
