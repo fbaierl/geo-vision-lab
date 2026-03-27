@@ -267,12 +267,12 @@
             <div class="window-resize-handle corner"></div>
         </div>
 
-        <!-- GRAPH WINDOW -->
+        <!-- ONTOLOGY WINDOW -->
         <div class="window graph-window" id="window-graph" data-window="graph">
             <div class="window-header">
                 <div class="window-title">
                     <span>▸</span>
-                    <span>Knowledge Graph</span>
+                    <span>Ontology</span>
                 </div>
                 <div class="window-controls">
                     <button class="window-btn minimize" title="Minimize">−</button>
@@ -281,17 +281,80 @@
                 </div>
             </div>
             <div class="window-content" style="position: relative;">
-                <div id="graph-container" style="width: 100%; height: 100%;"></div>
-                <!-- Empty state indicator -->
-                <div class="empty-state" id="graph-empty-state" style="display: none;">
-                    <div class="empty-state-icon">⬡</div>
-                    <div class="empty-state-text">No knowledge graph</div>
-                    <div class="empty-state-subtext">No entities or relationships extracted yet</div>
+                <!-- Tab Navigation -->
+                <div class="ontology-tabs">
+                    <button class="ontology-tab active" data-tab="graph">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <circle cx="6" cy="6" r="2"></circle>
+                            <circle cx="18" cy="18" r="2"></circle>
+                            <path d="M8 8l2 2"></path>
+                            <path d="M16 16l-2-2"></path>
+                        </svg>
+                        Graph
+                    </button>
+                    <button class="ontology-tab" data-tab="json">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="16 18 22 12 16 6"></polyline>
+                            <polyline points="8 6 2 12 8 18"></polyline>
+                        </svg>
+                        JSON Structure
+                    </button>
                 </div>
-                <!-- Loading spinner - unified style -->
-                <div class="loading-spinner graph-loading" id="graph-loading" style="display: none;">
-                    <div class="loading-spinner-icon"></div>
-                    <div class="loading-spinner-text">Updating Graph<span class="loading-dots"><span></span><span></span><span></span></span></div>
+
+                <!-- Graph Tab Content -->
+                <div id="graph-tab-content" class="ontology-tab-content active">
+                    <div id="graph-container" style="width: 100%; height: 100%;"></div>
+                    <!-- Empty state indicator -->
+                    <div class="empty-state" id="graph-empty-state" style="display: none;">
+                        <div class="empty-state-icon">⬡</div>
+                        <div class="empty-state-text">No ontology data</div>
+                        <div class="empty-state-subtext">No entities or relationships extracted yet</div>
+                    </div>
+                    <!-- Loading spinner - unified style -->
+                    <div class="loading-spinner graph-loading" id="graph-loading" style="display: none;">
+                        <div class="loading-spinner-icon"></div>
+                        <div class="loading-spinner-text">Updating Ontology<span class="loading-dots"><span></span><span></span><span></span></span></div>
+                    </div>
+                </div>
+
+                <!-- JSON Tab Content -->
+                <div id="json-tab-content" class="ontology-tab-content">
+                    <div class="json-viewer-toolbar">
+                        <button class="json-toolbar-btn" id="json-expand-all" title="Expand All">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            Expand All
+                        </button>
+                        <button class="json-toolbar-btn" id="json-collapse-all" title="Collapse All">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="18 15 12 9 6 15"></polyline>
+                            </svg>
+                            Collapse All
+                        </button>
+                        <button class="json-toolbar-btn" id="json-copy" title="Copy JSON">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            Copy JSON
+                        </button>
+                        <button class="json-toolbar-btn" id="json-download" title="Download JSON">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Download
+                        </button>
+                        <div class="json-stats">
+                            <span id="json-entity-count">0 entities</span>
+                            <span class="json-stats-separator">•</span>
+                            <span id="json-link-count">0 relationships</span>
+                        </div>
+                    </div>
+                    <div id="json-tree-container" class="json-tree-container"></div>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -322,9 +385,9 @@
             <span class="shelf-icon">◈</span>
             <span class="shelf-label">Maps</span>
         </div>
-        <div class="shelf-item" data-target="window-graph" title="Toggle Knowledge Graph">
+        <div class="shelf-item" data-target="window-graph" title="Toggle Ontology Window">
             <span class="shelf-icon">⬡</span>
-            <span class="shelf-label">Graph</span>
+            <span class="shelf-label">Ontology</span>
         </div>
         
         <button class="snap-layout-btn" id="snap-layout-btn" title="Snap Windows into Tiled Layout">
@@ -1666,6 +1729,11 @@
                                 const ontology = evt.ontology || {entities: {}, links: {}};
                                 console.log("[DEBUG] Current SessionOntology data:", ontology);
 
+                                // Update ontology tab manager (NEW - sync with JSON view)
+                                if (ontologyTabManager) {
+                                    ontologyTabManager.updateOntology(ontology);
+                                }
+
                                 // Check if ontology has any data
                                 const entityCount = Object.keys(ontology.entities || {}).length;
                                 const linkCount = Object.keys(ontology.links || {}).length;
@@ -1873,6 +1941,222 @@
 
         // Initialize window manager
         const windowManager = new WindowManager();
+
+        // ═══════════════════════════════════════════════════════════════
+        // ONTOLOGY TAB MANAGER
+        // ═══════════════════════════════════════════════════════════════
+
+        class OntologyTabManager {
+            constructor() {
+                this.currentTab = 'graph';
+                this.currentOntology = { entities: {}, links: {} };
+                this.init();
+            }
+
+            init() {
+                // Tab switching
+                document.querySelectorAll('.ontology-tab').forEach(tab => {
+                    tab.addEventListener('click', (e) => {
+                        const targetTab = e.target.closest('.ontology-tab')?.dataset.tab;
+                        if (targetTab) this.switchTab(targetTab);
+                    });
+                });
+
+                // Toolbar actions
+                document.getElementById('json-expand-all')?.addEventListener('click', () => this.expandAllJson());
+                document.getElementById('json-collapse-all')?.addEventListener('click', () => this.collapseAllJson());
+                document.getElementById('json-copy')?.addEventListener('click', () => this.copyJson());
+                document.getElementById('json-download')?.addEventListener('click', () => this.downloadJson());
+            }
+
+            switchTab(tabId) {
+                this.currentTab = tabId;
+
+                // Update tab buttons
+                document.querySelectorAll('.ontology-tab').forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.tab === tabId);
+                });
+
+                // Update content visibility
+                document.querySelectorAll('.ontology-tab-content').forEach(content => {
+                    content.classList.toggle('active', content.id === `${tabId}-tab-content`);
+                });
+
+                // If switching to JSON tab, render/update the tree
+                if (tabId === 'json') {
+                    this.renderJsonTree(this.currentOntology);
+                }
+            }
+
+            updateOntology(ontology) {
+                this.currentOntology = ontology;
+
+                // Update stats
+                const entityCount = Object.keys(ontology.entities || {}).length;
+                const linkCount = Object.keys(ontology.links || {}).length;
+
+                document.getElementById('json-entity-count').textContent = `${entityCount} entit${entityCount === 1 ? 'y' : 'ies'}`;
+                document.getElementById('json-link-count').textContent = `${linkCount} relationship${linkCount === 1 ? 'y' : 'ships'}`;
+
+                // If JSON tab is active, re-render
+                if (this.currentTab === 'json') {
+                    this.renderJsonTree(ontology);
+                }
+            }
+
+            renderJsonTree(ontology) {
+                const container = document.getElementById('json-tree-container');
+                if (!container) return;
+
+                const treeHtml = this.buildJsonTree(ontology);
+                container.innerHTML = treeHtml;
+            }
+
+            buildJsonTree(data, key = null, depth = 0) {
+                if (data === null) {
+                    return `<li class="json-tree-node">
+                        ${key !== null ? `<span class="json-tree-key">"${key}"</span><span class="json-tree-separator">:</span> ` : ''}
+                        <span class="json-tree-value-null">null</span>
+                    </li>`;
+                }
+
+                if (typeof data !== 'object') {
+                    const valueClass = typeof data === 'string' ? 'json-tree-value-string' :
+                                      typeof data === 'number' ? 'json-tree-value-number' :
+                                      'json-tree-value-boolean';
+                    const displayValue = typeof data === 'string' ? `"${this.escapeJsonString(data)}"` : String(data);
+
+                    return `<li class="json-tree-node">
+                        ${key !== null ? `<span class="json-tree-key">"${key}"</span><span class="json-tree-separator">:</span> ` : ''}
+                        <span class="${valueClass}">${displayValue}</span>
+                    </li>`;
+                }
+
+                const isArray = Array.isArray(data);
+                const items = isArray ? data : Object.entries(data);
+                const bracketOpen = isArray ? '[' : '{';
+                const bracketClose = isArray ? ']' : '}';
+                const itemCount = items.length;
+
+                if (itemCount === 0) {
+                    return `<li class="json-tree-node">
+                        ${key !== null ? `<span class="json-tree-key">"${key}"</span><span class="json-tree-separator">:</span> ` : ''}
+                        <span class="json-tree-bracket">${bracketOpen}${bracketClose}</span>
+                    </li>`;
+                }
+
+                // Collapsible node for objects/arrays with children
+                let html = `<li class="json-tree-node">`;
+
+                if (key !== null) {
+                    html += `<span class="json-tree-toggle collapsed" onclick="this.parentElement.classList.toggle('collapsed')"></span>`;
+                    html += `<span class="json-tree-key">"${key}"</span><span class="json-tree-separator">:</span> `;
+                } else {
+                    html += `<span class="json-tree-toggle collapsed" onclick="this.parentElement.classList.toggle('collapsed')"></span>`;
+                }
+
+                html += `<span class="json-tree-bracket">${bracketOpen}</span>`;
+
+                if (itemCount <= 3 && depth < 5) {
+                    // Inline preview for small objects
+                    html += `<span class="json-tree-preview">${itemCount} item${itemCount === 1 ? '' : 's'}</span>`;
+                }
+
+                html += `<ul class="json-tree-children">`;
+
+                if (isArray) {
+                    data.forEach((item, index) => {
+                        html += this.buildJsonTree(item, index, depth + 1);
+                    });
+                } else {
+                    for (const [k, v] of items) {
+                        html += this.buildJsonTree(v, k, depth + 1);
+                    }
+                }
+
+                html += `</ul><span class="json-tree-bracket">${bracketClose}</span></li>`;
+
+                return html;
+            }
+
+            escapeJsonString(str) {
+                return str
+                    .replace(/\\/g, '\\\\')
+                    .replace(/"/g, '\\"')
+                    .replace(/\n/g, '\\n')
+                    .replace(/\r/g, '\\r')
+                    .replace(/\t/g, '\\t');
+            }
+
+            expandAllJson() {
+                document.querySelectorAll('.json-tree-toggle.collapsed').forEach(toggle => {
+                    toggle.classList.remove('collapsed');
+                    toggle.classList.add('expanded');
+                    toggle.parentElement.classList.remove('collapsed');
+                });
+            }
+
+            collapseAllJson() {
+                document.querySelectorAll('.json-tree-toggle.expanded').forEach(toggle => {
+                    toggle.classList.remove('expanded');
+                    toggle.classList.add('collapsed');
+                    toggle.parentElement.classList.add('collapsed');
+                });
+            }
+
+            copyJson() {
+                const jsonString = JSON.stringify(this.currentOntology, null, 2);
+                navigator.clipboard.writeText(jsonString).then(() => {
+                    this.showToast('JSON copied to clipboard');
+                }).catch(err => {
+                    console.error('Failed to copy JSON:', err);
+                    this.showToast('Failed to copy JSON', 'error');
+                });
+            }
+
+            downloadJson() {
+                const jsonString = JSON.stringify(this.currentOntology, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ontology_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('Ontology downloaded');
+            }
+
+            showToast(message, type = 'info') {
+                // Simple toast implementation
+                const toast = document.createElement('div');
+                toast.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: ${type === 'error' ? 'var(--red)' : 'var(--accent)'};
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 6px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    z-index: 10000;
+                    animation: slideUp 0.3s ease;
+                `;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => toast.remove(), 300);
+                }, 2000);
+            }
+        }
+
+        // Initialize ontology tab manager
+        const ontologyTabManager = new OntologyTabManager();
     </script>
 </body>
 </html>
