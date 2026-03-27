@@ -367,23 +367,6 @@
                             </svg>
                             Download
                         </button>
-                        <div class="json-toolbar-divider"></div>
-                        <button class="json-toolbar-btn" id="ontology-export-btn" title="Export Ontology">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Export
-                        </button>
-                        <button class="json-toolbar-btn" id="ontology-import-btn" title="Import Ontology">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
-                            Import
-                        </button>
                         <div class="json-stats">
                             <span id="json-entity-count">0 entities</span>
                             <span class="json-stats-separator">•</span>
@@ -2233,16 +2216,6 @@
             }
 
             init() {
-                // Ontology window export button
-                document.getElementById('ontology-export-btn')?.addEventListener('click', () => {
-                    this.exportProject();
-                });
-
-                // Ontology window import button
-                document.getElementById('ontology-import-btn')?.addEventListener('click', () => {
-                    document.getElementById('ontology-import-input').click();
-                });
-
                 // File input change
                 document.getElementById('ontology-import-input')?.addEventListener('change', (e) => {
                     if (e.target.files.length > 0) {
