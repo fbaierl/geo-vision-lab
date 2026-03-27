@@ -20,6 +20,7 @@ from app.core.constants import (
 )
 from app.agents.ontology_subgraph import ontology_subgraph
 from app.models.ontology import SessionOntology
+from app.services.ontology.merge import merge_ontologies
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -176,7 +177,7 @@ def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_ONTOLOGY_EXT
 def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
     """
     Run the ontology processing sub-graph.
-    
+
     This wraps the ontology_subgraph and maps state between main graph and sub-graph.
     """
     logger.info("=" * 80)
@@ -190,20 +191,20 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
     # Build full conversation context from ALL messages (not just the first query)
     user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     assistant_msgs = [m for m in state[STATE_KEY_MESSAGES] if hasattr(m, "content") and not isinstance(m, HumanMessage)]
-    
+
     # Build conversation history for context
     full_context_parts = []
     for i, (user_msg, assistant_msg) in enumerate(zip(user_msgs, assistant_msgs), 1):
         user_content = user_msg.content if hasattr(user_msg, "content") else str(user_msg)
         assistant_content = assistant_msg.content if hasattr(assistant_msg, "content") else str(assistant_msg)
         full_context_parts.append(f"Turn {i}:\nUser: {user_content}\nAssistant: {assistant_content}")
-    
+
     # Include any remaining user messages without assistant responses (current query)
     if len(user_msgs) > len(assistant_msgs):
         remaining_user_msg = user_msgs[-1]
         user_content = remaining_user_msg.content if hasattr(remaining_user_msg, "content") else str(remaining_user_msg)
         full_context_parts.append(f"Current Query:\nUser: {user_content}")
-    
+
     full_context = "\n\n".join(full_context_parts) if full_context_parts else ""
 
     if not assistant_response:
@@ -217,59 +218,40 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
             "assistant_response": assistant_response,
             "query_id": "default"
         }
-        
+
+        logger.debug(f"[ONTOLOGY_SUBGRAPH] Invoking sub-graph with {len(assistant_response)} chars of assistant response")
+
         # Run sub-graph
         subgraph_result = ontology_subgraph.invoke(subgraph_input)
         delta = subgraph_result.get("extracted_delta")
-        
+
+        # Log sub-graph result details
+        if delta:
+            logger.info(f"[ONTOLOGY_SUBGRAPH] Sub-graph returned {len(delta.entities)} entities and {len(delta.links)} links")
+        else:
+            logger.warning("[ONTOLOGY_SUBGRAPH] Sub-graph returned None or empty delta")
+
         # Merge with existing session ontology
         current_ontology = state.get(STATE_KEY_ONTOLOGY)
         if not current_ontology:
-            current_ontology = SessionOntology().model_dump()
-        elif isinstance(current_ontology, SessionOntology):
-            current_ontology = current_ontology.model_dump()
-            
+            current_ontology = SessionOntology()
+        elif isinstance(current_ontology, dict):
+            current_ontology = SessionOntology.model_validate(current_ontology)
+
         if delta:
-            entities = delta.get("entities", {}) if isinstance(delta, dict) else delta.entities
-            links = delta.get("links", {}) if isinstance(delta, dict) else delta.links
-            
-            # Merge Entities
-            for k, v in entities.items():
-                new_ent_data = v if isinstance(v, dict) else v.model_dump()
-                
-                if k not in current_ontology["entities"]:
-                    current_ontology["entities"][k] = new_ent_data
-                else:
-                    # Merge properties and mentions
-                    existing = current_ontology["entities"][k]
-                    
-                    # Add new mentions
-                    if "mentions" in new_ent_data:
-                        existing.setdefault("mentions", []).extend(new_ent_data["mentions"])
-                    
-                    # Merge properties (new info takes precedence if non-null)
-                    if "properties" in new_ent_data:
-                        for p_k, p_v in new_ent_data["properties"].items():
-                            if p_v is not None:
-                                existing.setdefault("properties", {})[p_k] = p_v
-            
-            # Merge Links
-            for k, v in links.items():
-                new_link_data = v if isinstance(v, dict) else v.model_dump()
-                if k not in current_ontology["links"]:
-                    current_ontology["links"][k] = new_link_data
-                else:
-                    # Append new mentions to existing link
-                    existing_link = current_ontology["links"][k]
-                    if "mentions" in new_link_data:
-                        existing_link.setdefault("mentions", []).extend(new_link_data["mentions"])
-        
-        entity_count = len(current_ontology.get("entities", {}))
-        logger.info(f"[ONTOLOGY_SUBGRAPH] Sub-graph complete: {entity_count} entities accumulated.")
+            # Use the new merge function
+            current_ontology = merge_ontologies(current_ontology, delta)
+
+        entity_count = len(current_ontology.entities)
+        link_count = len(current_ontology.links)
+        logger.info(f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links accumulated.")
         return {STATE_KEY_ONTOLOGY: current_ontology}
-        
+
     except Exception as e:
-        logger.error(f"[ONTOLOGY_SUBGRAPH] Sub-graph failed: {e}")
+        logger.error(f"[ONTOLOGY_SUBGRAPH] ✗ Sub-graph failed: {e}")
+        logger.exception(f"[ONTOLOGY_SUBGRAPH] Full stack trace:")
+        logger.error(f"[ONTOLOGY_SUBGRAPH] Assistant response length: {len(assistant_response)} chars")
+        logger.debug(f"[ONTOLOGY_SUBGRAPH] Assistant response preview: {assistant_response[:500]}...")
         return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
 
 
@@ -460,22 +442,63 @@ async def process_query_stream(
                     output = event.get("data", {}).get("output", {})
                     ontology_state = output.get(STATE_KEY_ONTOLOGY, {})
 
-                    if ontology_state and isinstance(ontology_state, dict):
-                        entities = ontology_state.get("entities", {})
-                        links = ontology_state.get("links", {})
-                        logger.info(f"[ONTOLOGY_SUBGRAPH] Extracted {len(entities)} entities")
+                    # Handle both SessionOntology objects and dicts
+                    entities = {}
+                    links = {}
+                    
+                    if ontology_state:
+                        if isinstance(ontology_state, dict):
+                            entities = ontology_state.get("entities", {})
+                            links = ontology_state.get("links", {})
+                        else:
+                            # It's a SessionOntology object
+                            entities = getattr(ontology_state, "entities", {})
+                            links = getattr(ontology_state, "links", {})
+                        
+                        # Count entities and links (handle both dict and object formats)
+                        if isinstance(entities, dict):
+                            entity_count = len(entities)
+                        elif hasattr(entities, "__len__"):
+                            entity_count = len(entities)
+                        else:
+                            entity_count = 0
+                            
+                        if isinstance(links, dict):
+                            link_count = len(links)
+                        elif hasattr(links, "__len__"):
+                            link_count = len(links)
+                        else:
+                            link_count = 0
+                            
+                        logger.info(f"[STREAM] Ontology extracted: {entity_count} entities, {link_count} links")
+
+                        # Convert to JSON-serializable format
+                        def serialize_entity(e):
+                            if hasattr(e, "model_dump"):
+                                return e.model_dump(mode='json')
+                            return e
+                            
+                        def serialize_link(l):
+                            if hasattr(l, "model_dump"):
+                                return l.model_dump(mode='json')
+                            return l
 
                         yield {
                             "type": "ontology_updated",
                             "tool": "ontology_subgraph",
-                            "summary": f"Graph updated: {len(entities)} entities, {len(links)} relationships",
-                            "ontology": ontology_state,
+                            "summary": f"Graph updated: {entity_count} entities, {link_count} relationships",
+                            "ontology": ontology_state if isinstance(ontology_state, dict) else {
+                                "entities": {str(k): serialize_entity(v) for k, v in entities.items()},
+                                "links": {str(k): serialize_link(v) for k, v in links.items()}
+                            },
                         }
                     else:
+                        logger.warning("[STREAM] Ontology extraction returned empty or invalid result")
                         yield {
                             "type": "ontology_error",
                             "tool": "ontology_subgraph",
-                            "content": "Ontology extraction completed but failed to return data."
+                            "summary": "No ontology data extracted",
+                            "content": "Ontology extraction completed but returned no data. Check backend logs for detailed error information."
                         }
 
             elif kind == "on_chat_model_end":

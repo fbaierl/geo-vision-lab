@@ -348,6 +348,23 @@
                             </svg>
                             Download
                         </button>
+                        <div class="json-toolbar-divider"></div>
+                        <button class="json-toolbar-btn" id="ontology-export-btn" title="Export Ontology">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Export
+                        </button>
+                        <button class="json-toolbar-btn" id="ontology-import-btn" title="Import Ontology">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Import
+                        </button>
                         <div class="json-stats">
                             <span id="json-entity-count">0 entities</span>
                             <span class="json-stats-separator">•</span>
@@ -356,6 +373,9 @@
                     </div>
                     <div id="json-tree-container" class="json-tree-container"></div>
                 </div>
+
+                <!-- Hidden file input for import -->
+                <input type="file" id="ontology-import-input" accept=".json" style="display: none;">
             </div>
             <div class="window-resize-handle right"></div>
             <div class="window-resize-handle bottom"></div>
@@ -1566,10 +1586,11 @@
             
             if (ontology.links) {
                 for (const [id, link] of Object.entries(ontology.links)) {
-                    const sourceId = link.source_id || link.source;
-                    const targetId = link.target_id || link.target;
+                    // Support multiple field name conventions for source/target
+                    const sourceId = link.source_id || link.source || link.source_uuid;
+                    const targetId = link.target_id || link.target || link.target_uuid;
                     const relationType = link.type || link.relation_type;
-                    const description = link.description || link.relation_type;
+                    const description = link.description || link.relation_type || link.type;
 
                     if (ontology.entities[sourceId] && ontology.entities[targetId]) {
                         edges.push({
@@ -1582,9 +1603,9 @@
                                 color: '#9CA3AF',
                                 highlight: '#5ec0ff'
                             },
-                            font: { 
-                                color: '#ffffff', 
-                                size: 13, 
+                            font: {
+                                color: '#ffffff',
+                                size: 13,
                                 strokeWidth: 3,
                                 strokeColor: '#15171e',
                                 align: 'middle',
@@ -1612,6 +1633,14 @@
                                 y: 2
                             }
                         });
+                    } else {
+                        // Debug: log if entities are missing
+                        if (!ontology.entities[sourceId]) {
+                            console.warn(`Edge ${id}: Source entity ${sourceId} not found`);
+                        }
+                        if (!ontology.entities[targetId]) {
+                            console.warn(`Edge ${id}: Target entity ${targetId} not found`);
+                        }
                     }
                 }
             }
@@ -2157,6 +2186,165 @@
 
         // Initialize ontology tab manager
         const ontologyTabManager = new OntologyTabManager();
+
+        // ═══════════════════════════════════════════════════════════════
+        // ONTOLOGY IMPORT/EXPORT HANDLER
+        // ═══════════════════════════════════════════════════════════════
+
+        class OntologyImportExportHandler {
+            constructor() {
+                this.pendingFile = null;
+                this.init();
+            }
+
+            init() {
+                // Export button
+                document.getElementById('ontology-export-btn')?.addEventListener('click', () => {
+                    this.exportOntology();
+                });
+
+                // Import button
+                document.getElementById('ontology-import-btn')?.addEventListener('click', () => {
+                    document.getElementById('ontology-import-input').click();
+                });
+
+                // File input change
+                document.getElementById('ontology-import-input')?.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.showImportModal(e.target.files[0]);
+                    }
+                });
+            }
+
+            async exportOntology() {
+                try {
+                    const threadId = window.currentThreadId || 'default';
+                    const response = await fetch(`/api/ontology/${threadId}/export`);
+
+                    if (!response.ok) throw new Error('Export failed');
+
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ontology_${threadId}_${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+
+                    this.showToast('Ontology exported successfully');
+                } catch (error) {
+                    this.showToast(`Export failed: ${error.message}`, 'error');
+                }
+            }
+
+            showImportModal(file) {
+                this.pendingFile = file;
+                document.getElementById('ontology-import-modal').style.display = 'flex';
+            }
+
+            async confirmImport() {
+                const mode = document.querySelector('input[name="import-mode"]:checked').value;
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', this.pendingFile);
+
+                    const threadId = window.currentThreadId || 'default';
+                    const response = await fetch(`/api/ontology/${threadId}/import?mode=${mode}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Import failed');
+                    }
+
+                    const result = await response.json();
+
+                    this.closeImportModal();
+                    this.showToast(`Imported ${result.imported_entities} entities, ${result.imported_links} links (${mode} mode)`);
+
+                    // Reload page to show imported ontology
+                    setTimeout(() => window.location.reload(), 1000);
+
+                } catch (error) {
+                    this.showToast(`Import failed: ${error.message}`, 'error');
+                }
+            }
+
+            closeImportModal() {
+                document.getElementById('ontology-import-modal').style.display = 'none';
+                document.getElementById('ontology-import-input').value = '';
+                this.pendingFile = null;
+            }
+
+            showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                toast.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: ${type === 'error' ? 'var(--red)' : 'var(--accent)'};
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 6px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    z-index: 10000;
+                `;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => toast.remove(), 300);
+                }, 2000);
+            }
+        }
+
+        // Initialize import/export handler
+        const ontologyImportExport = new OntologyImportExportHandler();
+
+        // Expose functions for modal buttons
+        window.closeImportModal = () => ontologyImportExport.closeImportModal();
+        window.confirmImport = () => ontologyImportExport.confirmImport();
     </script>
+
+    <!-- Import Modal -->
+    <div id="ontology-import-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Import Ontology</h3>
+                <button class="modal-close" onclick="closeImportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>How should the imported ontology be merged?</p>
+                <div class="import-mode-options">
+                    <label class="import-mode-option">
+                        <input type="radio" name="import-mode" value="merge" checked>
+                        <div class="mode-info">
+                            <strong>Merge</strong> (recommended)
+                            <p>Combine with existing ontology. Entities with matching UUIDs will be merged.</p>
+                        </div>
+                    </label>
+                    <label class="import-mode-option">
+                        <input type="radio" name="import-mode" value="replace">
+                        <div class="mode-info">
+                            <strong>Replace</strong>
+                            <p>Replace current ontology entirely. Existing data will be lost.</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmImport()">Import</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

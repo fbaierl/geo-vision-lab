@@ -68,38 +68,60 @@ class OntologyExtractorService:
     def extract(self, text: str, query: str = "") -> Optional[OntologyDelta]:
         """ Extracts entities and links from the response text. """
         if not text.strip():
+            logger.warning("[ONTOLOGY_EXTRACTOR] Empty text provided - cannot extract")
             return None
-            
+
         logger.info("[ONTOLOGY_EXTRACTOR] Starting extraction...")
-        
+
         if self.structured_llm:
             try:
                 # Use native structured output
                 chain = self.prompt | self.structured_llm
+                logger.debug("[ONTOLOGY_EXTRACTOR] Invoking structured LLM...")
                 result = chain.invoke({"query": query, "text": text})
+                logger.info(f"[ONTOLOGY_EXTRACTOR] ✓ Structured extraction successful: {len(result.entities)} entities, {len(result.links)} links")
                 return result
             except Exception as e:
-                logger.error(f"[ONTOLOGY_EXTRACTOR] Structured extraction failed: {e}")
+                logger.error(f"[ONTOLOGY_EXTRACTOR] ✗ Structured extraction failed: {e}")
+                logger.exception("[ONTOLOGY_EXTRACTOR] Structured extraction stack trace:")
                 # Fallback to standard generation
-                
+
         # Fallback manual parsing
         try:
+            logger.info("[ONTOLOGY_EXTRACTOR] Attempting fallback JSON parsing...")
             # Force JSON format if structured_llm failed or isn't available
             fallback_llm = self.llm.bind(format="json")
             chain = self.prompt | fallback_llm
             response = chain.invoke({"query": query, "text": text})
             content = response.content
-            
+
+            # Log raw response for debugging
+            logger.debug(f"[ONTOLOGY_EXTRACTOR] Raw LLM response ({len(content)} chars): {content[:500]}...")
+
             # Clean possible markdown
             if content.startswith("```json"):
+                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown json code block")
                 content = content.split("```json")[1].split("```")[0].strip()
             elif content.startswith("```"):
+                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown code block")
                 content = content.split("```")[1].split("```")[0].strip()
-                
+
             data = json.loads(content)
-            return OntologyDelta.model_validate(data)
+            logger.debug(f"[ONTOLOGY_EXTRACTOR] Parsed JSON: {len(data.get('entities', []))} entities, {len(data.get('links', []))} links")
+            
+            result = OntologyDelta.model_validate(data)
+            logger.info(f"[ONTOLOGY_EXTRACTOR] ✓ Fallback extraction successful: {len(result.entities)} entities, {len(result.links)} links")
+            return result
+        except json.JSONDecodeError as json_err:
+            logger.error(f"[ONTOLOGY_EXTRACTOR] ✗ JSON parsing failed: {json_err}")
+            logger.exception("[ONTOLOGY_EXTRACTOR] JSON decode stack trace:")
+            logger.error(f"[ONTOLOGY_EXTRACTOR] Invalid JSON content: {content[:1000] if 'content' in locals() else 'N/A'}...")
+            return None
         except Exception as e:
-            logger.error(f"[ONTOLOGY_EXTRACTOR] Fallback extraction failed: {e}")
+            logger.error(f"[ONTOLOGY_EXTRACTOR] ✗ Fallback extraction failed: {e}")
+            logger.exception("[ONTOLOGY_EXTRACTOR] Fallback extraction stack trace:")
+            if 'data' in locals():
+                logger.debug(f"[ONTOLOGY_EXTRACTOR] Parsed data that failed validation: {data}")
             return None
 
 def get_ontology_extractor() -> OntologyExtractorService:
