@@ -11,39 +11,39 @@ from uuid import uuid4
 class TestSessionsAPI:
     """Test suite for session management API endpoints."""
 
-    def test_create_session(self, client):
+    def test_create_session(self, client_with_mongo_mock, override_mongo):
         """Test creating a new session."""
-        response = client.post("/api/sessions", json={"title": "Test Session"})
+        response = client_with_mongo_mock.post("/api/sessions", json={"title": "Test Session"})
         
         assert response.status_code == 200
         data = response.json()
         assert "thread_id" in data
         assert "created_at" in data
 
-    def test_create_session_auto_title(self, client):
+    def test_create_session_auto_title(self, client_with_mongo_mock, override_mongo):
         """Test creating a session without title (auto-generated)."""
-        response = client.post("/api/sessions", json={})
+        response = client_with_mongo_mock.post("/api/sessions", json={})
         
         assert response.status_code == 200
         data = response.json()
         assert "thread_id" in data
 
-    def test_list_sessions_empty(self, client):
+    def test_list_sessions_empty(self, client_with_mongo_mock, override_mongo):
         """Test listing sessions when none exist."""
-        response = client.get("/api/sessions")
+        response = client_with_mongo_mock.get("/api/sessions")
         
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
 
-    def test_list_sessions(self, client):
+    def test_list_sessions(self, client_with_mongo_mock, override_mongo):
         """Test listing sessions after creating some."""
         # Create a session
-        create_response = client.post("/api/sessions", json={"title": "Test Session"})
+        create_response = client_with_mongo_mock.post("/api/sessions", json={"title": "Test Session"})
         thread_id = create_response.json()["thread_id"]
         
         # List sessions
-        list_response = client.get("/api/sessions")
+        list_response = client_with_mongo_mock.get("/api/sessions")
         
         assert list_response.status_code == 200
         sessions = list_response.json()
@@ -54,14 +54,14 @@ class TestSessionsAPI:
         assert session is not None
         assert session["title"] == "Test Session"
 
-    def test_get_session(self, client):
+    def test_get_session(self, client_with_mongo_mock, override_mongo):
         """Test getting a specific session."""
         # Create a session
-        create_response = client.post("/api/sessions", json={"title": "Test Session"})
+        create_response = client_with_mongo_mock.post("/api/sessions", json={"title": "Test Session"})
         thread_id = create_response.json()["thread_id"]
         
         # Get the session
-        get_response = client.get(f"/api/sessions/{thread_id}")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         
         assert get_response.status_code == 200
         data = get_response.json()
@@ -70,10 +70,10 @@ class TestSessionsAPI:
         assert "messages" in data
         assert "ontology" in data
 
-    def test_get_session_not_found(self, client):
+    def test_get_session_not_found(self, client_with_mongo_mock, override_mongo):
         """Test getting a non-existent session returns empty structure."""
         fake_id = str(uuid4())
-        response = client.get(f"/api/sessions/{fake_id}")
+        response = client_with_mongo_mock.get(f"/api/sessions/{fake_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -81,14 +81,14 @@ class TestSessionsAPI:
         assert data["messages"] == []
         assert data["ontology"] == {"entities": {}, "links": {}}
 
-    def test_update_session_title(self, client):
+    def test_update_session_title(self, client_with_mongo_mock, override_mongo):
         """Test updating session title."""
         # Create a session
-        create_response = client.post("/api/sessions", json={"title": "Old Title"})
+        create_response = client_with_mongo_mock.post("/api/sessions", json={"title": "Old Title"})
         thread_id = create_response.json()["thread_id"]
         
         # Update title
-        update_response = client.put(
+        update_response = client_with_mongo_mock.put(
             f"/api/sessions/{thread_id}",
             json={"title": "New Title"}
         )
@@ -96,14 +96,14 @@ class TestSessionsAPI:
         assert update_response.status_code == 200
         
         # Verify update
-        get_response = client.get(f"/api/sessions/{thread_id}")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         data = get_response.json()
         assert data["title"] == "New Title"
 
-    def test_update_session_ontology(self, client):
+    def test_update_session_ontology(self, client_with_mongo_mock, override_mongo):
         """Test updating session ontology."""
         # Create a session
-        create_response = client.post("/api/sessions", json={"title": "Test"})
+        create_response = client_with_mongo_mock.post("/api/sessions", json={"title": "Test"})
         thread_id = create_response.json()["thread_id"]
         
         # Update ontology
@@ -113,7 +113,7 @@ class TestSessionsAPI:
             },
             "links": {}
         }
-        update_response = client.put(
+        update_response = client_with_mongo_mock.put(
             f"/api/sessions/{thread_id}",
             json={"ontology": ontology}
         )
@@ -121,12 +121,12 @@ class TestSessionsAPI:
         assert update_response.status_code == 200
         
         # Verify update
-        get_response = client.get(f"/api/sessions/{thread_id}")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         data = get_response.json()
         assert len(data["ontology"]["entities"]) == 1
         assert data["ontology"]["entities"]["ent-1"]["name"] == "Germany"
 
-    def test_save_session_auto_save(self, client):
+    def test_save_session_auto_save(self, client_with_mongo_mock, override_mongo):
         """Test auto-save endpoint (called after each query)."""
         thread_id = str(uuid4())
         
@@ -146,7 +146,7 @@ class TestSessionsAPI:
             }
         }
         
-        response = client.post(f"/api/sessions/{thread_id}/save", json=save_data)
+        response = client_with_mongo_mock.post(f"/api/sessions/{thread_id}/save", json=save_data)
         
         assert response.status_code == 200
         data = response.json()
@@ -156,12 +156,12 @@ class TestSessionsAPI:
         assert data["link_count"] == 1
         
         # Verify session was created
-        get_response = client.get(f"/api/sessions/{thread_id}")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         session_data = get_response.json()
         assert len(session_data["messages"]) == 2
         assert len(session_data["ontology"]["entities"]) == 2
 
-    def test_save_session_updates_title(self, client):
+    def test_save_session_updates_title(self, client_with_mongo_mock, override_mongo):
         """Test that auto-save extracts title from first user message."""
         thread_id = str(uuid4())
         
@@ -172,17 +172,17 @@ class TestSessionsAPI:
             "ontology": {"entities": {}, "links": {}}
         }
         
-        client.post(f"/api/sessions/{thread_id}/save", json=save_data)
-        
-        # Verify title was extracted
-        get_response = client.get(f"/api/sessions/{thread_id}")
-        data = get_response.json()
-        assert data["title"] == "Tell me about the history of ancient..."
+        client_with_mongo_mock.post(f"/api/sessions/{thread_id}/save", json=save_data)
 
-    def test_save_session_update_existing(self, client):
+        # Verify title was extracted (first 6 words + "...")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
+        data = get_response.json()
+        assert data["title"] == "Tell me about the history of..."
+
+    def test_save_session_update_existing(self, client_with_mongo_mock, override_mongo):
         """Test that auto-save updates existing session."""
         # Create initial session
-        create_response = client.post("/api/sessions", json={"title": "Initial"})
+        create_response = client_with_mongo_mock.post("/api/sessions", json={"title": "Initial"})
         thread_id = create_response.json()["thread_id"]
         
         # Auto-save with new data
@@ -190,40 +190,40 @@ class TestSessionsAPI:
             "messages": [{"role": "user", "content": "Test message"}],
             "ontology": {"entities": {"e1": {"name": "Test"}}, "links": {}}
         }
-        client.post(f"/api/sessions/{thread_id}/save", json=save_data)
+        client_with_mongo_mock.post(f"/api/sessions/{thread_id}/save", json=save_data)
         
         # Verify update
-        get_response = client.get(f"/api/sessions/{thread_id}")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         data = get_response.json()
         assert len(data["messages"]) == 1
         assert len(data["ontology"]["entities"]) == 1
 
-    def test_delete_session(self, client):
+    def test_delete_session(self, client_with_mongo_mock, override_mongo):
         """Test deleting a session."""
         # Create a session
-        create_response = client.post("/api/sessions", json={"title": "To Delete"})
+        create_response = client_with_mongo_mock.post("/api/sessions", json={"title": "To Delete"})
         thread_id = create_response.json()["thread_id"]
         
         # Delete it
-        delete_response = client.delete(f"/api/sessions/{thread_id}")
+        delete_response = client_with_mongo_mock.delete(f"/api/sessions/{thread_id}")
         
         assert delete_response.status_code == 200
         assert delete_response.json()["deleted"] is True
         
         # Verify it's gone
-        get_response = client.get(f"/api/sessions/{thread_id}")
+        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         # Should return empty structure, not 404
         assert get_response.status_code == 200
         assert get_response.json()["messages"] == []
 
-    def test_delete_session_not_found(self, client):
+    def test_delete_session_not_found(self, client_with_mongo_mock, override_mongo):
         """Test deleting non-existent session returns 404."""
         fake_id = str(uuid4())
-        response = client.delete(f"/api/sessions/{fake_id}")
+        response = client_with_mongo_mock.delete(f"/api/sessions/{fake_id}")
         
         assert response.status_code == 404
 
-    def test_save_session_empty_messages(self, client):
+    def test_save_session_empty_messages(self, client_with_mongo_mock, override_mongo):
         """Test auto-save with empty messages."""
         thread_id = str(uuid4())
         
@@ -232,28 +232,28 @@ class TestSessionsAPI:
             "ontology": {"entities": {}, "links": {}}
         }
         
-        response = client.post(f"/api/sessions/{thread_id}/save", json=save_data)
+        response = client_with_mongo_mock.post(f"/api/sessions/{thread_id}/save", json=save_data)
         
         assert response.status_code == 200
 
-    def test_sessions_sorted_by_updated_at(self, client):
+    def test_sessions_sorted_by_updated_at(self, client_with_mongo_mock, override_mongo):
         """Test that sessions are sorted by updated_at (most recent first)."""
         # Create two sessions
-        response1 = client.post("/api/sessions", json={"title": "First"})
+        response1 = client_with_mongo_mock.post("/api/sessions", json={"title": "First"})
         thread1 = response1.json()["thread_id"]
         
         asyncio.sleep(0.1)  # Small delay to ensure different timestamps
         
-        client.post("/api/sessions", json={"title": "Second"})
+        client_with_mongo_mock.post("/api/sessions", json={"title": "Second"})
         
         # Update first session to make it more recent
-        client.post(f"/api/sessions/{thread1}/save", json={
+        client_with_mongo_mock.post(f"/api/sessions/{thread1}/save", json={
             "messages": [{"role": "user", "content": "Update"}],
             "ontology": {"entities": {}, "links": {}}
         })
         
         # List sessions
-        list_response = client.get("/api/sessions")
+        list_response = client_with_mongo_mock.get("/api/sessions")
         sessions = list_response.json()
         
         # First session should be first (most recently updated)
