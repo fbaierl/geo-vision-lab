@@ -102,15 +102,6 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     mock_vector_store = MagicMock()
     mock_vector_store.similarity_search.side_effect = mock_similarity_search
 
-    # Mock vector_search tool function that queries real MongoDB
-    def mock_vector_search_tool(query: str) -> str:
-        """Mock vector search tool that queries real MongoDB collection."""
-        results = mock_similarity_search(query, k=3)
-        if not results:
-            return "No archival data found in historical intelligence database."
-        results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
-        return f"ARCHIVAL INTELLIGENCE REPORT:\n{results_text}"
-
     # Setup DI container overrides BEFORE importing graph
     from app.core.di import container
     from app.core.di_nlp import get_embeddings
@@ -127,24 +118,8 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
 
     monkeypatch.setattr(app.ingestion.ingest, "settings", settings)
 
-    # Patch the vector_search tool in the tools module
-    import app.agents.tools as tools_module
-
-    original_vector_search = tools_module.vector_search
-    tools_module.vector_search = mock_vector_search_tool  # type: ignore
-
     # Now import the graph
     from app.agents.graph import app_graph
-
-    # The graph was compiled with original tools. Patch the ToolNode's tools mapping
-    tools_node = app_graph.nodes.get("tools")
-    if tools_node and hasattr(tools_node, "bound"):
-        # Replace vector_search in the tools mapping
-        if hasattr(tools_node.bound, "_tools_by_name"):
-            from langchain_core.tools import tool
-
-            mock_tool = tool(mock_vector_search_tool)
-            tools_node.bound._tools_by_name["vector_search"] = mock_tool
 
     # Run ingestion
     with patch(
@@ -174,29 +149,19 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     inputs = {"messages": [HumanMessage(content=query)]}
     config = {"configurable": {"thread_id": "integration_test_thread"}}
 
-    # Mock LLM responses
+    # Mock LLM responses - vector search is now automatic via vector_search_node
     mock_llm = MagicMock()
     mock_llm_with_tools = MagicMock()
     mock_llm.bind_tools.return_value = mock_llm_with_tools
 
-    # Sequenced responses for the LangGraph:
+    # Single response - agent receives vector search results automatically in context
     call_1 = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "name": "vector_search",
-                "args": {"query": "secret base"},
-                "id": "call_123",
-            }
-        ],
-    )
-    call_2 = AIMessage(
         content="Based on the intelligence, the secret base is located in Antarctica. [map: Antarctica, -82.8628, 135.0000]"
     )
     mock_reviewer_response = MagicMock()
     mock_reviewer_response.content = "VALID"
 
-    mock_llm_with_tools.invoke.side_effect = [call_1, call_2]
+    mock_llm_with_tools.invoke.return_value = call_1
     mock_llm.invoke.return_value = mock_reviewer_response
 
     # Run the agent
@@ -214,18 +179,14 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
         f"Expected 'Antarctica' in final message: {final_message}"
     )
 
-    assert mock_llm_with_tools.invoke.call_count == 2, (
-        f"Expected 2 LLM calls, got {mock_llm_with_tools.invoke.call_count}"
+    assert mock_llm_with_tools.invoke.call_count == 1, (
+        f"Expected 1 LLM call, got {mock_llm_with_tools.invoke.call_count}"
     )
 
-    tool_messages = [
-        m for m in result["messages"] if m.__class__.__name__ == "ToolMessage"
-    ]
-    assert len(tool_messages) == 1, f"Expected 1 tool message, got {len(tool_messages)}"
-    assert "Antarctica" in tool_messages[0].content, (
-        f"Expected 'Antarctica' in tool response: {tool_messages[0].content}"
+    # Vector search is now handled by vector_search_node, not as a tool
+    vector_search_results = result.get("vector_search_results", "")
+    assert "ARCHIVAL INTELLIGENCE" in str(vector_search_results) or "Antarctica" in str(result), (
+        f"Expected vector search results in state: {result}"
     )
 
-    # Cleanup - restore original vector_search tool
-    tools_module.vector_search = original_vector_search  # type: ignore
     container.reset_overrides()

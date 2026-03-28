@@ -43,9 +43,7 @@ from app.core.di_llm import (  # noqa: F401
 )
 from app.core.di_services import (  # noqa: F401
     get_vector_store,
-    get_vector_store_service,
     get_location_extractor,
-    get_location_extractor_service,
     get_location_prioritizer,
     ensure_vector_index,
 )

@@ -373,14 +373,12 @@ async def process_query_stream(
                 return  # Stop processing
 
             if kind == "on_chat_model_start":
+                from app.core.config import settings
                 if "reviewer" in tags:
-                    from app.core.config import settings
                     yield {"type": "status", "phase": "reviewing", "model": settings.REASONING_LLM_MODEL_NAME}
                 elif "ontology_extractor" in tags:
-                    from app.core.config import settings
                     yield {"type": "status", "phase": "extracting_ontology", "model": settings.REASONING_LLM_MODEL_NAME}
                 else:
-                    from app.core.config import settings
                     if streaming_started:
                         yield {"type": "status", "phase": "revising", "model": settings.REASONING_LLM_MODEL_NAME}
                     yield {"type": "status", "phase": "reasoning", "model": settings.REASONING_LLM_MODEL_NAME}

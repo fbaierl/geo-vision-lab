@@ -1,45 +1,6 @@
 from unittest.mock import patch, MagicMock
-from app.agents.tools import vector_search, web_search, duckduckgo_search
+from app.agents.tools import web_search, duckduckgo_search
 import wikipedia
-
-# --- vector_search tests ---
-
-@patch("app.agents.tools.get_vector_store")
-def test_vector_search_success(mock_get_vector_store):
-    # Mock the vector store service
-    mock_vector_store = MagicMock()
-    mock_doc1 = {"page_content": "Historical event 1 details."}
-    mock_doc2 = {"page_content": "Historical event 2 details."}
-    mock_vector_store.similarity_search.return_value = [mock_doc1, mock_doc2]
-    mock_get_vector_store.return_value = mock_vector_store
-
-    result = vector_search.invoke({"query": "Cold War"})
-
-    assert "ARCHIVAL INTELLIGENCE REPORT:" in result
-    assert "Historical event 1 details." in result
-    assert "Historical event 2 details." in result
-    mock_vector_store.similarity_search.assert_called_once_with("Cold War", k=3)
-
-@patch("app.agents.tools.get_vector_store")
-def test_vector_search_no_results(mock_get_vector_store):
-    mock_vector_store = MagicMock()
-    mock_vector_store.similarity_search.return_value = []
-    mock_get_vector_store.return_value = mock_vector_store
-
-    result = vector_search.invoke({"query": "Nonexistent Event"})
-
-    assert result == "No archival data found in historical intelligence database."
-
-@patch("app.agents.tools.get_vector_store")
-def test_vector_search_error(mock_get_vector_store):
-    mock_vector_store = MagicMock()
-    mock_vector_store.similarity_search.side_effect = Exception("DB Connection Error")
-    mock_get_vector_store.return_value = mock_vector_store
-
-    result = vector_search.invoke({"query": "Cold War"})
-
-    assert "Error accessing vector database: DB Connection Error" in result
-
 
 # --- web_search tests ---
 
