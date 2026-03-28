@@ -74,24 +74,35 @@ flowchart TD
     subgraph OntologySubgraph["🕸️ ONTOLOGY_EXTRACTOR SUBGRAPH"]
         direction TB
         ExtractOntology["📋 extract_ontology<br/>Extract entities & links<br/>Identify gap references"]
-        
-        ExtractOntology --> DetectGaps["🔎 detect_gaps<br/>Check for missing<br/>entity references"]
-        
+
+        ExtractOntology --> ProcessEntities["Process Entities<br/>Generate UUIDs"]
+
+        ProcessEntities --> IsLocation{"Is<br/>Location?"}
+
+        IsLocation -->|Yes| Geocode["🌍 Geocode Location<br/>Nominatim API<br/>lat, lon, country"]
+        IsLocation -->|No| BuildMap["Build Name to UUID Map"]
+
+        Geocode --> BuildMap
+
+        BuildMap --> DetectGaps["🔎 detect_gaps<br/>Check for missing<br/>entity references"]
+
         DetectGaps --> HasGaps{"Gap<br/>entities<br/>found?"}
-        
+
         HasGaps -->|Yes| ExtractGap["🎯 extract_gap_entities<br/>Targeted LLM extraction<br/>for missing entities only"]
         HasGaps -->|No| MergeFinalize["💾 merge_and_finalize<br/>Create entities with UUIDs<br/>Process all links"]
-        
+
         ExtractGap --> MergeFinalize
-        
+
         MergeFinalize --> LinksOK{"All links<br/>resolvable?"}
-        
+
         LinksOK -->|No - Skip| LogHallucinated["⚠️ Log as hallucinated<br/>relationship"]
         LinksOK -->|Yes| CreateLink["✓ Create link<br/>with UUIDs"]
-        
+
         LogHallucinated --> SessionOntology["📊 Session Ontology<br/>Persisted to MongoDB"]
         CreateLink --> SessionOntology
     end
+    
+    style Geocode fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
     
     SessionOntology --> Final
     
@@ -117,6 +128,8 @@ flowchart TD
 4. **Reviewer** - QA Critic validates response against constraints
 5. **Ontology Extractor Subgraph** (dashed border) - Two-pass extraction with gap resolution:
    - **extract_ontology**: Extract entities (7 types), extract links, identify missing references
+   - **Process Entities**: Generate UUIDs for all entities
+   - **Geocode Locations**: Location entities are geocoded via Nominatim API (lat, lon, country)
    - **detect_gaps**: Check if any link targets don't exist as entities
    - **extract_gap_entities** (if gaps): Targeted LLM extraction for missing entities only
    - **merge_and_finalize**: Create entities with UUIDs, process all links, skip unresolvable
