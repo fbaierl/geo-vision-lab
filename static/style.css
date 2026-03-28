@@ -130,6 +130,95 @@ html, body {
     gap: 12px;
 }
 
+/* Top Menu (File, Edit, etc.) */
+.top-menu {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.menu-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: background 0.15s ease;
+    user-select: none;
+}
+
+.menu-item:hover {
+    background: var(--bg-panel);
+}
+
+.menu-item .menu-arrow {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+}
+
+.menu-item.open .menu-arrow {
+    transform: rotate(180deg);
+}
+
+.menu-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    min-width: 200px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: 6px;
+    display: none;
+    z-index: 10001;
+}
+
+.menu-item.open .menu-dropdown {
+    display: flex;
+    flex-direction: column;
+}
+
+.menu-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    text-align: left;
+    transition: background 0.15s ease;
+    font-family: var(--font-ui);
+}
+
+.menu-dropdown-item:hover {
+    background: var(--accent);
+    color: white;
+}
+
+.menu-dropdown-item .menu-icon {
+    font-size: 1rem;
+    width: 16px;
+    text-align: center;
+}
+
+.menu-dropdown-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 6px 0;
+}
+
 .status-pill {
     display: flex;
     align-items: center;
@@ -994,6 +1083,174 @@ html, body {
     color: var(--text-muted);
     text-transform: uppercase;
     margin-bottom: 3px;
+}
+
+/* Sessions Section */
+.sessions-section {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.sessions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.sessions-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sessions-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.clear-all-sessions-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.clear-all-sessions-btn:hover {
+    background: var(--error);
+    border-color: var(--error);
+    color: white;
+}
+
+.clear-all-sessions-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.new-session-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.new-session-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.new-session-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.session-item {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.session-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--border);
+}
+
+.session-item.active {
+    background: rgba(61, 174, 217, 0.15);
+    border-color: var(--accent);
+}
+
+.session-item.active::before {
+    content: "●";
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 0.7rem;
+}
+
+.session-item.active .session-title-text {
+    padding-left: 12px;
+}
+
+.session-title-text {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session-updated {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.session-delete {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    background: transparent;
+    border: none;
+    color: var(--red);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 2px 6px;
+}
+
+.session-item:hover .session-delete {
+    opacity: 1;
+}
+
+.session-delete:hover {
+    background: var(--red);
+    color: white;
+    border-radius: 4px;
+}
+
+.no-sessions {
+    text-align: center;
+    padding: 20px 10px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
     font-weight: 600;
 }
 
@@ -1913,5 +2170,157 @@ html, body {
     content: '...';
     color: var(--text-muted);
     margin-left: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Ontology Import/Export UI
+   ═══════════════════════════════════════════════════════════════ */
+
+.json-toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 8px;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-content {
+    background: var(--bg-window);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-window);
+    padding: 20px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: var(--shadow-window);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--text);
+}
+
+.modal-body {
+    margin-bottom: 16px;
+}
+
+.modal-body p {
+    margin: 0 0 12px 0;
+    color: var(--text);
+}
+
+.import-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.import-mode-option {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.import-mode-option:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.import-mode-option input[type="radio"] {
+    margin: 4px 0 0 0;
+    accent-color: var(--accent);
+}
+
+.mode-info strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text);
+}
+
+.mode-info p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.4;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: var(--radius-control);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-hover);
+}
+
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--accent-bright);
 }
 
