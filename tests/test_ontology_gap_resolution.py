@@ -7,8 +7,7 @@ Tests the two-pass extraction with gap resolution:
 - Entity merging and link resolution
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from app.models.ontology import OntologyDelta, OntologyDeltaEntity, OntologyDeltaLink
 
 
@@ -148,7 +147,7 @@ class TestOntologyGapResolution:
     def test_merge_and_finalize_creates_gap_entities(self):
         """Test that merge_and_finalize_node creates entities from gap extraction."""
         from app.agents.ontology_subgraph import merge_and_finalize_node
-        from app.models.ontology import SessionOntology, OntologyEntity
+        from app.models.ontology import SessionOntology
         
         # Create a session delta with some entities
         existing_delta = SessionOntology()

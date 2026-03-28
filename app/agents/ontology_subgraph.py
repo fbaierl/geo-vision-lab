@@ -202,7 +202,7 @@ def route_after_gap_detection(state: OntologySubGraphState) -> Literal["extract_
     gap_names = state.get("gap_entity_names", [])
     
     if gap_names:
-        logger.info(f"[ONTOLOGY_SUBGRAPH] Routing to gap extraction")
+        logger.info("[ONTOLOGY_SUBGRAPH] Routing to gap extraction")
         return "extract_gap_entities"
     else:
         logger.info("[ONTOLOGY_SUBGRAPH] Routing to finalization")
