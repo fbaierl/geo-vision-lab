@@ -61,7 +61,7 @@ class OntologyExportService:
                 "link_count": len(ontology.links)
             },
             "entities": [e.model_dump(mode='json') for e in ontology.entities.values()],
-            "links": [l.model_dump(mode='json') for l in ontology.links.values()]
+            "links": [link.model_dump(mode='json') for link in ontology.links.values()]
         }
 
         return json.dumps(export_data, indent=2, default=str)
@@ -113,12 +113,12 @@ class OntologyExportService:
                 from app.models.ontology import OntologyEntity
                 entity = OntologyEntity.model_validate(e)
                 ontology.entities[str(entity.uuid)] = entity
-            
-            for l in links_data:
+
+            for link_data in links_data:
                 from app.models.ontology import OntologyLink
-                link = OntologyLink.model_validate(l)
+                link = OntologyLink.model_validate(link_data)
                 ontology.links[str(link.uuid)] = link
-            
+
             return ontology
         else:
             # Legacy format - use existing from_export_format

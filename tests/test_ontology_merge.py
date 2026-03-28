@@ -8,8 +8,6 @@ Tests the merge_ontologies function with various scenarios:
 - Mention deduplication
 """
 
-import pytest
-from datetime import datetime
 from app.models.ontology import SessionOntology, OntologyEntity, OntologyLink, Mention
 from app.services.ontology.merge import merge_ontologies
 

@@ -141,8 +141,8 @@ class OntologyService:
         """
         ontology = self.load_ontology(thread_id)
         return [
-            l for l in ontology.links.values()
-            if l.source_uuid == entity_uuid or l.target_uuid == entity_uuid
+            link for link in ontology.links.values()
+            if link.source_uuid == entity_uuid or link.target_uuid == entity_uuid
         ]
 
     def get_entity_graph(

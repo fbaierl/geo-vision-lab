@@ -66,7 +66,7 @@ class SessionOntology(BaseModel):
         """Convert to array format for MongoDB storage."""
         return {
             "entities": [e.model_dump() for e in self.entities.values()],
-            "links": [l.model_dump() for l in self.links.values()]
+            "links": [link.model_dump() for link in self.links.values()]
         }
     
     @classmethod
@@ -76,12 +76,12 @@ class SessionOntology(BaseModel):
         for e in data.get("entities", []):
             entity = OntologyEntity.model_validate(e)
             entities[str(entity.uuid)] = entity
-        
+
         links = {}
-        for l in data.get("links", []):
-            link = OntologyLink.model_validate(l)
+        for link_data in data.get("links", []):
+            link = OntologyLink.model_validate(link_data)
             links[str(link.uuid)] = link
-        
+
         return cls(entities=entities, links=links)
     
     def to_export_format(self, metadata: dict = None) -> dict:
@@ -91,7 +91,7 @@ class SessionOntology(BaseModel):
             "version": "2.0",
             "metadata": metadata or {},
             "entities": [e.model_dump() for e in self.entities.values()],
-            "links": [l.model_dump() for l in self.links.values()]
+            "links": [link.model_dump() for link in self.links.values()]
         }
     
     @classmethod
@@ -101,10 +101,10 @@ class SessionOntology(BaseModel):
         for e in data.get("entities", []):
             entity = OntologyEntity.model_validate(e)
             entities[str(entity.uuid)] = entity
-        
+
         links = {}
-        for l in data.get("links", []):
-            link = OntologyLink.model_validate(l)
+        for link_data in data.get("links", []):
+            link = OntologyLink.model_validate(link_data)
             links[str(link.uuid)] = link
-        
+
         return cls(entities=entities, links=links)

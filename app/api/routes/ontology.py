@@ -5,10 +5,8 @@ REST endpoints for ontology export/import.
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import Response, JSONResponse
-from app.models.ontology import SessionOntology
+from fastapi.responses import Response
 from app.services.ontology.export import OntologyExportService
-from app.services.ontology.service import OntologyService
 from app.core.di import get_ontology_service
 
 router = APIRouter(prefix="/api/ontology", tags=["ontology"])
@@ -93,10 +91,10 @@ async def import_ontology(
         logger.info(f"[IMPORT] Current ontology: {len(current_ontology.entities)} entities, {len(current_ontology.links)} links")
 
         if mode == "replace":
-            logger.info(f"[IMPORT] Replacing ontology entirely")
+            logger.info("[IMPORT] Replacing ontology entirely")
             final_ontology = imported_ontology
         else:  # merge
-            logger.info(f"[IMPORT] Merging ontologies")
+            logger.info("[IMPORT] Merging ontologies")
             final_ontology = OntologyExportService.merge_imported_ontology(
                 current_ontology,
                 imported_ontology
@@ -105,7 +103,7 @@ async def import_ontology(
 
         logger.info(f"[IMPORT] Saving ontology for thread '{target_thread_id}'")
         ontology_service.save_ontology(target_thread_id, final_ontology)
-        logger.info(f"[IMPORT] Save complete")
+        logger.info("[IMPORT] Save complete")
 
         return {
             "status": "success",
@@ -141,7 +139,7 @@ async def get_ontology(thread_id: str):
             "entity_count": len(ontology.entities),
             "link_count": len(ontology.links),
             "entities": [e.model_dump() for e in ontology.entities.values()],
-            "links": [l.model_dump() for l in ontology.links.values()]
+            "links": [link.model_dump() for link in ontology.links.values()]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load ontology: {str(e)}")

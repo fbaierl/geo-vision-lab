@@ -58,16 +58,14 @@ from app.core.di_database import ensure_vector_index as di_ensure_vector_index  
 def get_ontology_service() -> OntologyService:
     """
     Get or create OntologyService instance.
-    
+
     Returns:
         OntologyService instance
     """
-    from app.core.di_database import get_database
-    
     def factory():
         db = get_database()
         return OntologyService(db)
-    
+
     return container._get_or_create(get_ontology_service, factory)
 
 

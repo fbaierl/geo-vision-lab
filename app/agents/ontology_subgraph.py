@@ -106,7 +106,7 @@ def extract_ontology_node(state: OntologySubGraphState) -> Dict[str, Any]:
 
             except Exception as entity_error:
                 logger.error(f"[ONTOLOGY_SUBGRAPH] Failed to process entity '{ext_ent.name}': {entity_error}")
-                logger.exception(f"[ONTOLOGY_SUBGRAPH] Entity processing stack trace:")
+                logger.exception("[ONTOLOGY_SUBGRAPH] Entity processing stack trace:")
 
         # Process Links
         for ext_link in delta.links:
@@ -149,19 +149,19 @@ def extract_ontology_node(state: OntologySubGraphState) -> Dict[str, Any]:
 
             except Exception as link_error:
                 logger.error(f"[ONTOLOGY_SUBGRAPH] Failed to process link '{ext_link.source_entity_name}' -> '{ext_link.target_entity_name}': {link_error}")
-                logger.exception(f"[ONTOLOGY_SUBGRAPH] Link processing stack trace:")
+                logger.exception("[ONTOLOGY_SUBGRAPH] Link processing stack trace:")
 
-        logger.info(f"[ONTOLOGY_SUBGRAPH] === EXTRACTION SUMMARY ===")
+        logger.info("[ONTOLOGY_SUBGRAPH] === EXTRACTION SUMMARY ===")
         logger.info(f"[ONTOLOGY_SUBGRAPH] ✓ Entities created: {entities_created}")
         logger.info(f"[ONTOLOGY_SUBGRAPH] ✓ Links created: {links_created}")
         logger.info(f"[ONTOLOGY_SUBGRAPH] ✗ Links skipped (missing references): {links_skipped}")
-        logger.info(f"[ONTOLOGY_SUBGRAPH] ==========================")
+        logger.info("[ONTOLOGY_SUBGRAPH] ==========================")
         
         return {"extracted_delta": session_delta}
 
     except Exception as e:
         logger.error(f"[ONTOLOGY_SUBGRAPH] Critical error during ontology extraction: {e}")
-        logger.exception(f"[ONTOLOGY_SUBGRAPH] Full stack trace:")
+        logger.exception("[ONTOLOGY_SUBGRAPH] Full stack trace:")
         return {"extracted_delta": SessionOntology()}
 
 
