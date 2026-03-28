@@ -8,6 +8,7 @@ import time
 # 1. Provide the same MongoDB image we use in docker-compose
 MONGODB_IMAGE = "mongodb/mongodb-atlas-local:8.2"
 
+
 @pytest.fixture(scope="module")
 def mongodb_container():
     """Spins up a real MongoDB container for testing."""
@@ -47,6 +48,7 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
 
     # Get the collection directly from the test MongoDB container
     from pymongo import MongoClient
+
     mongo_client = MongoClient(db_url)
     collection = mongo_client[dbname]["test_collection"]
 
@@ -61,8 +63,7 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     )
 
     test_doc = Document(
-        page_content=long_text,
-        metadata={"source": "test_integration.pdf", "page": 1}
+        page_content=long_text, metadata={"source": "test_integration.pdf", "page": 1}
     )
 
     mock_loader_instance = MagicMock()
@@ -71,7 +72,11 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     # Mock similarity_search to use regular MongoDB query instead of $vectorSearch
     # (local MongoDB containers don't support vector search indexes)
     def mock_similarity_search(query: str, k: int = 3):
-        results = list(collection.find({"page_content": {"$regex": query, "$options": "i"}}).limit(k))
+        results = list(
+            collection.find({"page_content": {"$regex": query, "$options": "i"}}).limit(
+                k
+            )
+        )
         for doc in results:
             doc.pop("_id", None)
         return results
@@ -79,15 +84,18 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     # Mock embeddings to avoid HuggingFace model downloads
     class MockEmbeddings:
         """Mock embeddings that return random vectors."""
+
         def __init__(self, *args, **kwargs):
             pass
 
         def embed_documents(self, texts):
             import random
+
             return [[random.random() for _ in range(384)] for _ in texts]
 
         def embed_query(self, text):
             import random
+
             return [random.random() for _ in range(384)]
 
     # Create mock vector store
@@ -116,32 +124,47 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
 
     # Patch settings for ingestion module
     import app.ingestion.ingest
+
     monkeypatch.setattr(app.ingestion.ingest, "settings", settings)
 
     # Patch the vector_search tool in the tools module
     import app.agents.tools as tools_module
+
     original_vector_search = tools_module.vector_search
     tools_module.vector_search = mock_vector_search_tool  # type: ignore
 
     # Now import the graph
     from app.agents.graph import app_graph
-    
+
     # The graph was compiled with original tools. Patch the ToolNode's tools mapping
-    tools_node = app_graph.nodes.get('tools')
-    if tools_node and hasattr(tools_node, 'bound'):
+    tools_node = app_graph.nodes.get("tools")
+    if tools_node and hasattr(tools_node, "bound"):
         # Replace vector_search in the tools mapping
-        if hasattr(tools_node.bound, '_tools_by_name'):
+        if hasattr(tools_node.bound, "_tools_by_name"):
             from langchain_core.tools import tool
+
             mock_tool = tool(mock_vector_search_tool)
-            tools_node.bound._tools_by_name['vector_search'] = mock_tool
+            tools_node.bound._tools_by_name["vector_search"] = mock_tool
 
     # Run ingestion
-    with patch("app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]):
-        with patch("app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance):
-            with patch("app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"):
-                with patch("app.ingestion.ingest.os.path.exists", return_value=False):
-                    with patch("app.ingestion.ingest.HASH_FILE", "/tmp/mock_hash_file_test"):
-                        app.ingestion.ingest.main()
+    with patch(
+        "app.ingestion.ingest.glob.glob", side_effect=[["/mock/path/doc.pdf"], []]
+    ):
+        with patch(
+            "app.ingestion.ingest.PyPDFLoader", return_value=mock_loader_instance
+        ):
+            with patch(
+                "app.ingestion.ingest.compute_files_hash", return_value="mock_hash_123"
+            ):
+                with patch(
+                    "app.ingestion.ingest.get_ingestion_state", return_value=None
+                ):
+                    with patch(
+                        "app.ingestion.ingest.get_vector_documents_count",
+                        return_value=0,
+                    ):
+                        with patch("app.ingestion.ingest.save_ingestion_state"):
+                            app.ingestion.ingest.main()
 
     # Wait a moment for MongoDB to index the documents
     time.sleep(1)
@@ -159,9 +182,17 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
     # Sequenced responses for the LangGraph:
     call_1 = AIMessage(
         content="",
-        tool_calls=[{"name": "vector_search", "args": {"query": "secret base"}, "id": "call_123"}]
+        tool_calls=[
+            {
+                "name": "vector_search",
+                "args": {"query": "secret base"},
+                "id": "call_123",
+            }
+        ],
     )
-    call_2 = AIMessage(content="Based on the intelligence, the secret base is located in Antarctica. [map: Antarctica, -82.8628, 135.0000]")
+    call_2 = AIMessage(
+        content="Based on the intelligence, the secret base is located in Antarctica. [map: Antarctica, -82.8628, 135.0000]"
+    )
     mock_reviewer_response = MagicMock()
     mock_reviewer_response.content = "VALID"
 
@@ -179,13 +210,21 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
 
     # Assertions
     final_message = result["messages"][-1].content
-    assert "Antarctica" in final_message, f"Expected 'Antarctica' in final message: {final_message}"
+    assert "Antarctica" in final_message, (
+        f"Expected 'Antarctica' in final message: {final_message}"
+    )
 
-    assert mock_llm_with_tools.invoke.call_count == 2, f"Expected 2 LLM calls, got {mock_llm_with_tools.invoke.call_count}"
+    assert mock_llm_with_tools.invoke.call_count == 2, (
+        f"Expected 2 LLM calls, got {mock_llm_with_tools.invoke.call_count}"
+    )
 
-    tool_messages = [m for m in result["messages"] if m.__class__.__name__ == "ToolMessage"]
+    tool_messages = [
+        m for m in result["messages"] if m.__class__.__name__ == "ToolMessage"
+    ]
     assert len(tool_messages) == 1, f"Expected 1 tool message, got {len(tool_messages)}"
-    assert "Antarctica" in tool_messages[0].content, f"Expected 'Antarctica' in tool response: {tool_messages[0].content}"
+    assert "Antarctica" in tool_messages[0].content, (
+        f"Expected 'Antarctica' in tool response: {tool_messages[0].content}"
+    )
 
     # Cleanup - restore original vector_search tool
     tools_module.vector_search = original_vector_search  # type: ignore

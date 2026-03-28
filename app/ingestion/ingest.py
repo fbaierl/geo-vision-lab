@@ -50,21 +50,17 @@ def save_ingestion_state(file_hash: str, file_paths: list, document_count: int) 
     try:
         db = get_database()
         state_collection = db[INGESTION_STATE_COLLECTION]
-        
+
         state = {
             "_id": INGESTION_STATE_ID,
             "files_hash": file_hash,
             "last_ingested": datetime.utcnow().isoformat(),
             "document_count": document_count,
-            "files_processed": [os.path.basename(p) for p in sorted(file_paths)]
+            "files_processed": [os.path.basename(p) for p in sorted(file_paths)],
         }
-        
+
         # Upsert: replace existing or insert new
-        state_collection.replace_one(
-            {"_id": INGESTION_STATE_ID},
-            state,
-            upsert=True
-        )
+        state_collection.replace_one({"_id": INGESTION_STATE_ID}, state, upsert=True)
         logger.info("[STATE] Ingestion state saved to MongoDB")
     except Exception as e:
         logger.error(f"[ERROR] Could not save ingestion state: {e}")
@@ -81,20 +77,25 @@ def get_vector_documents_count() -> int:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.info("[INIT] Starting ingestion of geopolitical intelligence documents...")
 
     # 1. Discover all PDF and Markdown files in documents/
     pdf_pattern = os.path.join(PDF_DIR, "**", "*.pdf")
     md_pattern = os.path.join(DOCUMENTS_DIR, "*.md")
-    
+
     pdf_files = glob.glob(pdf_pattern, recursive=True)
     md_files = glob.glob(md_pattern, recursive=True)
-    
+
     all_files = pdf_files + md_files
 
     if not all_files:
-        logger.warning(f"[WARN] No PDF or Markdown files found in {DOCUMENTS_DIR}. Skipping ingestion.")
+        logger.warning(
+            f"[WARN] No PDF or Markdown files found in {DOCUMENTS_DIR}. Skipping ingestion."
+        )
         return
 
     logger.info(f"[SCAN] Found {len(all_files)} document(s): {all_files}")
@@ -106,18 +107,24 @@ def main():
 
     if ingestion_state and current_hash == ingestion_state.get("files_hash"):
         if vector_count > 0:
-            logger.info("[SKIP] Documents have not changed since last ingestion. Skipping rebuild.")
+            logger.info(
+                "[SKIP] Documents have not changed since last ingestion. Skipping rebuild."
+            )
             return
         else:
-            logger.info("[UPDATE] Hash matches but vector store is empty. Rebuilding...")
+            logger.info(
+                "[UPDATE] Hash matches but vector store is empty. Rebuilding..."
+            )
     elif ingestion_state:
         logger.info("[UPDATE] Documents have changed. Rebuilding vector database...")
     else:
-        logger.info("[INIT] No previous ingestion state found. Building vector database...")
+        logger.info(
+            "[INIT] No previous ingestion state found. Building vector database..."
+        )
 
     # 3. Load all documents and split into chunks
     all_docs = []
-    
+
     # Load PDFs
     for pdf_path in pdf_files:
         logger.info(f"[LOAD] Loading PDF: {pdf_path}")
@@ -147,10 +154,7 @@ def main():
     # 4. Store in MongoDB with vector embeddings
     logger.info(f"[DB] Inserting vectors into MongoDB ({settings.DATABASE_URL})...")
     documents = [
-        {
-            "page_content": split.page_content,
-            "metadata": split.metadata
-        }
+        {"page_content": split.page_content, "metadata": split.metadata}
         for split in splits
     ]
     insert_documents(documents)
