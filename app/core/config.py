@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
-    VECTOR_COLLECTION_NAME: str = "historical_reports"
+    VECTOR_COLLECTION_NAME: str = "vector_documents"
     SEARCH_K: int = 3  # Number of docs to retrieve
     VECTOR_INDEX_NAME: str = "vector_index"
     EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 produces 384-dim vectors

@@ -9,6 +9,13 @@
 
 GeoVision Lab uses **MongoDB 8.2+ Vector Search** for semantic document retrieval. This guide explains how the vector search index is created and managed.
 
+## Collections
+
+| Collection | Purpose |
+|------------|---------|
+| `vector_documents` | Stores document chunks with vector embeddings |
+| `_ingestion_state` | Tracks ingestion metadata (hash, timestamp, document count) |
+
 ## How it works
 
 - On startup, the app container runs `python -m app.services.setup_mongodb` **before** starting the server. This creates the vector search index if it doesn't exist.
@@ -33,16 +40,16 @@ You can manage the vector search index manually using `mongosh`:
 
 ```bash
 # Connect to MongoDB
-docker compose exec mongodb mongosh -u geovision -p geovision
+docker compose exec mongodb mongosh
 
 # List existing search indexes
-db.historical_reports.listSearchIndexes()
+db.vector_documents.listSearchIndexes()
 
 # Drop the vector index (if needed)
-db.historical_reports.dropSearchIndex("vector_index")
+db.vector_documents.dropSearchIndex("vector_index")
 
 # Recreate the index
-db.historical_reports.createSearchIndex({
+db.vector_documents.createSearchIndex({
   name: "vector_index",
   type: "vectorSearch",
   definition: {
@@ -67,7 +74,7 @@ db.historical_reports.createSearchIndex({
 The vector search uses MongoDB's aggregation pipeline:
 
 ```javascript
-db.historical_reports.aggregate([
+db.vector_documents.aggregate([
   {
     "$vectorSearch": {
       "index": "vector_index",
@@ -85,6 +92,26 @@ db.historical_reports.aggregate([
   }
 ])
 ```
+
+## Ingestion State Tracking
+
+Document ingestion state is stored in MongoDB (not filesystem) to prevent desynchronization:
+
+```javascript
+// Collection: _ingestion_state
+{
+  _id: "current",
+  files_hash: "abc123...",
+  last_ingested: "2026-03-28T19:13:28.093Z",
+  document_count: 418,
+  files_processed: ["fantasy.md", "Iran - Wikipedia.pdf"]
+}
+```
+
+This ensures:
+- Hash and vector data share the same lifecycle
+- Empty database is detected automatically (re-ingestion triggered)
+- No orphaned state across container restarts
 
 ## Troubleshooting
 
