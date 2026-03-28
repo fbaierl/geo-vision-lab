@@ -10,8 +10,6 @@ from pymongo import MongoClient
 from langchain_huggingface import HuggingFaceEmbeddings
 import logging
 
-from app.core.di_services import get_vector_store_service
-
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +19,8 @@ class VectorStoreService:
 
     Usage:
         # With DI (recommended)
-        from app.core.di_services import get_vector_store_service
-        service = VectorStoreService(**get_vector_store_service())
+        from app.core.di_services import get_vector_store
+        service = get_vector_store()
 
         # Or with explicit dependencies
         service = VectorStoreService(embeddings=emb, client=client, collection=coll)
@@ -114,7 +112,8 @@ def get_vector_store() -> VectorStoreService:
 
     This is the recommended way to get a VectorStoreService instance.
     """
-    return VectorStoreService(**get_vector_store_service())
+    from app.core.di_services import get_vector_store as di_get_vector_store
+    return di_get_vector_store()
 
 
 # Legacy function wrappers for backward compatibility

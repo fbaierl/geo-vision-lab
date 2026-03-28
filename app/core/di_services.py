@@ -16,7 +16,7 @@ Testing:
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from app.core.di_database import get_mongo_client, get_collection
 from app.core.di_nlp import get_embeddings, get_ner_pipeline, get_geocode_cache
@@ -25,19 +25,8 @@ from app.core.di_llm import get_llm
 logger = logging.getLogger(__name__)
 
 
-def _get_container():
-    """Lazy import to avoid circular dependency."""
-    from app.core.di import container
-    return container
-
-
 def get_vector_store() -> Any:
-    """
-    Get vector store service.
-
-    Returns:
-        VectorStoreService instance
-    """
+    """Get vector store service instance."""
     from app.services.vector_store import VectorStoreService
     return VectorStoreService(
         embeddings=get_embeddings(),
@@ -46,27 +35,8 @@ def get_vector_store() -> Any:
     )
 
 
-def get_vector_store_service() -> Dict[str, Any]:
-    """
-    Get vector store service dependencies as a dict.
-
-    Returns:
-        Dict with 'embeddings', 'client', 'collection' keys
-    """
-    return {
-        "embeddings": get_embeddings(),
-        "client": get_mongo_client(),
-        "collection": get_collection()
-    }
-
-
 def get_location_extractor() -> Any:
-    """
-    Get location extractor service.
-
-    Returns:
-        LocationExtractorService instance
-    """
+    """Get location extractor service instance."""
     from app.services.location_extractor import LocationExtractorService
     return LocationExtractorService(
         ner_pipeline=get_ner_pipeline(),
@@ -74,26 +44,8 @@ def get_location_extractor() -> Any:
     )
 
 
-def get_location_extractor_service() -> Dict[str, Any]:
-    """
-    Get location extractor service dependencies as a dict.
-
-    Returns:
-        Dict with 'ner_pipeline', 'geocode_cache' keys
-    """
-    return {
-        "ner_pipeline": get_ner_pipeline(),
-        "geocode_cache": get_geocode_cache()
-    }
-
-
 def get_location_prioritizer() -> Any:
-    """
-    Get location prioritizer service.
-
-    Returns:
-        LocationPrioritizerService instance
-    """
+    """Get location prioritizer service instance."""
     from app.services.location_prioritizer import LocationPrioritizerService
     return LocationPrioritizerService(llm=get_llm())
 

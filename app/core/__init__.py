@@ -14,8 +14,6 @@ from app.core.di import (
     get_llm,
     get_ner_pipeline,
     get_geocode_cache,
-    get_vector_store_service,
-    get_location_extractor_service,
     ensure_vector_index,
 )
 
@@ -31,7 +29,5 @@ __all__ = [
     "get_llm",
     "get_ner_pipeline",
     "get_geocode_cache",
-    "get_vector_store_service",
-    "get_location_extractor_service",
     "ensure_vector_index",
 ]

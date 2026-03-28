@@ -2,27 +2,10 @@ from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 import wikipedia
 import logging
-from app.services.vector_store import get_vector_store
 
 logger = logging.getLogger("agent_flow")
 
 duckduckgo_tool = DuckDuckGoSearchRun()
-
-
-@tool
-def vector_search(query: str) -> str:
-    """Searches the local vector database containing all uploaded user documents, historical intelligence reports, and custom data context."""
-    logger.debug(f"[AGENT LOG] Using vector_search for: {query}")
-    try:
-        # Use DI to get vector store service
-        vector_store = get_vector_store()
-        results = vector_store.similarity_search(query, k=3)
-        if not results:
-            return "No archival data found in historical intelligence database."
-        results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
-        return f"ARCHIVAL INTELLIGENCE REPORT:\n{results_text}"
-    except Exception as e:
-        return f"Error accessing vector database: {str(e)}"
 
 
 @tool
@@ -75,4 +58,4 @@ def duckduckgo_search(query: str) -> str:
         return f"Failed to retrieve duckduckgo web information on '{query}'. Error: {e}"
 
 
-tools = [vector_search, web_search, duckduckgo_search]
+tools = [web_search, duckduckgo_search]
