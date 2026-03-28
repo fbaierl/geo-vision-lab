@@ -49,105 +49,78 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 
 ## Architecture
 
-### Main Agent Graph
+### Complete Agent Flow
 
+```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'fontSize': '11px', 'lineColor': '#666666'}}}%%
+flowchart TD
+    User["📥 User Query"] --> VectorSearch["🔍 VECTOR_SEARCH_NODE<br/>Archival RAG Lookup"]
+    
+    VectorSearch --> Agent["🤖 AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
+    
+    Agent --> ShouldContinue{"Has tool<br/>calls?"}
+    
+    ShouldContinue -->|Yes| Tools["🛠️ TOOL_NODE<br/>DuckDuckGo / Wikipedia / Time"]
+    ShouldContinue -->|No| Reviewer["👁️ REVIEWER_NODE<br/>QA Critic LLM"]
+    
+    Tools --> Agent
+    
+    Reviewer --> IsValid{"Response<br/>VALID?"}
+    
+    IsValid -->|No, <3 attempts| Agent
+    IsValid -->|No, ≥3 attempts| Final["📤 Final Output + Knowledge Graph"]
+    IsValid -->|Yes| OntologySubgraph
+    
+    subgraph OntologySubgraph["🕸️ ONTOLOGY_EXTRACTOR SUBGRAPH"]
+        direction TB
+        ExtractOntology["📋 extract_ontology<br/>Extract entities & links<br/>Identify gap references"]
+        
+        ExtractOntology --> DetectGaps["🔎 detect_gaps<br/>Check for missing<br/>entity references"]
+        
+        DetectGaps --> HasGaps{"Gap<br/>entities<br/>found?"}
+        
+        HasGaps -->|Yes| ExtractGap["🎯 extract_gap_entities<br/>Targeted LLM extraction<br/>for missing entities only"]
+        HasGaps -->|No| MergeFinalize["💾 merge_and_finalize<br/>Create entities with UUIDs<br/>Process all links"]
+        
+        ExtractGap --> MergeFinalize
+        
+        MergeFinalize --> LinksOK{"All links<br/>resolvable?"}
+        
+        LinksOK -->|No - Skip| LogHallucinated["⚠️ Log as hallucinated<br/>relationship"]
+        LinksOK -->|Yes| CreateLink["✓ Create link<br/>with UUIDs"]
+        
+        LogHallucinated --> SessionOntology["📊 Session Ontology<br/>Persisted to MongoDB"]
+        CreateLink --> SessionOntology
+    end
+    
+    SessionOntology --> Final
+    
+    style User fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
+    style Final fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
+    style Agent fill:#1e3a5f,stroke:#3a5a8a,stroke-width:2px
+    style Reviewer fill:#5f1e3a,stroke:#8a3a5a,stroke-width:2px
+    style Tools fill:#5f4a1e,stroke:#8a6a3a,stroke-width:2px
+    style VectorSearch fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
+    style SessionOntology fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
+    style IsValid fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
+    style HasGaps fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
+    style ShouldContinue fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
+    style LinksOK fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
+    style OntologySubgraph fill:#1a1a2e,stroke:#5a3a8a,stroke-width:3px,stroke-dasharray: 5 5
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           GEO-VISION-LAB AGENT FLOW                          │
-└─────────────────────────────────────────────────────────────────────────────┘
 
-                              ┌──────────────────┐
-                              │   USER QUERY     │
-                              └────────┬─────────┘
-                                       │
-                                       ▼
-                         ┌─────────────────────────┐
-                         │   VECTOR_SEARCH_NODE    │
-                         │   (Archival RAG Lookup) │
-                         └────────────┬────────────┘
-                                      │
-                                      ▼
-                    ┌─────────────────────────────────┐
-                    │      AGENT_NODE (Worker)        │
-                    │  - Receives vector search results│
-                    │  - Can call tools iteratively   │
-                    │  - Builds response with reasoning│
-                    └────────────┬────────────────────┘
-                                 │
-               ┌─────────────────┴─────────────────┐
-               │                                   │
-               ▼                                   ▼
-    ┌─────────────────────┐           ┌─────────────────────┐
-    │   TOOL_NODE         │           │  REVIEWER_NODE      │
-    │  - DuckDuckGo       │           │  (QA Critic LLM)    │
-    │  - Wikipedia        │           │  - Validates output │
-    │  - Time lookup      │           │  - Checks constraints│
-    └─────────┬───────────┘           └──────────┬──────────┘
-              │                                  │
-              │         ┌────────────────────────┤
-              │         │                        │
-              │         │ (if invalid, <3 tries) │
-              │         │                        │
-              │         ▼                        ▼
-              │   ┌─────────────┐      ┌─────────────────────┐
-              │   │   Retry     │      │ ONTOLOGY_EXTRACTOR  │
-              │   │   Agent     │      │   (Sub-Graph)       │
-              │   └─────────────┘      │  - Entity Extraction│
-              │                        │  - Link Extraction  │
-              │                        │  - Geocoding        │
-              └────────────────────────┘      └──────────┬──────────┘
-                                      │
-                                      ▼
-                              ┌───────────────┐
-                              │  FINAL OUTPUT │
-                              │  + Knowledge  │
-                              │    Graph      │
-                              └───────────────┘
-```
+**Flow Description:**
 
-### Ontology Processing Sub-Graph
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    ONTOLOGY_SUBGRAPH (Internal Flow)                         │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-    ┌──────────────────────┐
-    │  assistant_response  │
-    │  (Approved Text)     │
-    └──────────┬───────────┘
-               │
-               ▼
-    ┌─────────────────────────┐
-    │  LLM EXTRACTION         │
-    │  - Structured Output    │
-    │  - 7 Entity Types       │
-    │  - Relationship Types   │
-    └──────────┬──────────────┘
-               │
-               ├─────────────────┬─────────────────┐
-               ▼                 ▼                 ▼
-    ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-    │  LOCATIONS      │ │  OTHER ENTITIES │ │  RELATIONSHIPS  │
-    │  - Geocode      │ │  - Normalize    │ │  - Link         │
-    │  - Nominatim    │ │  - ID Gen       │ │  - Merge        │
-    └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
-             │                   │                   │
-             └───────────────────┼───────────────────┘
-                                 ▼
-                    ┌─────────────────────────┐
-                    │  MERGE INTO SESSION     │
-                    │  - Upsert Entities      │
-                    │  - Upsert Links         │
-                    │  - Append Mentions      │
-                    └──────────┬──────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────────┐
-                    │  Session Ontology       │
-                    │  (Accumulated Graph)    │
-                    └─────────────────────────┘
-```
+1. **Vector Search** (mandatory first step) - Retrieves archival intelligence from MongoDB vector store
+2. **Agent** - Worker LLM receives context, performs reasoning, decides on tool usage
+3. **Tools** - DuckDuckGo, Wikipedia, Time lookup (loop back to Agent for iterative reasoning)
+4. **Reviewer** - QA Critic validates response against constraints
+5. **Ontology Extractor Subgraph** (dashed border) - Two-pass extraction with gap resolution:
+   - **extract_ontology**: Extract entities (7 types), extract links, identify missing references
+   - **detect_gaps**: Check if any link targets don't exist as entities
+   - **extract_gap_entities** (if gaps): Targeted LLM extraction for missing entities only
+   - **merge_and_finalize**: Create entities with UUIDs, process all links, skip unresolvable
+6. **Final Output** - Response + accumulated knowledge graph persisted to MongoDB
 
 **Entity Types Extracted:**
 - Location, Person, Organization, Event, Asset, Document, Concept
