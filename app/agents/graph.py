@@ -648,12 +648,35 @@ async def process_query_stream(
             # Convert messages to serializable format
             serializable_messages = []
             for msg in messages:
+                msg_dict = {}
                 if hasattr(msg, "model_dump"):
-                    serializable_messages.append(msg.model_dump())
+                    msg_dict = msg.model_dump()
                 elif hasattr(msg, "dict"):
-                    serializable_messages.append(msg.dict())
+                    msg_dict = msg.dict()
                 else:
-                    serializable_messages.append({"content": str(msg), "role": "unknown"})
+                    msg_dict = {"content": str(msg)}
+                
+                # Map LangChain 'type' field to 'role' field for session storage
+                msg_type = msg_dict.get("type", None)
+                if msg_type == "human":
+                    msg_dict["role"] = "user"
+                elif msg_type == "ai":
+                    msg_dict["role"] = "assistant"
+                elif msg_type == "system":
+                    msg_dict["role"] = "system"
+                elif msg_type == "tool":
+                    msg_dict["role"] = "tool"
+                elif "role" not in msg_dict:
+                    # Fallback: check class name
+                    class_name = msg.__class__.__name__.lower()
+                    if "human" in class_name or "user" in class_name:
+                        msg_dict["role"] = "user"
+                    elif "ai" in class_name or "assistant" in class_name:
+                        msg_dict["role"] = "assistant"
+                    else:
+                        msg_dict["role"] = "unknown"
+                
+                serializable_messages.append(msg_dict)
             
             # Convert ontology to serializable format
             serializable_ontology = {"entities": {}, "links": {}}
