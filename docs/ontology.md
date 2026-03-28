@@ -1,9 +1,9 @@
 # Ontology System
 
 > **Related Documentation:**
-> - [Agent Workflow](agent_workflow.md) — Agent orchestration and workflow
-> - [Technology Choices](technology.md) — Tech stack rationale
-> - [Debugging Guide](debugging.md) — Troubleshooting common issues
+> - [Agent Workflow](agent_workflow.md) - Agent orchestration and workflow
+> - [Technology Choices](technology.md) - Tech stack rationale
+> - [Debugging Guide](debugging.md) - Troubleshooting common issues
 
 ---
 
@@ -13,12 +13,13 @@ The GeoVision Lab Ontology System automatically extracts and maintains a structu
 
 ### Key Features
 
-- **Automatic Extraction** — Runs after every approved response without manual triggering
-- **Multi-Entity Support** — Extracts 7 entity types: Location, Person, Organization, Event, Asset, Document, Concept
-- **Relationship Mapping** — Identifies semantic relationships between entities (LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, etc.)
-- **Location Geocoding** — Automatically geocodes location entities via Nominatim API
-- **Provenance Tracking** — Every entity and link preserves the source text (mention) for auditability
-- **Session Accumulation** — Knowledge graph grows throughout the conversation, merging duplicates
+- **Automatic Extraction** - Runs after every approved response without manual triggering
+- **Multi-Entity Support** - Extracts 7 entity types: Location, Person, Organization, Event, Asset, Document, Concept
+- **Relationship Mapping** - Identifies semantic relationships between entities (LOCATED_IN, AFFILIATED_WITH, SUPPORTS, TARGETS, etc.)
+- **Location Geocoding** - Automatically geocodes location entities via Nominatim API
+- **Two-Pass Gap Resolution** - Detects and recovers missing entity references through targeted re-extraction
+- **Provenance Tracking** - Every entity and link preserves the source text (mention) for auditability
+- **Session Accumulation** - Knowledge graph grows throughout the conversation, merging duplicates
 
 ---
 
@@ -26,36 +27,174 @@ The GeoVision Lab Ontology System automatically extracts and maintains a structu
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
-graph TB
-    subgraph Input ["Input"]
+flowchart TB
+    subgraph Main["Main Agent Flow"]
         RESP["Approved Response Text<br/>from QA Reviewer"]
     end
 
-    subgraph Extract ["Extraction Layer"]
-        LLM["LLM Structured Output<br/>(Qwen 3.5 4B)"]
-        ENT_PARSER["Entity Parser"]
-        LINK_PARSER["Link Parser"]
+    subgraph OntologySubgraph["ONTOLOGY_EXTRACTOR SUBGRAPH"]
+        direction TB
+        Extract["extract_ontology<br/>Extract entities & links<br/>Identify gaps"]
+        
+        Extract --> Detect["detect_gaps<br/>Check for missing<br/>entity references"]
+        
+        Detect --> Check{Gap<br/>entities<br/>found?}
+        
+        Check -->|Yes| GapExtract["extract_gap_entities<br/>Targeted LLM extraction<br/>for missing entities only"]
+        Check -->|No| Merge
+        
+        GapExtract --> Merge["merge_and_finalize<br/>- Create entities with UUIDs<br/>- Process all links<br/>- Skip unresolvable"]
     end
 
-    subgraph Enrich ["Enrichment Layer"]
-        GEO["Geocoding Service<br/>(Nominatim API)"]
-        NORM["Entity Normalization<br/>(ID Generation)"]
+    subgraph Store["Storage Layer"]
+        Merge --> SessionOntology[("Session Ontology<br/>MongoDB Storage")]
     end
 
-    subgraph Store ["Storage Layer"]
-        MERGE["Merge Logic<br/>(Upsert + Deduplicate)"]
-        ONTO[("Session Ontology<br/>(In-Memory Graph)")]
-    end
+    RESP --> Extract
+    SessionOntology --> UI["Knowledge Graph UI"]
+    
+    style OntologySubgraph fill:#1a1a2e,stroke:#5a3a8a,stroke-width:2px,stroke-dasharray: 5 5
+```
 
-    RESP --> LLM
-    LLM --> ENT_PARSER
-    LLM --> LINK_PARSER
-    ENT_PARSER --> NORM
-    ENT_PARSER --> GEO
-    LINK_PARSER --> NORM
-    GEO --> MERGE
-    NORM --> MERGE
-    MERGE --> ONTO
+---
+
+## Ontology Sub-Graph Architecture
+
+The ontology extraction runs as a LangGraph sub-graph with a two-pass gap resolution strategy.
+
+### Complete Sub-Graph Flow
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+flowchart TD
+    Start([Start]) --> Extract["extract_ontology_node<br/>PASS 1: Initial Extraction"]
+    
+    Extract --> Parse["Parse Entities + Links"]
+    Parse --> ProcessEnt["Process Entities<br/>- Generate UUIDs<br/>- Geocode Locations<br/>- Build Name to UUID Map"]
+    ProcessEnt --> IdentifyGaps["Identify Gap Entities<br/>Links reference missing entities"]
+    
+    IdentifyGaps --> Detect["detect_gaps_node<br/>Route based on gaps"]
+    
+    Detect --> HasGaps{"Gap<br/>entities<br/>found?"}
+    
+    HasGaps -->|Yes| GapExtract["extract_gap_entities_node<br/>PASS 2: Gap Resolution<br/>- Targeted LLM prompt<br/>- Extract ONLY missing entities<br/>- No link extraction"]
+    HasGaps -->|No| Merge
+    
+    GapExtract --> Merge["merge_and_finalize_node<br/>Finalization<br/>- Merge gap entities<br/>- Process pending links<br/>- Resolve UUIDs<br/>- Skip unresolvable links"]
+    
+    Merge --> LinksOK{"All links<br/>resolvable?"}
+    LinksOK -->|No - Skip| LogHallucinated["Log as hallucinated<br/>relationship"]
+    LinksOK -->|Yes| CreateLink["Create link<br/>with UUIDs"]
+    
+    LogHallucinated --> End([End])
+    CreateLink --> End
+    
+    style Extract fill:#2e1a3a,stroke:#5a3a6a
+    style GapExtract fill:#2e1a3a,stroke:#5a3a6a
+    style Merge fill:#2e1a3a,stroke:#5a3a6a
+    style Detect fill:#1a2e3a,stroke:#3a5a6a
+```
+
+### Node Descriptions
+
+#### extract_ontology_node (Pass 1)
+
+**Purpose:** Initial extraction of entities and links from the assistant response.
+
+**Process:**
+1. Call LLM extractor with structured output prompt
+2. Process entities:
+   - Generate UUID for each entity
+   - Geocode Location entities via Nominatim API
+   - Store in session delta with mentions
+   - Build name-to-UUID mapping
+3. Collect links (defer processing until after gap resolution)
+4. Identify gap entities (referenced in links but not extracted)
+5. Output: session_delta, gap_entity_names, pending_links
+
+**Output State:**
+```python
+{
+    "extracted_delta": SessionOntology,  # Entities created
+    "gap_entity_names": ["Allies", "Axis powers"],  # Missing entities
+    "pending_links": [...]  # Links waiting for resolution
+}
+```
+
+#### detect_gaps_node
+
+**Purpose:** Conditional router that determines whether gap extraction is needed.
+
+**Process:**
+1. Check if gap_entity_names is empty
+2. Route to extract_gap_entities if gaps exist
+3. Route to merge_and_finalize if no gaps
+
+**Routing Logic:**
+```python
+def route_after_gap_detection(state):
+    if state.get("gap_entity_names"):
+        return "extract_gap_entities"
+    else:
+        return "merge_and_finalize"
+```
+
+#### extract_gap_entities_node (Pass 2)
+
+**Purpose:** Targeted extraction of only the missing gap entities.
+
+**Process:**
+1. Receive gap_entity_names from Pass 1
+2. Invoke specialized LLM prompt:
+   - Lists missing entity names
+   - Requests ONLY those entities (no links)
+   - Asks for proper type classification
+3. Parse and validate extracted entities
+4. Output: gap_entities_raw (list of entity dicts)
+
+**Gap Extraction Prompt:**
+```
+You are repairing a knowledge graph extraction.
+
+The following entities were referenced in relationships but were NOT extracted:
+- "Allies"
+- "Axis powers"
+
+Your task: Extract ONLY these missing entities from the text below.
+For each missing entity:
+1. Find where it appears in the text
+2. Determine its correct type (Organization, Concept, Event, etc.)
+3. Extract the context where it's mentioned
+
+Do NOT extract links. Do NOT extract other entities.
+Focus only on the missing entities listed above.
+```
+
+#### merge_and_finalize_node
+
+**Purpose:** Merge gap entities and process all pending links.
+
+**Process:**
+1. Process gap entities:
+   - Generate UUIDs
+   - Add to session delta
+   - Update name-to-UUID map
+2. Process pending links:
+   - Look up source/target UUIDs
+   - Create link with UUIDs (if both exist)
+   - Skip and log unresolvable links
+3. Output: final session_delta
+
+**Link Resolution:**
+```python
+for link_data in pending_links:
+    source_uuid = name_to_uuid.get(link_data["source"].lower())
+    target_uuid = name_to_uuid.get(link_data["target"].lower())
+    
+    if source_uuid and target_uuid:
+        # Create link
+    else:
+        # Skip and log as hallucinated
 ```
 
 ---
@@ -78,17 +217,19 @@ graph TB
 
 ```python
 class OntologyEntity(BaseModel):
-    id: str                                # Normalized ID (e.g., "volodymyr_zelensky")
-    type: str                              # Entity type from schema above
-    name: str                              # Display name
-    properties: Dict[str, Any]             # Type-specific attributes
-    mentions: List[Mention]                # Source text references
+    uuid: UUID                               # UUID-based identity
+    name: str                                # Display name
+    type: str                                # Entity type from schema above
+    properties: Dict[str, Any]               # Type-specific attributes
+    mentions: List[Mention]                  # Source text references
+    created_at: datetime                     # Creation timestamp
+    created_by: str                          # Creator identifier
 ```
 
 **Example Entity:**
 ```json
 {
-  "id": "kyiv",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
   "type": "Location",
   "name": "Kyiv",
   "properties": {
@@ -103,7 +244,8 @@ class OntologyEntity(BaseModel):
       "extracted_at": "2025-03-25T14:30:00Z",
       "confidence": 0.95
     }
-  ]
+  ],
+  "created_by": "llm_extractor"
 }
 ```
 
@@ -111,20 +253,22 @@ class OntologyEntity(BaseModel):
 
 ```python
 class OntologyLink(BaseModel):
-    id: str                                # Composite ID: "{source}_{type}_{target}"
-    source_id: str                         # Source entity ID
-    target_id: str                         # Target entity ID
-    type: str                              # Relationship type
-    properties: Dict[str, Any]             # Optional metadata
-    mentions: List[Mention]                # Source text references
+    uuid: UUID                               # UUID-based identity
+    source_uuid: UUID                        # Source entity UUID
+    target_uuid: UUID                        # Target entity UUID
+    type: str                                # Relationship type
+    properties: Dict[str, Any]               # Optional metadata
+    mentions: List[Mention]                  # Source text references
+    created_at: datetime                     # Creation timestamp
+    created_by: str                          # Creator identifier
 ```
 
 **Example Relationship:**
 ```json
 {
-  "id": "kyiv_located_in_ukraine",
-  "source_id": "kyiv",
-  "target_id": "ukraine",
+  "uuid": "75144852-67c3-44d7-9c4d-a137674df771",
+  "source_uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "target_uuid": "660f9400-f39c-52e5-b827-557766550000",
   "type": "LOCATED_IN",
   "properties": {},
   "mentions": [
@@ -133,7 +277,8 @@ class OntologyLink(BaseModel):
       "extracted_at": "2025-03-25T14:30:00Z",
       "confidence": 0.98
     }
-  ]
+  ],
+  "created_by": "llm_extractor"
 }
 ```
 
@@ -141,87 +286,17 @@ class OntologyLink(BaseModel):
 
 | Relationship Category | Relationship Types | Direction | Example |
 |-----------------------|-------------------|-----------|---------|
-| **Spatial** | LOCATED_IN, STATIONED_IN, OPERATES_IN, HEADQUARTERED_IN, BRANCH_IN, ORIGINATES_FROM, DEPLOYS_TO | Entity → Location | "Kyiv" → "Ukraine" |
-| **Organizational** | AFFILIATED_WITH, PART_OF, LEADS, COMMANDS, SUBORDINATE_TO, REPORTS_TO, REPRESENTS, SPEAKS_FOR, FOUNDED, ESTABLISHED, DISSOLVED | Person/Org → Organization | "Zelensky" → "Ukraine" |
-| **Political/Military** | SUPPORTS, TARGETS, CONFLICT_WITH, ATTACKED, DEFENDS, ALLIES_WITH, HOSTILE_TO, SANCTIONS, EMBARGOES, ARMS, TRAINS, FUNDS | Entity → Entity | "United States" → "Ukraine" |
-| **Territorial** | OCCUPIES, CONTROLS, LIBERATES, CAPTURES, SEIZES, RECAPTURES, OVERRUNS, FORTIFIES, BLOCKADES | Entity → Location | "Russian Forces" → "Crimea" |
-| **Diplomatic** | NEGOTIATES_WITH, MET_WITH, VISITED, SIGNATORY_TO, RATIFIES, VIOLATES, WITHDRAWS_FROM, REJOINS, MEDIATES, ARBITRATES | Entity → Entity/Document | "Russia" → "Budapest Memorandum" |
-| **Informational** | MENTIONS, MENTIONED_IN, REPORTS, INVESTIGATES, CONFIRMS, DENIES, CLAIMS, ALLEGES, ACCUSES_OF | Document/Entity → Entity | "UN Report" → "Human Rights Violations" |
-| **Legal/Judicial** | INVESTIGATES, INDICTS, CHARGES, PROSECUTES, ARRESTS, DETAINS, RELEASES, PARDONS, EXTRADITES, SANCTIONED_BY | Entity → Entity | "ICC" → "War Criminals" |
-| **Economic** | OWNS, ACQUIRES, MERGES_WITH, PARTNERS_WITH, FUNDS, SPONSORS, BOYCOTTS, IMPOSES_TARIFFS_ON, GRANTS_AID_TO | Entity → Entity | "Company A" → "Subsidiary B" |
-| **Generic** | USES, RELATED_TO, PARTICIPATED_IN, COLLABORATES_WITH, COORDINATES_WITH, INFLUENCED_BY, DERIVED_FROM | Entity → Entity | Various contexts |
+| **Spatial** | LOCATED_IN, STATIONED_IN, OPERATES_IN, HEADQUARTERED_IN, BRANCH_IN, ORIGINATES_FROM, DEPLOYS_TO | Entity to Location | "Kyiv" to "Ukraine" |
+| **Organizational** | AFFILIATED_WITH, PART_OF, LEADS, COMMANDS, SUBORDINATE_TO, REPORTS_TO, REPRESENTS, SPEAKS_FOR, FOUNDED, ESTABLISHED, DISSOLVED | Person/Org to Organization | "Zelensky" to "Ukraine" |
+| **Political/Military** | SUPPORTS, TARGETS, CONFLICT_WITH, ATTACKED, DEFENDS, ALLIES_WITH, HOSTILE_TO, SANCTIONS, EMBARGOES, ARMS, TRAINS, FUNDS | Entity to Entity | "United States" to "Ukraine" |
+| **Territorial** | OCCUPIES, CONTROLS, LIBERATES, CAPTURES, SEIZES, RECAPTURES, OVERRUNS, FORTIFIES, BLOCKADES | Entity to Location | "Russian Forces" to "Crimea" |
+| **Diplomatic** | NEGOTIATES_WITH, MET_WITH, VISITED, SIGNATORY_TO, RATIFIES, VIOLATES, WITHDRAWS_FROM, REJOINS, MEDIATES, ARBITRATES | Entity to Entity/Document | "Russia" to "Budapest Memorandum" |
+| **Informational** | MENTIONS, MENTIONED_IN, REPORTS, INVESTIGATES, CONFIRMS, DENIES, CLAIMS, ALLEGES, ACCUSES_OF | Document/Entity to Entity | "UN Report" to "Human Rights Violations" |
+| **Legal/Judicial** | INVESTIGATES, INDICTS, CHARGES, PROSECUTES, ARRESTS, DETAINS, RELEASES, PARDONS, EXTRADITES, SANCTIONED_BY | Entity to Entity | "ICC" to "War Criminals" |
+| **Economic** | OWNS, ACQUIRES, MERGES_WITH, PARTNERS_WITH, FUNDS, SPONSORS, BOYCOTTS, IMPOSES_TARIFFS_ON, GRANTS_AID_TO | Entity to Entity | "Company A" to "Subsidiary B" |
+| **Generic** | USES, RELATED_TO, PARTICIPATED_IN, COLLABORATES_WITH, COORDINATES_WITH, INFLUENCED_BY, DERIVED_FROM | Entity to Entity | Various contexts |
 
-**Note:** The relationship types listed above are predefined examples, but the ontology extractor is designed to discover and use additional relationship types that accurately capture semantic connections in the text. The system uses CAPS_SNAKE_CASE format for all relationship types (e.g., `MARRIED_TO`, `SIBLING_OF`, `STUDIED_AT`).
-
----
-
-## Ontology Sub-Graph
-
-The ontology extraction runs as a LangGraph sub-graph with the following structure:
-
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph LR
-    START([Start]) --> EXTRACT["extract_ontology_node"]
-    EXTRACT --> PARSE["Parse Entities + Links"]
-    PARSE --> GEOCODE["Geocode Locations"]
-    GEOCODE --> MERGE["Merge into Session Ontology"]
-    MERGE --> END([End])
-```
-
-### Node Implementation
-
-```python
-def extract_ontology_node(state: OntologySubGraphState) -> Dict[str, Any]:
-    """Extracts entities and links from the assistant response."""
-    
-    # 1. Get the response text
-    assistant_response = state["assistant_response"]
-    query = state["user_query"]
-    
-    # 2. Call LLM extractor with structured output
-    extractor = get_ontology_extractor()
-    delta = extractor.extract(text=assistant_response, query=query)
-    
-    # 3. Process entities
-    for ext_ent in delta.entities:
-        ent_id = ext_ent.name.lower().strip()
-        
-        # Geocode if location
-        if ext_ent.type == "Location":
-            candidates = loc_extractor.geocode_location(ext_ent.name)
-            if candidates:
-                best = candidates[0]
-                properties["lat"] = best["lat"]
-                properties["lon"] = best["lon"]
-                properties["country"] = best.get("country", "")
-        
-        entity = OntologyEntity(
-            id=ent_id,
-            type=ext_ent.type,
-            name=ext_ent.name,
-            properties=properties,
-            mentions=[Mention(source_text=ext_ent.context)]
-        )
-        session_delta.entities[ent_id] = entity
-    
-    # 4. Process links
-    for ext_link in delta.links:
-        src_id = ext_link.source_entity_name.lower().strip()
-        tgt_id = ext_link.target_entity_name.lower().strip()
-        link_id = f"{src_id}_{ext_link.relationship_type}_{tgt_id}"
-        
-        link = OntologyLink(
-            id=link_id,
-            source_id=src_id,
-            target_id=tgt_id,
-            type=ext_link.relationship_type,
-            mentions=[Mention(source_text=ext_link.context)]
-        )
-        session_delta.links[link_id] = link
-    
-    return {"extracted_delta": session_delta}
-```
+**Note:** The relationship types listed above are predefined examples, but the ontology extractor is designed to discover and use additional relationship types that accurately capture semantic connections in the text. The system uses CAPS_SNAKE_CASE format for all relationship types.
 
 ---
 
@@ -231,13 +306,13 @@ The ontology extractor uses structured prompting to ensure consistent JSON outpu
 
 ```
 System Prompt:
-You are an expert Intelligence Analyst extracting Entities and Relationships 
+You are an expert Intelligence Analyst extracting Entities and Relationships
 into a strict JSON Knowledge Graph.
 
-You must extract the following Entity types: 
+You must extract the following Entity types:
 Location, Person, Organization, Event, Asset, Document, Concept.
 
-You must extract Links between them with a descriptive relationship_type 
+You must extract Links between them with a descriptive relationship_type
 (if any exist).
 
 Your output MUST be a valid JSON object matching this schema:
@@ -246,13 +321,13 @@ Your output MUST be a valid JSON object matching this schema:
     { "name": "...", "type": "Location", "context": "exact text from source" }
   ],
   "links": [
-    { "source_entity_name": "...", "target_entity_name": "...", 
+    { "source_entity_name": "...", "target_entity_name": "...",
       "relationship_type": "LOCATED_IN", "context": "exact text" }
   ]
 }
 
-IMPORTANT: You MUST extract all relevant entities EVEN IF there are no links 
-between them! It is perfectly fine to return an empty 'links' array, but you 
+IMPORTANT: You MUST extract all relevant entities EVEN IF there are no links
+between them! It is perfectly fine to return an empty 'links' array, but you
 must still extract the entities.
 
 Do not add markdown formatting or conversational text, only output the JSON.
@@ -260,67 +335,61 @@ Do not add markdown formatting or conversational text, only output the JSON.
 
 ---
 
-## Merge Strategy
+## Gap Resolution Strategy
 
-When merging extracted entities and links into the session ontology:
+The two-pass extraction with gap resolution addresses the problem of links referencing entities that weren't extracted in the initial pass.
 
-### Entity Merging
+### Problem Example
 
-```python
-for k, v in entities.items():
-    if k not in current_ontology["entities"]:
-        # New entity - insert directly
-        current_ontology["entities"][k] = v
-    else:
-        # Existing entity - merge
-        existing = current_ontology["entities"][k]
-        
-        # Add new mentions (avoid duplicates)
-        if "mentions" in v:
-            for mention in v["mentions"]:
-                if mention not in existing["mentions"]:
-                    existing["mentions"].append(mention)
-        
-        # Merge properties (new info takes precedence)
-        if "properties" in v:
-            for p_k, p_v in v["properties"].items():
-                if p_v is not None:
-                    existing.setdefault("properties", {})[p_k] = p_v
+**Input Text:**
+```
+The Allies and Axis powers were the two main opposing military alliances.
+The Allies included United States, United Kingdom, and Soviet Union.
+The Axis powers included Nazi Germany, Empire of Japan, and Kingdom of Italy.
 ```
 
-### Link Merging
+**Pass 1 Extraction (Incomplete):**
+- Entities: United States, United Kingdom, Soviet Union, Nazi Germany, Empire of Japan, Kingdom of Italy
+- Links: (United States) -[PART_OF]-> (Allies), (Nazi Germany) -[PART_OF]-> (Axis powers)
+- **Problem:** "Allies" and "Axis powers" referenced in links but not extracted as entities
 
-```python
-for k, v in links.items():
-    if k not in current_ontology["links"]:
-        # New link - insert directly
-        current_ontology["links"][k] = v
-    else:
-        # Existing link - append mentions
-        existing_link = current_ontology["links"][k]
-        if "mentions" in v:
-            existing_link.setdefault("mentions", []).extend(v["mentions"])
-```
+**Gap Detection:**
+- Missing entities: ["Allies", "Axis powers"]
+
+**Pass 2 Gap Extraction:**
+- Entities: Allies (Organization), Axis powers (Organization)
+
+**Final Result:**
+- All 8 entities extracted
+- All links resolvable with UUIDs
+
+### Benefits
+
+1. **Referential Integrity** - All link references resolve to actual entities
+2. **LLM-Driven Typing** - Gap entities get proper type classification from LLM
+3. **Minimal Overhead** - Second pass only runs when gaps detected
+4. **Audit Trail** - Clear logging of gap detection and resolution
+5. **Handles Hallucinations** - Unresolvable links logged and skipped gracefully
 
 ---
 
 ## Integration with Main Agent Graph
 
-The ontology extractor is a node in the main LangGraph workflow:
+The ontology extractor is a sub-graph node in the main LangGraph workflow:
 
 ```python
 # From app/agents/graph.py
 
 def get_graph():
     workflow = StateGraph(AgentState)
-    
+
     # Add nodes
     workflow.add_node(NODE_VECTOR_SEARCH, vector_search_node)
     workflow.add_node(NODE_AGENT, call_model)
     workflow.add_node(NODE_TOOLS, ToolNode(tools))
     workflow.add_node(NODE_REVIEWER, review_response)
     workflow.add_node(NODE_ONTOLOGY_EXTRACTOR, run_ontology_subgraph)
-    
+
     # Define edges
     workflow.set_entry_point(NODE_VECTOR_SEARCH)
     workflow.add_edge(NODE_VECTOR_SEARCH, NODE_AGENT)
@@ -328,19 +397,23 @@ def get_graph():
     workflow.add_edge(NODE_TOOLS, NODE_AGENT)
     workflow.add_conditional_edges(NODE_REVIEWER, check_validation)
     workflow.add_edge(NODE_ONTOLOGY_EXTRACTOR, "__end__")
-    
+
     return workflow.compile(checkpointer=checkpointer)
 ```
 
 ### State Flow
 
 ```
-User Query 
-  → vector_search_node (inject archival results)
-  → agent_node (reasoning + tool calls)
-  → reviewer_node (QA validation)
-  → ontology_extractor_node (entity/link extraction)
-  → __end__ (return response + updated ontology)
+User Query
+  -> vector_search_node (inject archival results)
+  -> agent_node (reasoning + tool calls)
+  -> reviewer_node (QA validation)
+  -> ontology_extractor_node (sub-graph execution)
+      -> extract_ontology (Pass 1)
+      -> detect_gaps (routing)
+      -> extract_gap_entities (Pass 2, if needed)
+      -> merge_and_finalize (finalization)
+  -> __end__ (return response + updated ontology)
 ```
 
 ---
@@ -403,10 +476,16 @@ docker compose logs -f geovision-api | grep ONTOLOGY
 
 **Expected Log Output:**
 ```
-[ONTOLOGY_SUBGRAPH] Starting ontology processing sub-graph
+[ONTOLOGY_SUBGRAPH] Pass 1: Extracting entities and links
 [ONTOLOGY_EXTRACTOR] Starting extraction...
-[ONTOLOGY_SUBGRAPH] Found 5 entities and 3 links
-[ONTOLOGY_SUBGRAPH] Sub-graph complete: 12 entities accumulated.
+[ONTOLOGY_SUBGRAPH] Extractor returned 25 entities and 26 links
+[ONTOLOGY_SUBGRAPH] Gap entities detected: 2
+[ONTOLOGY_SUBGRAPH] Gap entity names: ['Allies', 'Axis powers']
+[ONTOLOGY_SUBGRAPH] Pass 2: Extracting 2 gap entities
+[ONTOLOGY_EXTRACTOR] Gap extraction successful: 2 entities recovered
+[ONTOLOGY_SUBGRAPH] Finalization: Merging entities and processing links
+[ONTOLOGY_SUBGRAPH] Total entities: 27
+[ONTOLOGY_SUBGRAPH] Links created: 26
 ```
 
 ### Common Issues
@@ -414,8 +493,9 @@ docker compose logs -f geovision-api | grep ONTOLOGY
 | Issue | Symptom | Solution |
 |-------|---------|----------|
 | **No entities extracted** | Ontology empty after response | Check LLM extractor prompt; ensure response contains named entities |
-| **Duplicate entities** | Same entity appears multiple times | Entity ID normalization may be failing; check `ent_id = name.lower().strip()` |
+| **Duplicate entities** | Same entity appears multiple times | UUID-based identity should prevent this; check merge logic |
 | **Geocoding fails** | Location entities missing coordinates | Nominatim API rate limiting or network issue |
+| **Gap extraction fails** | Links still skipped after Pass 2 | Entity may not exist in text (hallucinated link); check logs |
 | **JSON parsing error** | Extraction returns None | LLM output malformed; check structured output fallback |
 
 ---
@@ -465,26 +545,31 @@ async def get_entity_relationships(entity_id: str):
     """Get all relationships for an entity."""
 ```
 
-### 4. Entity Disambiguation
-
-Improve ID generation to handle同名 entities:
-
-```python
-# Current: ent_id = name.lower().strip()
-# Improved: ent_id = f"{type}_{name.lower().replace(' ', '_')}"
-# Example: "person_volodymyr_zelensky" vs "location_zelensky" (if a place had same name)
-```
-
-### 5. Hierarchical Entity Types
+### 4. Hierarchical Entity Types
 
 Support sub-typing for better categorization:
 
 ```python
 class LocationEntity(OntologyEntity):
     subtype: Literal["Country", "City", "Region", "Landmark"]
-    
+
 class PersonEntity(OntologyEntity):
     subtype: Literal["Politician", "Military_Leader", "Diplomat"]
+```
+
+### 5. Entity Deduplication
+
+Detect and merge near-duplicate entities (e.g., "Empire of Japan" vs "Imperial Japan"):
+
+```python
+# Fuzzy matching on entity names
+from difflib import SequenceMatcher
+
+def are_duplicates(name1: str, name2: str, type1: str, type2: str) -> bool:
+    if type1 != type2:
+        return False
+    similarity = SequenceMatcher(None, name1.lower(), name2.lower()).ratio()
+    return similarity > 0.85
 ```
 
 ---

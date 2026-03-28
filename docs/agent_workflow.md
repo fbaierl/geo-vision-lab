@@ -8,9 +8,9 @@ This document provides a detailed breakdown of the LangGraph agent architecture 
 
 GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The system consists of three primary agents working in concert:
 
-1. **Worker Agent** — The primary reasoning engine that handles user queries, performs tool calls, and synthesizes responses
-2. **Critic Agent** — A QA reviewer that validates outputs before delivery
-3. **Ontology Extractor** — Automatic knowledge graph construction extracting entities (Locations, Persons, Organizations, Events, Assets, Documents, Concepts) and their relationships, with integrated geocoding for location entities
+1. **Worker Agent** - The primary reasoning engine that handles user queries, performs tool calls, and synthesizes responses
+2. **Critic Agent** - A QA reviewer that validates outputs before delivery
+3. **Ontology Extractor** - Automatic knowledge graph construction extracting entities (Locations, Persons, Organizations, Events, Assets, Documents, Concepts) and their relationships, with integrated geocoding for location entities
 
 ## Mandatory Vector Search First Protocol
 
@@ -22,12 +22,12 @@ GeoVision Lab uses a **multi-agent system** orchestrated by LangGraph. The syste
 2. **Data Privacy**: Prioritizes internal/custom data over public web searches
 3. **Context Awareness**: Prevents redundant searches for information already in the knowledge base
 4. **Performance**: Vector search (50-200ms) is faster than web searches (1-3s)
-5. **Structural Enforcement**: The workflow **guarantees** vector search executes first — not dependent on LLM decision
+5. **Structural Enforcement**: The workflow **guarantees** vector search executes first - not dependent on LLM decision
 
 ### Execution Flow
 
 ```
-User Query → [Vector Search] → Worker Agent → Critic Agent → Ontology Extractor → Response + Knowledge Graph
+User Query -> [Vector Search] -> Worker Agent -> Critic Agent -> Ontology Extractor -> Response + Knowledge Graph
 ```
 
 ### Decision Tree
@@ -35,59 +35,56 @@ User Query → [Vector Search] → Worker Agent → Critic Agent → Ontology Ex
 - **Step 1 (Automatic)**: `vector_search_node` executes for every query
 - **Step 2**: Results stored in AgentState and injected into agent context
 - **Step 3**: Worker Agent reviews archival results, decides if additional tools needed
-- **Step 4**: If additional intel needed → execute web search tools
+- **Step 4**: If additional intel needed -> execute web search tools
 - **Step 5**: Submit draft to Critic Agent for validation
 - **Step 6 (Automatic)**: Ontology Extractor identifies entities and relationships, geocodes locations, updates session knowledge graph
 
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
-graph TB
-    subgraph Input["Input Layer"]
-        UQ[("User Query<br/>(Chat Interface)")]
+flowchart TD
+    User["User Query"] --> VectorSearch["VECTOR_SEARCH_NODE<br/>MongoDB Archival Lookup<br/>AUTOMATIC FIRST STEP"]
+    
+    VectorSearch --> Agent["AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
+    
+    Agent --> ShouldContinue{"Has tool<br/>calls?"}
+    
+    ShouldContinue -->|Yes| Tools["TOOL_NODE<br/>DuckDuckGo / Wikipedia / Time"]
+    ShouldContinue -->|No| Reviewer["REVIEWER_NODE<br/>QA Critic LLM"]
+    
+    Tools --> Agent
+    
+    Reviewer --> IsValid{"Response<br/>VALID?"}
+    
+    IsValid -->|No, <3 attempts| Agent
+    IsValid -->|No, >=3 attempts| Final["Final Output + Knowledge Graph"]
+    IsValid -->|Yes| OntologySubgraph
+    
+    subgraph OntologySubgraph["ONTOLOGY_EXTRACTOR SUBGRAPH"]
+        direction TB
+        ExtractOntology["extract_ontology<br/>Extract entities & links<br/>Identify gap references"]
+        
+        ExtractOntology --> DetectGaps["detect_gaps<br/>Check for missing<br/>entity references"]
+        
+        DetectGaps --> HasGaps{"Gap<br/>entities<br/>found?"}
+        
+        HasGaps -->|Yes| ExtractGap["extract_gap_entities<br/>Targeted LLM extraction<br/>for missing entities only"]
+        HasGaps -->|No| MergeFinalize["merge_and_finalize<br/>Create entities with UUIDs<br/>Process all links"]
+        
+        ExtractGap --> MergeFinalize
+        
+        MergeFinalize --> LinksOK{"All links<br/>resolvable?"}
+        
+        LinksOK -->|No - Skip| LogHallucinated["Log as hallucinated<br/>relationship"]
+        LinksOK -->|Yes| CreateLink["Create link<br/>with UUIDs"]
+        
+        LogHallucinated --> SessionOntology["Session Ontology<br/>Persisted to MongoDB"]
+        CreateLink --> SessionOntology
     end
-
-    subgraph Mandatory["Mandatory First Step"]
-        VS["Vector Search Node<br/>(MongoDB)<br/>**AUTOMATIC**"]
-    end
-
-    subgraph Worker["Worker Agent"]
-        REASON["Reasoning Engine<br/>(Qwen 3.5 4B)<br/>+ Injected Results"]
-        TOOLS["Tool Executor<br/>(ToolNode)"]
-    end
-
-    subgraph Critic["Critic Agent"]
-        REVIEW["QA Reviewer<br/>(Qwen 3.5 4B)"]
-    end
-
-    subgraph Ontology["Ontology Extractor Sub-Graph"]
-        EXT["Entity Extraction<br/>(LLM Structured Output)"]
-        GEO["Location Geocoding<br/>(Nominatim API)"]
-        LINK["Link Extraction<br/>(Relationship Mapping)"]
-    end
-
-    subgraph Tools["Available Tools"]
-        DDG["DuckDuckGo Search<br/>(Live Web)"]
-        WIKI["Wikipedia API<br/>(Background Info)"]
-    end
-
-    subgraph Output["Output Layer"]
-        RESP[("Streaming Response<br/>3-Lane UI: Reasoning | Text | Knowledge Graph)")]
-    end
-
-    UQ --> VS
-    VS --> REASON
-    REASON --> DECIDE{Needs More Data?}
-    DECIDE -->|Yes - Live| DDG
-    DECIDE -->|Yes - Background| WIKI
-    DECIDE -->|No| REVIEW
-    DDG --> REASON
-    WIKI --> REASON
-    REASON -->|Final Draft| REVIEW
-    REVIEW -->|Validated| EXT
-    EXT --> GEO
-    EXT --> LINK
-    GEO --> RESP
+    
+    SessionOntology --> Final
+    
+    style OntologySubgraph fill:#1a1a2e,stroke:#5a3a8a,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ---
@@ -126,7 +123,7 @@ flowchart LR
         E --> S[similarity_search]
         S --> R[Store Results in State]
     end
-    
+
     R --> AGENT["Passes to Agent Node"]
 ```
 
@@ -137,7 +134,7 @@ flowchart LR
 4. Stores results in `state["vector_search_results"]`
 5. Workflow automatically transitions to agent node
 
-**Key Point:** This step is **structurally enforced** by the LangGraph workflow — the agent cannot bypass it.
+**Key Point:** This step is **structurally enforced** by the LangGraph workflow - the agent cannot bypass it.
 
 ---
 
@@ -149,7 +146,7 @@ flowchart LR
     subgraph LLM["LLM Processing"]
         SYS[System Prompt<br/>Rules + Constraints]
         CTX[Conversation History<br/>+ Metadata]
-        VEC[Vector Search Results<br/>**INJECTED**]
+        VEC[Vector Search Results<br/>INJECTED]
     end
 
     LLM --> REASON["Reasoning Process"]
@@ -171,7 +168,7 @@ flowchart LR
 **System Prompt Rules:**
 - **Rule 1**: Review injected vector search results first
 - **Rule 2**: Use additional tools only if archival data is insufficient
-- **Rule 3**: MUST wrap thought process in `<think>...</think>` tags
+- **Rule 3**: MUST wrap thought process in <think>...</think> tags
 - **Rule 4**: MUST format responses in military intelligence style
 - **Rule 5**: MUST include map tags when referencing geographic locations
 
@@ -184,15 +181,15 @@ flowchart LR
 stateDiagram-v2
     [*] --> AgentNode
     AgentNode --> ShouldContinue
-    
+
     ShouldContinue: should_continue
     ShouldContinue --> ToolNode: Has tool_calls
     ShouldContinue --> ReviewerNode: No tool_calls
-    
+
     ToolNode --> ExecuteTools: Run Python functions
     ExecuteTools --> AppendResults: Add ToolMessages
     AppendResults --> AgentNode: Loop back
-    
+
     ReviewerNode --> [*]
 ```
 
@@ -205,7 +202,7 @@ stateDiagram-v2
 | **get_current_time** | Return exact timestamp | Time-aware queries |
 | **render_map** | Generate Leaflet.js map code | Geographic location references |
 
-**Note:** Vector search is **not** in this table because it's automatically executed as a workflow node before the agent begins reasoning — the agent does not call it as a tool.
+**Note:** Vector search is **not** in this table because it's automatically executed as a workflow node before the agent begins reasoning - the agent does not call it as a tool.
 
 **Tool Call Example:**
 ```json
@@ -234,7 +231,7 @@ stateDiagram-v2
 graph TD
     subgraph Reviewer["QA Reviewer Agent"]
         INPUT["Draft Response<br/>from Worker"]
-        RULES["Constraint Rules<br/>(System Prompt)"]
+        RULES["Constraint Rules<br/>System Prompt"]
         CHECK["Validation Checks"]
     end
 
@@ -273,13 +270,15 @@ If any constraint is violated, explain the issue and request revision.
 
 ### Stage 5: Ontology Extraction (Automatic)
 
+The ontology extraction runs as a sub-graph with two-pass gap resolution. See [Ontology System](ontology.md) for detailed architecture.
+
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart LR
     subgraph EXT["Entity & Link Extraction"]
-        TEXT[Response Text] --> LLM["LLM Structured Output<br/>(Qwen 3.5 4B)"]
-        LLM --> ENTITIES["Extract Entities<br/>Location, Person, Organization,<br/>Event, Asset, Document, Concept"]
-        LLM --> LINKS["Extract Relationships<br/>Source → Target<br/>with Type + Context"]
+        TEXT[Response Text] --> LLM["LLM Structured Output"]
+        LLM --> ENTITIES["Extract Entities<br/>7 Types"]
+        LLM --> LINKS["Extract Relationships<br/>Source to Target<br/>with Type + Context"]
     end
 
     subgraph GEO["Location Geocoding"]
@@ -288,50 +287,47 @@ flowchart LR
         NOMINATIM --> CANDIDATES["Geocoding Results<br/>lat, lon, display_name,<br/>country, type"]
     end
 
-    subgraph MERGE["Knowledge Graph Merge"]
-        CANDIDATES --> MERGE_ENT["Merge Entities<br/>into Session Ontology"]
-        LINKS --> MERGE_LINK["Merge Links<br/>into Session Ontology"]
+    subgraph GAP["Gap Resolution"]
+        CANDIDATES --> DETECT["detect_gaps<br/>Identify missing<br/>entity references"]
+        DETECT --> CHECK{Gaps<br/>found?}
+        CHECK -->|Yes| GAP_EXT["extract_gap_entities<br/>Targeted extraction<br/>for missing entities"]
+        CHECK -->|No| MERGE
+        GAP_EXT --> MERGE["merge_and_finalize<br/>Create entities with UUIDs<br/>Process all links"]
     end
 
-    MERGE_ENT --> UI["Update UI<br/>Knowledge Graph Panel"]
-    MERGE_LINK --> UI
+    MERGE --> UI["Update UI<br/>Knowledge Graph Panel"]
 ```
 
 **What happens:**
 1. `ontology_extractor_node` receives the approved response text
 2. LLM extracts structured entities and relationships using few-shot prompting:
    - **Entity Types**: Location, Person, Organization, Event, Asset, Document, Concept
-   - **Relationship Types**: Comprehensive predefined set including:
-     - Spatial: LOCATED_IN, STATIONED_IN, OPERATES_IN, HEADQUARTERED_IN, DEPLOYS_TO
-     - Organizational: AFFILIATED_WITH, PART_OF, LEADS, COMMANDS, REPORTS_TO
-     - Political/Military: SUPPORTS, TARGETS, CONFLICT_WITH, ATTACKED, DEFENDS, ALLIES_WITH, SANCTIONS
-     - Territorial: OCCUPIES, CONTROLS, LIBERATES, CAPTURES, SEIZES, FORTIFIES
-     - Diplomatic: NEGOTIATES_WITH, MET_WITH, VISITED, SIGNATORY_TO, RATIFIES
-     - Legal/Judicial: INVESTIGATES, INDICTS, PROSECUTES, ARRESTS, EXTRADITES
-     - Economic: OWNS, ACQUIRES, MERGES_WITH, PARTNERS_WITH, FUNDS, BOYCOTTS
-     - Generic: USES, RELATED_TO, COLLABORATES_WITH, INFLUENCED_BY
-     - **Important:** The LLM can discover and use additional relationship types beyond this predefined list based on the semantic content of the text
+   - **Relationship Types**: Comprehensive predefined set including spatial, organizational, political/military, territorial, diplomatic, legal/judicial, and economic relationships
    - Each extraction includes the original source text as context (mention)
 3. For Location entities, automatic geocoding via Nominatim API:
    - Returns coordinates (lat, lon), display name, country
    - Results attached to entity properties
-4. Entities and links are merged into the session ontology:
-   - Deterministic IDs prevent duplicates
+4. **Gap Resolution** (two-pass extraction):
+   - Detects links referencing entities that weren't extracted
+   - Runs targeted LLM extraction for missing entities only
+   - Merges gap entities and processes all links with complete entity set
+5. Entities and links are merged into the session ontology:
+   - UUID-based identity prevents duplicates
    - New mentions are appended to existing entities
    - Properties are updated with fresh information
-5. Updated ontology is streamed to frontend for knowledge graph visualization
+6. Updated ontology is streamed to frontend for knowledge graph visualization
 
-**Key Point:** This step is **fully automatic** — the Worker Agent does NOT need to request ontology extraction. The ontology sub-graph handles everything after the reviewer approves.
+**Key Point:** This step is **fully automatic** - the Worker Agent does NOT need to request ontology extraction. The ontology sub-graph handles everything after the reviewer approves.
 
 **Example Extraction:**
 ```
-Input: "The conflict in Kyiv, Ukraine has escalated. 
+Input: "The conflict in Kyiv, Ukraine has escalated.
         President Zelensky met with NATO representatives."
 
 Extracted Entities:
-- Location: "Kyiv" → geocode → (50.4501, 30.5234) → country: Ukraine
-- Location: "Ukraine" → geocode → (48.3794, 31.1656) → country: Ukraine  
-- Person: "Zelensky" → properties: {title: "President"}
+- Location: "Kyiv" -> geocode -> (50.4501, 30.5234) -> country: Ukraine
+- Location: "Ukraine" -> geocode -> (48.3794, 31.1656) -> country: Ukraine
+- Person: "Zelensky" -> properties: {title: "President"}
 - Organization: "NATO"
 
 Extracted Links:
@@ -342,11 +338,11 @@ Extracted Links:
 
 **Entity ID Strategy:**
 ```python
-# Entities are normalized by lowercase name for deduplication
-ent_id = ext_ent.name.lower().strip()  # e.g., "kyiv", "united_nations"
+# Entities use UUID-based identity for robust deduplication
+entity_uuid = uuid.uuid4()
 
-# Links use deterministic composite IDs
-link_id = f"{src_id}_{relationship_type}_{tgt_id}"  # e.g., "kyiv_located_in_ukraine"
+# Links use UUID-based identity
+link_uuid = uuid.uuid4()
 ```
 
 ---
@@ -397,10 +393,10 @@ The `should_continue` function is the brain of the agent workflow:
 def should_continue(state: AgentState) -> Literal["tools", "reviewer"]:
     """
     Router function that determines the next node in the graph.
-    
+
     Args:
         state: Current agent state containing messages
-        
+
     Returns:
         "tools" if LLM requested tool calls
         "reviewer" if LLM is ready to finalize response
@@ -557,10 +553,10 @@ graph.get_graph().draw_mermaid()
 
 ## Related Documentation
 
-- [Technology Choices](technology.md) — Detailed rationale for tech stack decisions
-- [Agent Learnings](learnings.md) — Technical insights on reasoning LLMs and decision logic
-- [Ontology System](ontology.md) — Knowledge graph architecture and entity extraction
-- [Debugging Guide](debugging.md) — Troubleshooting common issues
+- [Technology Choices](technology.md) - Detailed rationale for tech stack decisions
+- [Agent Learnings](learnings.md) - Technical insights on reasoning LLMs and decision logic
+- [Ontology System](ontology.md) - Knowledge graph architecture and entity extraction
+- [Debugging Guide](debugging.md) - Troubleshooting common issues
 
 ---
 

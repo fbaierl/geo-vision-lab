@@ -4,12 +4,12 @@ Ontology Extractor Pipeline
 Extracts full Entities (People, Orgs, Locations, Events) and their Links.
 """
 import logging
-from typing import Optional
+from typing import Optional, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 import json
 
-from app.models.ontology import OntologyDelta
+from app.models.ontology import OntologyDelta, OntologyDeltaEntity
 
 logger = logging.getLogger("agent_flow")
 
@@ -64,6 +64,38 @@ class OntologyExtractorService:
         except NotImplementedError:
             self.structured_llm = None
             logger.warning("Structured output not natively supported by this LLM wrapper. Will fallback to JSON parsing.")
+
+        # Gap extraction prompt - specialized for extracting only missing entities
+        self.gap_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are repairing a knowledge graph extraction.\n\n"
+             "## Task\n"
+             "The following entities were referenced in relationships but were NOT extracted:\n"
+             "{missing_entities}\n\n"
+             "Your task: Extract ONLY these missing entities from the text below.\n"
+             "For each missing entity:\n"
+             "1. Find where it appears in the text\n"
+             "2. Determine its correct type (Organization, Concept, Event, Location, Person, Asset, Document)\n"
+             "3. Extract the context where it's mentioned\n\n"
+             "## Output Format\n"
+             "Your output MUST be a valid JSON object with this structure:\n"
+             "{{\n"
+             '  "entities": [\n'
+             '    {{"name": "Allies", "type": "Organization", "context": "The Allies and Axis powers were the two main opposing military alliances"}},\n'
+             '    {{"name": "Axis powers", "type": "Organization", "context": "the Allies and Axis powers were the two main opposing military alliances"}}\n'
+             "  ],\n"
+             '  "links": []\n'
+             "}}\n\n"
+             "## CRITICAL INSTRUCTIONS:\n"
+             "1. Extract ONLY the missing entities listed above - do NOT extract other entities\n"
+             "2. Do NOT extract links - leave the links array empty\n"
+             "3. Use exact entity names as they appear in the text\n"
+             "4. The 'context' field must contain the exact sentence or phrase where the entity was mentioned\n"
+             "5. Do NOT add markdown formatting (no ```json blocks) - output raw JSON only\n"
+             "6. If a missing entity cannot be found in the text, omit it from the output\n"
+             "7. Determine the appropriate type based on context (e.g., military alliances → Organization, ideologies → Concept)"),
+            ("human", "User Query Context: {query}\n\nText to analyze:\n{text}")
+        ])
 
     def extract(self, text: str, query: str = "") -> Optional[OntologyDelta]:
         """ Extracts entities and links from the response text. """
@@ -123,6 +155,77 @@ class OntologyExtractorService:
             if 'data' in locals():
                 logger.debug(f"[ONTOLOGY_EXTRACTOR] Parsed data that failed validation: {data}")
             return None
+
+    def extract_missing_entities(self, text: str, missing_names: List[str], query: str = "") -> List[OntologyDeltaEntity]:
+        """
+        Extract only the specified missing entities from text.
+        
+        Use case: Links reference entities that weren't extracted in pass 1.
+        This method performs targeted extraction to recover gap entities.
+        
+        Args:
+            text: The source text to analyze
+            missing_names: List of entity names that need to be extracted
+            query: Optional user query context
+            
+        Returns:
+            List of extracted entities (only the missing ones)
+        """
+        if not text.strip() or not missing_names:
+            logger.warning("[ONTOLOGY_EXTRACTOR] Empty text or missing names for gap extraction")
+            return []
+
+        logger.info(f"[ONTOLOGY_EXTRACTOR] Starting gap extraction for {len(missing_names)} entities: {missing_names}")
+
+        # Format missing entities as a bulleted list for the prompt
+        missing_entities_str = "\n".join(f"- \"{name}\"" for name in missing_names)
+
+        try:
+            chain = self.gap_prompt | self.llm.bind(format="json")
+            response = chain.invoke({
+                "query": query,
+                "text": text,
+                "missing_entities": missing_entities_str
+            })
+            content = response.content
+
+            # Log raw response for debugging
+            logger.debug(f"[ONTOLOGY_EXTRACTOR] Raw gap extraction response ({len(content)} chars): {content[:500]}...")
+
+            # Clean possible markdown
+            if content.startswith("```json"):
+                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown json code block")
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif content.startswith("```"):
+                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown code block")
+                content = content.split("```")[1].split("```")[0].strip()
+
+            data = json.loads(content)
+            entities_data = data.get("entities", [])
+            logger.debug(f"[ONTOLOGY_EXTRACTOR] Parsed gap JSON: {len(entities_data)} entities")
+
+            # Validate and return entities
+            result = OntologyDelta.model_validate(data)
+            logger.info(f"[ONTOLOGY_EXTRACTOR] ✓ Gap extraction successful: {len(result.entities)} entities recovered")
+            
+            # Log which missing entities were found
+            found_names = [e.name for e in result.entities]
+            not_found = set(n.lower() for n in missing_names) - set(n.lower() for n in found_names)
+            if not_found:
+                logger.warning(f"[ONTOLOGY_EXTRACTOR] Could not find these entities in text: {not_found}")
+            
+            return result.entities
+            
+        except json.JSONDecodeError as json_err:
+            logger.error(f"[ONTOLOGY_EXTRACTOR] ✗ Gap extraction JSON parsing failed: {json_err}")
+            logger.exception("[ONTOLOGY_EXTRACTOR] JSON decode stack trace:")
+            logger.error(f"[ONTOLOGY_EXTRACTOR] Invalid JSON content: {content[:1000] if 'content' in locals() else 'N/A'}...")
+            return []
+        except Exception as e:
+            logger.error(f"[ONTOLOGY_EXTRACTOR] ✗ Gap extraction failed: {e}")
+            logger.exception("[ONTOLOGY_EXTRACTOR] Gap extraction stack trace:")
+            return []
+
 
 def get_ontology_extractor() -> OntologyExtractorService:
     from app.core.di_llm import get_llm
