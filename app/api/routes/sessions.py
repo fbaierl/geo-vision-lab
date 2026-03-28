@@ -171,18 +171,36 @@ async def update_session(thread_id: str, data: SessionUpdate):
     }
 
 
+@router.delete("")
+async def delete_all_sessions():
+    """
+    Delete all sessions (bulk operation).
+    
+    Returns the count of deleted sessions.
+    """
+    db = get_database()
+
+    result = db.sessions.delete_many({})
+
+    return {
+        "status": "success",
+        "deleted": True,
+        "deleted_count": result.deleted_count
+    }
+
+
 @router.delete("/{thread_id}")
 async def delete_session(thread_id: str):
     """
     Delete a session (instant, no confirmation).
     """
     db = get_database()
-    
+
     result = db.sessions.delete_one({"thread_id": thread_id})
-    
+
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail=f"Session {thread_id} not found")
-    
+
     return {"status": "success", "deleted": True}
 
 

@@ -1106,6 +1106,36 @@ html, body {
     letter-spacing: 0.5px;
 }
 
+.sessions-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.clear-all-sessions-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.clear-all-sessions-btn:hover {
+    background: var(--error);
+    border-color: var(--error);
+    color: white;
+}
+
+.clear-all-sessions-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
 .new-session-btn {
     display: flex;
     align-items: center;

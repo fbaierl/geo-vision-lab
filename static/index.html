@@ -166,12 +166,22 @@
                 <div class="sessions-section">
                     <div class="sessions-header">
                         <span class="sessions-title">Sessions</span>
-                        <button class="new-session-btn" id="new-session-btn" title="New Session">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                        </button>
+                        <div class="sessions-actions">
+                            <button class="clear-all-sessions-btn" id="clear-all-sessions-btn" title="Clear All Sessions">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                            </button>
+                            <button class="new-session-btn" id="new-session-btn" title="New Session">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="sessions-list" id="sessions-list">
                         <!-- Dynamically populated -->
@@ -2257,10 +2267,15 @@
                 
                 // Load sessions for sidebar
                 this.loadSessions();
-                
+
                 // New session button
                 document.getElementById('new-session-btn')?.addEventListener('click', () => {
                     this.createNewSession();
+                });
+
+                // Clear all sessions button
+                document.getElementById('clear-all-sessions-btn')?.addEventListener('click', () => {
+                    this.clearAllSessions();
                 });
             }
 
@@ -2418,11 +2433,11 @@
                     const response = await fetch(`/api/sessions/${threadId}`, {
                         method: 'DELETE'
                     });
-                    
+
                     if (!response.ok) throw new Error('Failed to delete session');
-                    
+
                     console.log('[SESSION] Deleted session:', threadId);
-                    
+
                     // If deleting current session, create new one
                     if (threadId === this.currentThreadId) {
                         this.createNewSession();
@@ -2432,6 +2447,28 @@
                     }
                 } catch (error) {
                     console.error('[SESSION] Error deleting session:', error);
+                }
+            }
+
+            async clearAllSessions() {
+                if (!confirm('Are you sure you want to delete all sessions? This cannot be undone.')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/sessions', {
+                        method: 'DELETE'
+                    });
+
+                    if (!response.ok) throw new Error('Failed to clear all sessions');
+
+                    const result = await response.json();
+                    console.log('[SESSION] Cleared all sessions:', result.deleted_count, 'sessions deleted');
+
+                    // Create a new session after clearing all
+                    this.createNewSession();
+                } catch (error) {
+                    console.error('[SESSION] Error clearing all sessions:', error);
                 }
             }
 
