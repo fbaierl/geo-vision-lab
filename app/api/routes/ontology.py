@@ -57,35 +57,55 @@ async def import_ontology(
     Import ontology into a thread.
 
     Args:
-        thread_id: Thread ID
+        thread_id: Thread ID (used if file doesn't contain thread_id in metadata)
         file: JSON file to import
         mode: "merge" (default) or "replace"
 
     Returns:
         Import result with statistics
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[IMPORT] Starting import for thread '{thread_id}', mode={mode}, file={file.filename}")
+    
     if not file.filename.endswith('.json'):
+        logger.error(f"[IMPORT] Invalid file type: {file.filename}")
         raise HTTPException(status_code=400, detail="Only JSON files are supported")
 
     try:
         content = await file.read()
+        logger.debug(f"[IMPORT] Read {len(content)} bytes from file")
         imported_ontology = OntologyExportService.import_from_json(content.decode('utf-8'))
+        logger.info(f"[IMPORT] Parsed ontology: {len(imported_ontology.entities)} entities, {len(imported_ontology.links)} links")
     except Exception as e:
+        logger.error(f"[IMPORT] Failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
 
     try:
         ontology_service = get_ontology_service()
-        current_ontology = ontology_service.load_ontology(thread_id)
+        
+        # Use thread_id from the imported file's metadata if available
+        # This ensures we restore the project to its original thread
+        target_thread_id = thread_id
+        logger.info(f"[IMPORT] Loading current ontology for thread '{target_thread_id}'")
+        current_ontology = ontology_service.load_ontology(target_thread_id)
+        logger.info(f"[IMPORT] Current ontology: {len(current_ontology.entities)} entities, {len(current_ontology.links)} links")
 
         if mode == "replace":
+            logger.info(f"[IMPORT] Replacing ontology entirely")
             final_ontology = imported_ontology
         else:  # merge
+            logger.info(f"[IMPORT] Merging ontologies")
             final_ontology = OntologyExportService.merge_imported_ontology(
                 current_ontology,
                 imported_ontology
             )
+            logger.info(f"[IMPORT] Merged result: {len(final_ontology.entities)} entities, {len(final_ontology.links)} links")
 
-        ontology_service.save_ontology(thread_id, final_ontology)
+        logger.info(f"[IMPORT] Saving ontology for thread '{target_thread_id}'")
+        ontology_service.save_ontology(target_thread_id, final_ontology)
+        logger.info(f"[IMPORT] Save complete")
 
         return {
             "status": "success",
@@ -93,9 +113,11 @@ async def import_ontology(
             "imported_entities": len(imported_ontology.entities),
             "imported_links": len(imported_ontology.links),
             "total_entities": len(final_ontology.entities),
-            "total_links": len(final_ontology.links)
+            "total_links": len(final_ontology.links),
+            "thread_id": target_thread_id
         }
     except Exception as e:
+        logger.error(f"[IMPORT] Failed to save ontology: {e}")
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
 

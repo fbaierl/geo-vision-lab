@@ -249,7 +249,7 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"[ONTOLOGY_SUBGRAPH] ✗ Sub-graph failed: {e}")
-        logger.exception(f"[ONTOLOGY_SUBGRAPH] Full stack trace:")
+        logger.exception("[ONTOLOGY_SUBGRAPH] Full stack trace:")
         logger.error(f"[ONTOLOGY_SUBGRAPH] Assistant response length: {len(assistant_response)} chars")
         logger.debug(f"[ONTOLOGY_SUBGRAPH] Assistant response preview: {assistant_response[:500]}...")
         return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
@@ -478,10 +478,10 @@ async def process_query_stream(
                                 return e.model_dump(mode='json')
                             return e
                             
-                        def serialize_link(l):
-                            if hasattr(l, "model_dump"):
-                                return l.model_dump(mode='json')
-                            return l
+                        def serialize_link(link_obj):
+                            if hasattr(link_obj, "model_dump"):
+                                return link_obj.model_dump(mode='json')
+                            return link_obj
 
                         yield {
                             "type": "ontology_updated",
@@ -637,3 +637,56 @@ async def process_query_stream(
                 }
             yield {"type": "done"}
             done_sent = True
+        
+        # Auto-save session to MongoDB after query completes
+        try:
+            # Get final state from the graph
+            final_state = await app_graph.aget_state(config)
+            messages = final_state.values.get("messages", [])
+            ontology_state = final_state.values.get("ontology", {})
+            
+            # Convert messages to serializable format
+            serializable_messages = []
+            for msg in messages:
+                if hasattr(msg, "model_dump"):
+                    serializable_messages.append(msg.model_dump())
+                elif hasattr(msg, "dict"):
+                    serializable_messages.append(msg.dict())
+                else:
+                    serializable_messages.append({"content": str(msg), "role": "unknown"})
+            
+            # Convert ontology to serializable format
+            serializable_ontology = {"entities": {}, "links": {}}
+            if ontology_state:
+                if hasattr(ontology_state, "model_dump"):
+                    serializable_ontology = ontology_state.model_dump(mode='json')
+                elif hasattr(ontology_state, "entities") and hasattr(ontology_state, "links"):
+                    serializable_ontology["entities"] = {
+                        str(k): v.model_dump(mode='json') if hasattr(v, "model_dump") else str(v)
+                        for k, v in ontology_state.entities.items()
+                    }
+                    serializable_ontology["links"] = {
+                        str(k): v.model_dump(mode='json') if hasattr(v, "model_dump") else str(v)
+                        for k, v in ontology_state.links.items()
+                    }
+            
+            # Save to MongoDB via sessions endpoint
+            import httpx
+            from app.core.config import settings
+            
+            async with httpx.AsyncClient() as client:
+                save_url = f"http://localhost:8000/api/sessions/{thread_id}/save"
+                save_data = {
+                    "messages": serializable_messages,
+                    "ontology": serializable_ontology
+                }
+                response = await client.post(save_url, json=save_data, timeout=10.0)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"[AUTO-SAVE] Session saved: {result.get('message_count')} messages, {result.get('entity_count')} entities, {result.get('link_count')} links")
+                else:
+                    logger.error(f"[AUTO-SAVE] Failed to save session: {response.status_code} - {response.text}")
+        except Exception as save_error:
+            logger.error(f"[AUTO-SAVE] Error saving session: {save_error}")
+            # Don't propagate error - auto-save is best effort

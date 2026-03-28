@@ -6,7 +6,16 @@ Provides dependency injection overrides for testing.
 
 import pytest
 from unittest.mock import MagicMock
+from fastapi.testclient import TestClient
 from app.core.di import container
+from app.main import app
+
+
+@pytest.fixture
+def client():
+    """Create a test client for the FastAPI app."""
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(autouse=True)
