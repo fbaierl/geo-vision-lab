@@ -358,7 +358,6 @@ async def process_query_stream(
     done_sent = False
 
     # Emit vector search status immediately (mandatory first step)
-    from app.core.config import settings
     yield {
         "type": "status",
         "phase": "vector_search",
@@ -758,7 +757,6 @@ async def process_query_stream(
             
             # Save to MongoDB via sessions endpoint
             import httpx
-            from app.core.config import settings
             
             async with httpx.AsyncClient() as client:
                 save_url = f"http://localhost:8000/api/sessions/{thread_id}/save"

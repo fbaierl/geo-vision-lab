@@ -6,7 +6,6 @@ Extracts full Entities (People, Orgs, Locations, Events) and their Links.
 import logging
 from typing import Optional, List
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
 import json
 
