@@ -16,6 +16,10 @@ NODE_REVIEWER = "reviewer"
 NODE_ONTOLOGY_EXTRACTOR = "ontology_extractor"
 NODE_LOCATION_PRIORITIZER = "location_prioritizer"
 
+# RAG Subgraph nodes
+NODE_RAG_SUBGRAPH = "rag_subgraph"
+NODE_GRADER = "grader"
+
 
 # =============================================================================
 # Event Types for Streaming
@@ -75,3 +79,10 @@ STATE_KEY_VALIDATION_ATTEMPTS = "validation_attempts"
 STATE_KEY_IS_VALID = "is_valid"
 STATE_KEY_VECTOR_SEARCH_RESULTS = "vector_search_results"
 STATE_KEY_ONTOLOGY = "ontology"
+
+# RAG Subgraph state keys
+STATE_KEY_RAG_QUERY = "rag_query"
+STATE_KEY_RAG_QUALITY = "rag_quality"
+STATE_KEY_RAG_CONTEXT = "rag_context"
+STATE_KEY_RAG_HINT = "rag_hint"
+STATE_KEY_RETRIEVED_DOCS = "retrieved_docs"  # For re-ranker candidates

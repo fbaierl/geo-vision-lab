@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     VECTOR_INDEX_NAME: str = "vector_index"
     EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 produces 384-dim vectors
 
+    # --- RAG Features (Runtime Toggles) ---
+    RAG_GRADER_ENABLED: bool = True  # Enable/disable context grading
+    RAG_RERANKER_ENABLED: bool = False  # Enable/disable BGE re-ranker
+    RAG_RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RAG_RERANKER_TOP_K: int = 3  # Final results after re-ranking
+    RAG_RERANKER_CANDIDATES_K: int = 20  # Candidates to retrieve for re-ranking
+
     # --- Security ---
     SECRET_KEY: str = "changeme_in_production"
     API_KEY: Optional[str] = None
@@ -96,6 +103,24 @@ class Settings(BaseSettings):
     def is_groq_api_key_configured(self) -> bool:
         """Check if Groq API key is configured."""
         return bool(self.GROQ_API_KEY and self.GROQ_API_KEY.strip())
+
+    def set_rag_grader_enabled(self, enabled: bool) -> None:
+        """Enable or disable RAG grader at runtime."""
+        self.RAG_GRADER_ENABLED = enabled
+
+    def set_rag_reranker_enabled(self, enabled: bool) -> None:
+        """Enable or disable RAG re-ranker at runtime."""
+        self.RAG_RERANKER_ENABLED = enabled
+
+    def get_rag_config(self) -> dict:
+        """Get current RAG configuration."""
+        return {
+            "grader_enabled": self.RAG_GRADER_ENABLED,
+            "reranker_enabled": self.RAG_RERANKER_ENABLED,
+            "reranker_model": self.RAG_RERANKER_MODEL,
+            "reranker_top_k": self.RAG_RERANKER_TOP_K,
+            "reranker_candidates_k": self.RAG_RERANKER_CANDIDATES_K,
+        }
 
 
 @lru_cache()

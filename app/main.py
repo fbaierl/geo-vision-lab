@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
-from app.api.routes import chat, health, models, ontology, sessions
+from app.api.routes import chat, health, models, ontology, sessions, rag_config
 from app.api.routes import settings as settings_router
 
 
@@ -63,6 +63,7 @@ app.include_router(models.router, tags=["models"])
 app.include_router(settings_router.router, tags=["settings"])
 app.include_router(ontology.router, tags=["ontology"])
 app.include_router(sessions.router, tags=["sessions"])
+app.include_router(rag_config.router, tags=["rag"])
 
 # Ensure static directories exist
 os.makedirs("static", exist_ok=True)

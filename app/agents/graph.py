@@ -10,13 +10,15 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.tools import tools
+from app.agents.rag_subgraph import run_rag_subgraph
 from app.core.di_llm import get_llm
 from app.core.di_services import get_vector_store
 from app.core.constants import (
-    NODE_VECTOR_SEARCH, NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
-    NODE_ONTOLOGY_EXTRACTOR,
+    NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
+    NODE_ONTOLOGY_EXTRACTOR, NODE_RAG_SUBGRAPH,
     VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
     STATE_KEY_ONTOLOGY, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
+    STATE_KEY_RAG_CONTEXT, STATE_KEY_RAG_QUALITY, STATE_KEY_RAG_HINT,
 )
 from app.agents.ontology_subgraph import ontology_subgraph
 from app.models.ontology import SessionOntology
@@ -41,7 +43,9 @@ You have access to intel feeds:
 2. `web_search`: For Wikipedia summaries of background information on active geopolitics.
 3. `duckduckgo_search`: For live web search results regarding current events and general queries.
 
-The archival intelligence from vector search is automatically injected into your context. Review it first, then use additional tools if you need live or updated information.
+The archival intelligence from vector search is automatically injected into your context when relevant. Review it first, then use additional tools if you need live or updated information.
+
+If archival search found no relevant information, you will see a NOTE telling you to use web search tools.
 
 Respond in a clear, brief, unclassified military-style format, avoiding robotic language. Always summarize the intel you found.
 
@@ -122,12 +126,20 @@ def call_model(state: AgentState):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     time_prompt = f"\n\nCURRENT SYSTEM TIME: {current_time}. Keep this in mind for time-sensitive queries."
 
-    # Inject vector search results into the context
-    vector_results = state.get("vector_search_results", "")
+    # Inject RAG context (from RAG subgraph) into the agent prompt
+    rag_context = state.get(STATE_KEY_RAG_CONTEXT, "")
+    rag_hint = state.get(STATE_KEY_RAG_HINT, "")
+    
     vector_context = ""
-    if vector_results:
-        vector_context = f"\n\n---\nARCHIVAL INTELLIGENCE (from vector search):\n{vector_results}\n---\n\n"
-        logger.info("[AGENT] Vector search results injected into context")
+    if rag_context:
+        vector_context = f"\n\n---\nARCHIVAL INTELLIGENCE (from vector search):\n{rag_context}\n---\n\n"
+        logger.info("[AGENT] RAG context injected (RELEVANT or PARTIALLY_RELEVANT)")
+    elif rag_hint:
+        # Context was irrelevant, add hint to prompt
+        vector_context = f"\n\n---\n{rag_hint}\n---\n\n"
+        logger.info("[AGENT] RAG hint injected (context was IRRELEVANT)")
+    else:
+        logger.info("[AGENT] No RAG context or hint available")
 
     messages = [SystemMessage(content=system_msg + vector_context + time_prompt)] + list(
         state["messages"]
@@ -266,22 +278,74 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
         return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
 
 
+def run_rag_subgraph_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Run the RAG subgraph to retrieve and grade context.
+    
+    This wraps the RAG subgraph and maps state between main graph and sub-graph.
+    """
+    logger.info("=" * 80)
+    logger.info("[RAG_SUBGRAPH_NODE] Starting RAG subgraph")
+    logger.info("=" * 80)
+    
+    # Extract user query from the first HumanMessage
+    user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
+    if not user_msgs:
+        logger.warning("[RAG_SUBGRAPH_NODE] No user message found")
+        return {
+            STATE_KEY_RAG_QUALITY: "IRRELEVANT",
+            STATE_KEY_RAG_CONTEXT: "",
+            STATE_KEY_RAG_HINT: "NOTE: No query provided."
+        }
+    
+    query = user_msgs[0].content
+    logger.info(f"[RAG_SUBGRAPH_NODE] Query: '{query}'")
+    
+    try:
+        # Run the RAG subgraph
+        rag_result = run_rag_subgraph(query)
+        
+        rag_quality = rag_result.get("rag_quality", "IRRELEVANT")
+        rag_context = rag_result.get("rag_context", "")
+        rag_hint = rag_result.get("rag_hint", "")
+        
+        logger.info(f"[RAG_SUBGRAPH_NODE] RAG quality: {rag_quality}")
+        logger.info(f"[RAG_SUBGRAPH_NODE] Context length: {len(rag_context) if rag_context else 0} chars")
+        logger.info(f"[RAG_SUBGRAPH_NODE] Hint: {'Yes' if rag_hint else 'No'}")
+        
+        return {
+            STATE_KEY_RAG_QUALITY: rag_quality,
+            STATE_KEY_RAG_CONTEXT: rag_context,
+            STATE_KEY_RAG_HINT: rag_hint
+        }
+        
+    except Exception as e:
+        logger.error(f"[RAG_SUBGRAPH_NODE] RAG subgraph failed: {e}")
+        logger.exception("[RAG_SUBGRAPH_NODE] Full stack trace:")
+        # Return safe defaults on error
+        return {
+            STATE_KEY_RAG_QUALITY: "IRRELEVANT",
+            STATE_KEY_RAG_CONTEXT: "",
+            STATE_KEY_RAG_HINT: "NOTE: Archival search encountered an error. Use web search tools for information."
+        }
+
+
 def get_graph():
     checkpointer = MemorySaver()
     workflow = StateGraph(AgentState)
 
     # Add nodes
-    workflow.add_node(NODE_VECTOR_SEARCH, vector_search_node)
+    workflow.add_node(NODE_RAG_SUBGRAPH, run_rag_subgraph_node)
     workflow.add_node(NODE_AGENT, call_model)
     workflow.add_node(NODE_TOOLS, ToolNode(tools))
     workflow.add_node(NODE_REVIEWER, review_response)
     workflow.add_node(NODE_ONTOLOGY_EXTRACTOR, run_ontology_subgraph)
 
-    # Set entry point to vector_search (mandatory first step)
-    workflow.set_entry_point(NODE_VECTOR_SEARCH)
+    # Set entry point to RAG subgraph (mandatory first step)
+    workflow.set_entry_point(NODE_RAG_SUBGRAPH)
 
-    # Vector search always flows to agent
-    workflow.add_edge(NODE_VECTOR_SEARCH, NODE_AGENT)
+    # RAG subgraph always flows to agent (with context or hint)
+    workflow.add_edge(NODE_RAG_SUBGRAPH, NODE_AGENT)
 
     # Agent decides whether to use tools or go to reviewer
     workflow.add_conditional_edges(NODE_AGENT, should_continue)
@@ -357,11 +421,11 @@ async def process_query_stream(
     streaming_started = False
     done_sent = False
 
-    # Emit vector search status immediately (mandatory first step)
+    # Emit RAG subgraph status immediately (mandatory first step)
     yield {
         "type": "status",
-        "phase": "vector_search",
-        "tool": "vector_search",
+        "phase": "rag_retrieval",
+        "tool": "rag_subgraph",
         "query": user_query,
     }
 
@@ -399,6 +463,14 @@ async def process_query_stream(
                 }
                 return  # Stop processing
 
+            if kind == "on_chain_start":
+                # Capture RAG subgraph and grader phases
+                node_name = event.get("name", "")
+                if node_name == "rag_subgraph":
+                    yield {"type": "status", "phase": "rag_retrieval", "tool": "RAG Subgraph"}
+                elif node_name == "grader":
+                    yield {"type": "status", "phase": "rag_grading", "tool": "Grader"}
+            
             if kind == "on_chat_model_start":
                 active_model = _get_active_model_name()
                 if "reviewer" in tags:
@@ -434,18 +506,25 @@ async def process_query_stream(
                 }
 
             elif kind == "on_chain_end":
-                # Capture vector_search_node completion via chain events
-                if event.get("name") == "vector_search":
+                # Capture RAG subgraph completion
+                if event.get("name") == "rag_subgraph":
                     output = event.get("data", {}).get("output", {})
-                    results = output.get("vector_search_results", "") if isinstance(output, dict) else str(output)
-                    if results and isinstance(results, str) and results.strip():
-                        has_data = "No archival data" not in results and "error" not in results.lower()
-                        yield {
-                            "type": "tool_result",
-                            "tool": "vector_search",
-                            "summary": "Archival intelligence retrieved" if has_data else "No archival data found",
-                            "content": results,
-                        }
+                    rag_quality = output.get(STATE_KEY_RAG_QUALITY, "IRRELEVANT")
+                    _ = output.get(STATE_KEY_RAG_CONTEXT, "")  # Used internally
+                    rag_hint = output.get(STATE_KEY_RAG_HINT, "")
+                    
+                    if rag_quality == "IRRELEVANT":
+                        summary = "No relevant archival data found"
+                    else:
+                        summary = f"Archival intelligence retrieved (Quality: {rag_quality})"
+                    
+                    yield {
+                        "type": "rag_result",
+                        "tool": "RAG Subgraph",
+                        "summary": summary,
+                        "quality": rag_quality,
+                        "hint": rag_hint,
+                    }
 
                 # Capture reviewer result - check for various possible node names
                 node_name = event.get("name", "")
