@@ -7,6 +7,7 @@ import logging
 from typing import Optional, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
 import json
 
 from app.models.ontology import OntologyDelta, OntologyDeltaEntity
@@ -14,9 +15,10 @@ from app.models.ontology import OntologyDelta, OntologyDeltaEntity
 logger = logging.getLogger("agent_flow")
 
 class OntologyExtractorService:
-    def __init__(self, llm: ChatOllama):
+    def __init__(self, llm):
         self.llm = llm
-        
+        self.is_groq = isinstance(llm, ChatGroq)
+
         # We use a formal structured system prompt with concrete examples.
         # The model must replace ALL placeholder values with actual extracted data.
         # Note: All JSON curly braces are escaped with double braces {{}} for LangChain template safety.
@@ -57,13 +59,15 @@ class OntologyExtractorService:
              "IMPORTANT: You are NOT limited to the predefined types above. Feel free to discover and use additional relationship types that accurately capture the semantic connections between entities in the text. Use clear, descriptive relationship names in CAPS_SNAKE_CASE format (e.g., MARRIED_TO, SIBLING_OF, STUDIED_AT, WORKED_ON, INFLUENCED_BY, INSPIRED_BY, DERIVED_FROM, EVOLVED_INTO, PRECEDED_BY, SUCCEEDED_BY, etc.). The goal is to accurately represent the relationships found in the text, even if they don't match the predefined list."),
             ("human", "User Query Context: {query}\n\nText to analyze:\n{text}")
         ])
-        
+
         # Try to use formal structured output if the model supports it well
-        try:
-            self.structured_llm = self.llm.with_structured_output(OntologyDelta)
-        except NotImplementedError:
-            self.structured_llm = None
-            logger.warning("Structured output not natively supported by this LLM wrapper. Will fallback to JSON parsing.")
+        # Skip structured output for Groq as it doesn't support it well
+        self.structured_llm = None
+        if not self.is_groq:
+            try:
+                self.structured_llm = self.llm.with_structured_output(OntologyDelta)
+            except NotImplementedError:
+                logger.warning("Structured output not natively supported by this LLM wrapper. Will fallback to JSON parsing.")
 
         # Gap extraction prompt - specialized for extracting only missing entities
         self.gap_prompt = ChatPromptTemplate.from_messages([
@@ -105,7 +109,8 @@ class OntologyExtractorService:
 
         logger.info("[ONTOLOGY_EXTRACTOR] Starting extraction...")
 
-        if self.structured_llm:
+        # Use native structured output only for Ollama (Groq doesn't support it well)
+        if self.structured_llm and not self.is_groq:
             try:
                 # Use native structured output
                 chain = self.prompt | self.structured_llm
@@ -118,11 +123,17 @@ class OntologyExtractorService:
                 logger.exception("[ONTOLOGY_EXTRACTOR] Structured extraction stack trace:")
                 # Fallback to standard generation
 
-        # Fallback manual parsing
+        # Fallback manual parsing (used for Groq or when structured output fails)
         try:
             logger.info("[ONTOLOGY_EXTRACTOR] Attempting fallback JSON parsing...")
-            # Force JSON format if structured_llm failed or isn't available
-            fallback_llm = self.llm.bind(format="json")
+            # For Ollama, we can use format="json", but Groq doesn't support it
+            if self.is_groq:
+                # Groq: use regular LLM with strong JSON instruction in prompt
+                fallback_llm = self.llm
+            else:
+                # Ollama: use format="json" for better JSON compliance
+                fallback_llm = self.llm.bind(format="json")
+            
             chain = self.prompt | fallback_llm
             response = chain.invoke({"query": query, "text": text})
             content = response.content
@@ -140,7 +151,7 @@ class OntologyExtractorService:
 
             data = json.loads(content)
             logger.debug(f"[ONTOLOGY_EXTRACTOR] Parsed JSON: {len(data.get('entities', []))} entities, {len(data.get('links', []))} links")
-            
+
             result = OntologyDelta.model_validate(data)
             logger.info(f"[ONTOLOGY_EXTRACTOR] ✓ Fallback extraction successful: {len(result.entities)} entities, {len(result.links)} links")
             return result
@@ -159,15 +170,15 @@ class OntologyExtractorService:
     def extract_missing_entities(self, text: str, missing_names: List[str], query: str = "") -> List[OntologyDeltaEntity]:
         """
         Extract only the specified missing entities from text.
-        
+
         Use case: Links reference entities that weren't extracted in pass 1.
         This method performs targeted extraction to recover gap entities.
-        
+
         Args:
             text: The source text to analyze
             missing_names: List of entity names that need to be extracted
             query: Optional user query context
-            
+
         Returns:
             List of extracted entities (only the missing ones)
         """
@@ -181,7 +192,15 @@ class OntologyExtractorService:
         missing_entities_str = "\n".join(f"- \"{name}\"" for name in missing_names)
 
         try:
-            chain = self.gap_prompt | self.llm.bind(format="json")
+            # For Ollama, we can use format="json", but Groq doesn't support it
+            if self.is_groq:
+                # Groq: use regular LLM with strong JSON instruction in prompt
+                gap_llm = self.llm
+            else:
+                # Ollama: use format="json" for better JSON compliance
+                gap_llm = self.llm.bind(format="json")
+            
+            chain = self.gap_prompt | gap_llm
             response = chain.invoke({
                 "query": query,
                 "text": text,
@@ -207,15 +226,15 @@ class OntologyExtractorService:
             # Validate and return entities
             result = OntologyDelta.model_validate(data)
             logger.info(f"[ONTOLOGY_EXTRACTOR] ✓ Gap extraction successful: {len(result.entities)} entities recovered")
-            
+
             # Log which missing entities were found
             found_names = [e.name for e in result.entities]
             not_found = set(n.lower() for n in missing_names) - set(n.lower() for n in found_names)
             if not_found:
                 logger.warning(f"[ONTOLOGY_EXTRACTOR] Could not find these entities in text: {not_found}")
-            
+
             return result.entities
-            
+
         except json.JSONDecodeError as json_err:
             logger.error(f"[ONTOLOGY_EXTRACTOR] ✗ Gap extraction JSON parsing failed: {json_err}")
             logger.exception("[ONTOLOGY_EXTRACTOR] JSON decode stack trace:")

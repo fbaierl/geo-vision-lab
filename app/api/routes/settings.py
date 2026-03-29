@@ -23,15 +23,19 @@ class SettingsResponse(BaseModel):
     local_llm_enabled: bool
     current_local_model: str
     available_local_models: list[str]
-    
+
     # Online LLM settings
     online_llm_enabled: bool
     current_online_model: str
     available_online_models: list[str]
     groq_api_key_configured: bool
-    
+
     # Combined model list for UI
     all_models: list[dict]
+    
+    # Actual active model name (for display purposes)
+    active_model_name: str
+    active_model_type: str  # "local" or "online"
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -78,7 +82,11 @@ async def get_settings():
             "provider": "Groq",
             "current": model == settings.ONLINE_LLM_MODEL_NAME and settings.USE_ONLINE_LLM
         })
-    
+
+    # Determine active model name and type
+    active_model_name = settings.ONLINE_LLM_MODEL_NAME if settings.USE_ONLINE_LLM else settings.REASONING_LLM_MODEL_NAME
+    active_model_type = "online" if settings.USE_ONLINE_LLM else "local"
+
     return SettingsResponse(
         local_llm_enabled=not settings.USE_ONLINE_LLM,
         current_local_model=settings.REASONING_LLM_MODEL_NAME,
@@ -87,7 +95,9 @@ async def get_settings():
         current_online_model=settings.ONLINE_LLM_MODEL_NAME,
         available_online_models=settings.AVAILABLE_ONLINE_MODELS,
         groq_api_key_configured=settings.is_groq_api_key_configured(),
-        all_models=all_models
+        all_models=all_models,
+        active_model_name=active_model_name,
+        active_model_type=active_model_type
     )
 
 

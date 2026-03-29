@@ -1009,6 +1009,12 @@
                 if (data.all_models) {
                     modelMenu.innerHTML = ''; // Clear default static options
 
+                    // Update model selector display with active model name
+                    if (data.active_model_name) {
+                        currentModelDisplay.textContent = data.active_model_name;
+                        currentModel = data.active_model_name;
+                    }
+
                     // Add Online LLM toggle at the top
                     const toggleContainer = document.createElement('div');
                     toggleContainer.className = 'model-llm-toggle';
@@ -1244,15 +1250,25 @@
                 const gpuPill = document.getElementById('pill-gpu');
                 const gpuStatus = document.getElementById('gpu-status');
 
-                if (data.gpu_engaged) {
+                // Use new status enum
+                if (data.status === 'processing') {
+                    gpuPill.className = 'status-pill gpu-active';
+                    gpuStatus.textContent = 'Processing';
+                } else if (data.status === 'loading_model') {
+                    gpuPill.className = 'status-pill gpu-standby';
+                    gpuStatus.textContent = 'Loading Model...';
+                } else if (data.status === 'ready' || data.model_loaded) {
                     gpuPill.className = 'status-pill gpu-active';
                     gpuStatus.textContent = 'GPU Active';
-                } else if (data.gpu_available || data.reason === 'gpu_standby') {
+                } else if (data.status === 'idle' || data.gpu_available) {
                     gpuPill.className = 'status-pill gpu-standby';
                     gpuStatus.textContent = 'GPU Standby';
-                } else {
+                } else if (data.status === 'error' || !data.gpu_available) {
                     gpuPill.className = 'status-pill gpu-inactive';
-                    gpuStatus.textContent = 'CPU Only';
+                    gpuStatus.textContent = 'GPU Unavailable';
+                } else {
+                    gpuPill.className = 'status-pill gpu-standby';
+                    gpuStatus.textContent = 'GPU Standby';
                 }
             } catch (e) {
                 console.warn('Failed to fetch GPU status:', e);
@@ -1444,6 +1460,101 @@
             errorStep.innerHTML = errorHTML;
             reasoningContent.appendChild(errorStep);
             reasoningContent.scrollTop = reasoningContent.scrollHeight;
+        }
+
+        // Thinking panel functions for live reasoning display
+        let thinkingPanels = [];  // Track all thinking panels
+        let currentThinkingPanel = null;  // Currently active thinking panel
+        let currentThinkingPanelContent = null;
+        let currentThinkingPanelHeader = null;
+        let thinkingSessionCounter = 0;  // Unique ID counter for thinking sessions
+
+        function showThinkingPanel() {
+            // Remove placeholder if it exists
+            if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
+            if (reasoningLoading) reasoningLoading.style.display = 'none';
+
+            // Increment session counter for unique identification
+            thinkingSessionCounter++;
+
+            // Create a new thinking panel for each thinking_start event
+            const thinkingPanel = document.createElement('div');
+            thinkingPanel.className = 'thinking-panel';
+            thinkingPanel.id = `thinking-panel-${thinkingSessionCounter}`;
+
+            const thinkingPanelHeader = document.createElement('div');
+            thinkingPanelHeader.className = 'thinking-header';
+            thinkingPanelHeader.innerHTML = `
+                <span class="thinking-header-icon">🧠</span>
+                <span class="thinking-header-label">THINKING</span>
+                <span class="thinking-header-toggle">▼</span>
+            `;
+
+            const thinkingPanelContent = document.createElement('div');
+            thinkingPanelContent.className = 'thinking-body';
+
+            thinkingPanel.appendChild(thinkingPanelHeader);
+            thinkingPanel.appendChild(thinkingPanelContent);
+            reasoningContent.appendChild(thinkingPanel);
+
+            // Store reference to current panel for streaming
+            currentThinkingPanel = thinkingPanel;
+            currentThinkingPanelHeader = thinkingPanelHeader;
+            currentThinkingPanelContent = thinkingPanelContent;
+
+            // Track this panel
+            thinkingPanels.push({
+                panel: thinkingPanel,
+                header: thinkingPanelHeader,
+                content: thinkingPanelContent,
+                completed: false
+            });
+
+            // Add toggle functionality
+            thinkingPanelHeader.addEventListener('click', () => {
+                if (thinkingPanelContent.style.display === 'none') {
+                    thinkingPanelContent.style.display = 'block';
+                    thinkingPanelHeader.querySelector('.thinking-header-toggle').style.transform = 'rotate(0deg)';
+                } else {
+                    thinkingPanelContent.style.display = 'none';
+                    thinkingPanelHeader.querySelector('.thinking-header-toggle').style.transform = 'rotate(-180deg)';
+                }
+            });
+
+            reasoningContent.scrollTop = reasoningContent.scrollHeight;
+        }
+
+        function appendToThinkingPanel(text) {
+            if (!currentThinkingPanelContent) return;
+            currentThinkingPanelContent.textContent += text;
+            currentThinkingPanelContent.scrollTop = currentThinkingPanelContent.scrollHeight;
+        }
+
+        function collapseThinkingPanel() {
+            // Collapse the current/active thinking panel
+            if (!currentThinkingPanel) return;
+
+            if (currentThinkingPanelContent) currentThinkingPanelContent.style.display = 'none';
+            if (currentThinkingPanelHeader) {
+                currentThinkingPanelHeader.querySelector('.thinking-header-toggle').style.transform = 'rotate(-180deg)';
+                // Update label to indicate completion
+                const label = currentThinkingPanelHeader.querySelector('.thinking-header-label');
+                if (label) label.textContent = 'THINKING (complete)';
+            }
+
+            // Mark the current panel as completed
+            const currentPanel = thinkingPanels.find(p => p.panel === currentThinkingPanel);
+            if (currentPanel) currentPanel.completed = true;
+        }
+
+        // Reset thinking state for next query - preserve history
+        function resetThinkingState() {
+            // Don't remove panels - they serve as history
+            // Just reset the current panel references for the next query
+            currentThinkingPanel = null;
+            currentThinkingPanelContent = null;
+            currentThinkingPanelHeader = null;
+            // thinkingPanels array is preserved for history
         }
 
         // Map rendering
@@ -1721,6 +1832,9 @@
             const q = chatInput.value.trim();
             if (!q) return;
 
+            // Reset thinking state for new query
+            resetThinkingState();
+
             addMessage(escapeHtml(q), true);
             addHistory(q);
 
@@ -1852,6 +1966,15 @@
                             } else if (evt.type === 'token') {
                                 typingIndicator.classList.remove('show');
                                 appendToMessageLive(responseEl, evt.content);
+                            } else if (evt.type === 'thinking_start') {
+                                // Show thinking panel in reasoning window
+                                showThinkingPanel();
+                            } else if (evt.type === 'thinking_token') {
+                                // Stream thinking content to the panel
+                                appendToThinkingPanel(evt.content);
+                            } else if (evt.type === 'thinking_end') {
+                                // Auto-collapse thinking panel
+                                collapseThinkingPanel();
                             } else if (evt.type === 'error') {
                                 responseEl.innerHTML = `<div class="error-message">Error: ${escapeHtml(evt.content)}</div>`;
                                 // Also show error in reasoning window
