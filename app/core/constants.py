@@ -28,6 +28,11 @@ EVENT_TYPE_DONE = "done"
 EVENT_TYPE_ERROR = "error"
 EVENT_TYPE_ONTOLOGY_UPDATED = "ontology_updated"
 
+# Thinking/reasoning stream events
+EVENT_TYPE_THINKING_START = "thinking_start"
+EVENT_TYPE_THINKING_TOKEN = "thinking_token"
+EVENT_TYPE_THINKING_END = "thinking_end"
+
 
 # =============================================================================
 # Streaming Phases

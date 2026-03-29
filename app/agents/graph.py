@@ -21,6 +21,17 @@ from app.core.constants import (
 from app.agents.ontology_subgraph import ontology_subgraph
 from app.models.ontology import SessionOntology
 from app.services.ontology.merge import merge_ontologies
+from app.core.config import settings
+
+
+def _get_active_model_name() -> str:
+    """Get the currently active model name for display.
+    
+    Returns the online model name if USE_ONLINE_LLM is enabled, otherwise the local reasoning model.
+    """
+    if settings.USE_ONLINE_LLM and settings.GROQ_API_KEY:
+        return settings.ONLINE_LLM_MODEL_NAME
+    return settings.REASONING_LLM_MODEL_NAME
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -123,7 +134,7 @@ def call_model(state: AgentState):
     )
     logger.info(f"[AGENT] Invoking LLM with {len(messages)} messages")
     response = llm_with_tools.invoke(messages)
-    
+
     # Log the agent's reasoning and tool calls
     if hasattr(response, "content") and response.content:
         logger.info("[AGENT] === REASONING OUTPUT START ===")
@@ -131,7 +142,7 @@ def call_model(state: AgentState):
         logger.info("[AGENT] === REASONING OUTPUT END ===")
     if hasattr(response, "tool_calls") and response.tool_calls:
         logger.info(f"[AGENT] Tool calls requested: {[tc['name'] for tc in response.tool_calls]}")
-    
+
     logger.info("[AGENT] Reasoning phase complete")
     return {STATE_KEY_MESSAGES: [response]}
 
@@ -336,13 +347,17 @@ async def process_query_stream(
     logger.info(
         f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'"
     )
+    
+    # Set processing state
+    from app.api.routes.health import set_processing_state
+    set_processing_state(True, user_query)
+    
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False
     done_sent = False
 
     # Emit vector search status immediately (mandatory first step)
-    from app.core.config import settings
     yield {
         "type": "status",
         "phase": "vector_search",
@@ -366,22 +381,34 @@ async def process_query_stream(
             if kind == "on_chain_error" or kind == "on_llm_error":
                 error_msg = event.get("data", {}).get("error", "Unknown error")
                 logger.error(f"[STREAM ERROR] {kind}: {error_msg}")
+                logger.exception("[STREAM ERROR] Full error event data:")
                 yield {
                     "type": "error",
                     "content": f"LLM error: {str(error_msg)}\n\nThis may be due to:\n- Model not loaded in Ollama\n- Ollama service unavailable\n- Request timeout\n\nTry: `docker restart geovision-ollama`"
                 }
                 return  # Stop processing
+            
+            # Check for Groq-specific errors in stream events
+            if kind == "on_chat_model_error":
+                error_msg = event.get("data", {}).get("error", "Unknown error")
+                logger.error(f"[STREAM ERROR] on_chat_model_error: {error_msg}")
+                logger.exception("[STREAM ERROR] Full error event data:")
+                yield {
+                    "type": "error",
+                    "content": f"Chat model error: {str(error_msg)}"
+                }
+                return  # Stop processing
 
             if kind == "on_chat_model_start":
-                from app.core.config import settings
+                active_model = _get_active_model_name()
                 if "reviewer" in tags:
-                    yield {"type": "status", "phase": "reviewing", "model": settings.REASONING_LLM_MODEL_NAME}
+                    yield {"type": "status", "phase": "reviewing", "model": active_model}
                 elif "ontology_extractor" in tags:
-                    yield {"type": "status", "phase": "extracting_ontology", "model": settings.REASONING_LLM_MODEL_NAME}
+                    yield {"type": "status", "phase": "extracting_ontology", "model": active_model}
                 else:
                     if streaming_started:
-                        yield {"type": "status", "phase": "revising", "model": settings.REASONING_LLM_MODEL_NAME}
-                    yield {"type": "status", "phase": "reasoning", "model": settings.REASONING_LLM_MODEL_NAME}
+                        yield {"type": "status", "phase": "revising", "model": active_model}
+                    yield {"type": "status", "phase": "reasoning", "model": active_model}
 
             elif kind == "on_tool_start":
                 tool_name = event.get("name", "unknown")
@@ -559,6 +586,8 @@ async def process_query_stream(
                                 yield {"type": "token", "content": before}
                             buffer = buffer[idx + len("<think>"):]
                             in_think = True
+                            # Emit thinking_start event
+                            yield {"type": "thinking_start"}
                         else:
                             idx = buffer.rfind("<")
                             if idx == -1:
@@ -585,38 +614,65 @@ async def process_query_stream(
                     else: # in_think
                         if "</think>" in buffer:
                             idx = buffer.find("</think>")
-                            think_buffer += buffer[:idx]
+                            think_content = buffer[:idx]
+                            
+                            # Stream the remaining think content as tokens
+                            if think_content:
+                                yield {"type": "thinking_token", "content": think_content}
+                            
                             yield {
-                                "type": "tool_result", 
-                                "tool": "reasoning", 
-                                "summary": "Reasoning steps completed", 
-                                "content": think_buffer.strip()
+                                "type": "thinking_end"
                             }
+                            
+                            # Also emit as tool_result for backward compatibility
+                            yield {
+                                "type": "tool_result",
+                                "tool": "reasoning",
+                                "summary": "Reasoning steps completed",
+                                "content": (think_buffer + think_content).strip()
+                            }
+                            
                             think_buffer = ""
                             buffer = buffer[idx + len("</think>"):]
                             in_think = False
                         else:
                             idx = buffer.rfind("<")
                             if idx == -1:
+                                # Stream this chunk of thinking content
                                 think_buffer += buffer
+                                yield {"type": "thinking_token", "content": buffer}
                                 buffer = ""
                             else:
-                                think_buffer += buffer[:idx]
+                                # Stream partial thinking content
+                                partial = buffer[:idx]
+                                if partial:
+                                    think_buffer += partial
+                                    yield {"type": "thinking_token", "content": partial}
                                 buffer = buffer[idx:]
                                 if len(buffer) > 15:
                                     think_buffer += buffer
+                                    yield {"type": "thinking_token", "content": buffer}
                                     buffer = ""
                                 break
 
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[QUERY-STREAM] Error during streaming: {error_msg}")
+        logger.exception("[QUERY-STREAM] Full stack trace:")
+        logger.error(f"[QUERY-STREAM] Error type: {type(e).__name__}")
+        logger.error(f"[QUERY-STREAM] Buffer state: in_think={in_think}, buffer_len={len(buffer)}, think_buffer_len={len(think_buffer)}")
 
         # Check for JSON parsing errors from Ollama client
         if "failed to parse JSON" in error_msg or "unexpected end of JSON input" in error_msg:
             yield {
                 "type": "error",
                 "content": "LLM response parsing failed. This usually means:\n\n1. Ollama model crashed or timed out\n2. Connection was interrupted\n3. Model returned malformed output\n\nTry:\n- Restart Ollama: `docker restart geovision-ollama`\n- Check model is loaded: `docker exec geovision-ollama ollama ps`\n- Retry your query"
+            }
+        # Check for Groq function calling errors
+        elif "Failed to call a function" in error_msg:
+            yield {
+                "type": "error",
+                "content": f"Groq API error: {error_msg}\n\nThis typically means:\n1. The model tried to use a tool/function that Groq doesn't support\n2. Prompt instructions conflict with Groq's capabilities\n\nTry:\n- Simplify your query\n- Switch to a local Ollama model\n- Check that tool usage is properly disabled for Groq"
             }
         else:
             yield {"type": "error", "content": f"Streaming error: {error_msg}"}
@@ -625,17 +681,25 @@ async def process_query_stream(
         if not done_sent:
             if buffer and not in_think:
                 yield {"type": "token", "content": buffer}
-            elif buffer and in_think and think_buffer:
-                # Flush think buffer if we're still in think mode
+            elif buffer and in_think:
+                # Flush remaining think buffer
+                if buffer:
+                    yield {"type": "thinking_token", "content": buffer}
+                    think_buffer += buffer
+                yield {"type": "thinking_end"}
+                # Also emit as tool_result for backward compatibility
                 yield {
                     "type": "tool_result",
                     "tool": "reasoning",
                     "summary": "Reasoning steps completed",
-                    "content": (think_buffer + buffer).strip()
+                    "content": think_buffer.strip()
                 }
             yield {"type": "done"}
             done_sent = True
         
+        # Clear processing state
+        set_processing_state(False)
+
         # Auto-save session to MongoDB after query completes
         try:
             # Get final state from the graph
@@ -693,7 +757,6 @@ async def process_query_stream(
             
             # Save to MongoDB via sessions endpoint
             import httpx
-            from app.core.config import settings
             
             async with httpx.AsyncClient() as client:
                 save_url = f"http://localhost:8000/api/sessions/{thread_id}/save"

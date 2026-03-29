@@ -1454,6 +1454,77 @@ html, body {
     opacity: 0.5;
 }
 
+/* Thinking panel for live reasoning display */
+.thinking-panel {
+    border-left: 3px solid var(--amber);
+    background: rgba(255, 179, 0, 0.05);
+    border-radius: var(--radius-control);
+    margin-bottom: 8px;
+    overflow: hidden;
+    animation: slideIn 0.25s ease;
+}
+
+.thinking-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 179, 0, 0.1);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.thinking-header:hover {
+    background: rgba(255, 179, 0, 0.15);
+}
+
+.thinking-header-icon {
+    font-size: 0.9rem;
+}
+
+.thinking-header-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--amber);
+    font-family: var(--font-mono);
+}
+
+.thinking-header-toggle {
+    margin-left: auto;
+    font-size: 0.6rem;
+    color: var(--amber);
+    transition: transform 0.2s;
+}
+
+.thinking-body {
+    display: block;
+    padding: 10px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    line-height: 1.5;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.thinking-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.thinking-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.thinking-body::-webkit-scrollbar-thumb:hover {
+    background: var(--border-active);
+}
+
 /* Loading spinner - unified style for all spinners */
 .loading-spinner {
     display: flex;
