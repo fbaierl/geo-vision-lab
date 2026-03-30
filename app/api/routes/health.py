@@ -58,7 +58,7 @@ async def system_status():
     """
     # Get warmup status to determine model loading state
     warmup_status = get_warmup_status()
-    
+
     # Determine base status from warmup state
     if warmup_status.get("any_error"):
         base_status = SystemStatusEnum.ERROR
@@ -67,16 +67,16 @@ async def system_status():
         base_status = SystemStatusEnum.LOADING_MODEL
         error_msg = None
     elif warmup_status.get("ready", False):
-        base_status = SystemStatusEnum.READY
+        base_status = SystemStatusEnum.IDLE
         error_msg = None
     else:
         base_status = SystemStatusEnum.IDLE
         error_msg = None
-    
+
     # Override with processing state if actively processing
     if _processing_state["is_processing"]:
         base_status = SystemStatusEnum.PROCESSING
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{settings.OLLAMA_URL}/api/ps")
@@ -89,11 +89,10 @@ async def system_status():
                 vram_bytes = model_info.get("size_vram", 0)
                 # If model is loaded, GPU is available (Ollama is configured with GPU)
                 gpu_available = True
-                
-                # Update status if we thought we were idle but model is loaded
-                if base_status == SystemStatusEnum.IDLE:
-                    base_status = SystemStatusEnum.READY
-                
+
+                # Update status: model is loaded and ready
+                base_status = SystemStatusEnum.READY
+
                 return {
                     "status": base_status.value,
                     "gpu_available": gpu_available,
@@ -108,7 +107,7 @@ async def system_status():
             # No model currently loaded - GPU is available if Ollama responded
             # (Ollama container has GPU configured in docker-compose.yml)
             return {
-                "status": base_status.value,
+                "status": SystemStatusEnum.IDLE.value,
                 "gpu_available": True,
                 "model_loaded": None,
                 "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
