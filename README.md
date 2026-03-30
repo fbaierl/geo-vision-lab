@@ -57,13 +57,15 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': { 'fontSize': '11px', 'lineColor': '#666666'}}}%%
 flowchart TD
-    User["📥 User Query"] --> RAGSubgraph["🔍 RAG SUBGRAPH<br/>Retrieval + Grading"]
+    User["📥 User Query"] --> RAGSubgraph["🔍 RAG SUBGRAPH<br/>Retrieval + Grading + Re-ranking"]
 
     subgraph RAGSubgraph["📚 RAG SUBGRAPH"]
         direction TB
-        VectorSearch["🔎 Vector Search<br/>Archival Lookup"]
-        Grader["📊 Grader<br/>Context Relevance"]
-        VectorSearch --> Grader
+        VectorSearch["🔎 Vector Search<br/>Archival Lookup<br/>k=20 candidates"]
+        ReRanker["🔄 Re-ranker<br/>BGE Cross-Encoder<br/>Top-K selection"]
+        Grader["📊 Grader<br/>Context Relevance<br/>RELEVANT/IRRELEVANT"]
+        VectorSearch --> ReRanker
+        ReRanker --> Grader
     end
 
     RAGSubgraph --> Agent["🤖 AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
@@ -133,7 +135,8 @@ flowchart TD
 **Flow Description:**
 
 1. **RAG Subgraph** (mandatory first step) - Retrieves and grades archival context:
-   - **Vector Search**: Searches MongoDB vector store for relevant documents
+   - **Vector Search**: Searches MongoDB vector store for relevant documents (retrieves 20 candidates)
+   - **Re-ranker** (optional): BGE cross-encoder re-ranks candidates for better precision, selects top-K (default: 3)
    - **Grader**: Evaluates context relevance (RELEVANT, PARTIALLY_RELEVANT, IRRELEVANT)
    - **Context Injection**: Relevant context is injected; irrelevant context triggers a hint to use web tools
 
@@ -361,8 +364,8 @@ Changes take effect immediately for new queries.
 |--------------|------|----------|
 | All disabled | Vector Search → Agent | Fastest, baseline quality |
 | Grader only | Vector Search → Grader → Agent | Prevents hallucinations from poor context |
-| Re-ranker only | Vector Search (k=20) → Re-rank → Agent | Better precision for technical queries |
-| Both enabled (default) | Vector Search (k=20) → Re-rank → Grader → Agent | Best quality for critical analysis |
+| Re-ranker only | Vector Search (k=20) → Re-rank (k=3) → Agent | Better precision for technical queries |
+| Both enabled (default) | Vector Search (k=20) → Re-rank (k=3) → Grader → Agent | Best quality for critical analysis |
 
 ### When to Disable Features
 
