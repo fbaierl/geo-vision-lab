@@ -29,6 +29,7 @@ _warmup_status: Dict[str, Any] = {
         "ner": {"status": "pending", "label": "NER (bert-base-NER)"},
         "embeddings": {"status": "pending", "label": "Embeddings (all-MiniLM-L6-v2)"},
         "llm": {"status": "pending", "label": "LLM (initializing…)"},
+        "reranker": {"status": "pending", "label": "Re-ranker (BGE)"},
     },
 }
 
@@ -180,6 +181,50 @@ async def warm_up_llm() -> bool:
     return False
 
 
+async def warm_up_reranker() -> bool:
+    """
+    Pre-load the BGE re-ranker model.
+    
+    The re-ranker is a cross-encoder model that improves retrieval precision.
+    Loading it at startup avoids the ~2-5 second delay on first query.
+    """
+    from app.core.config import settings
+    
+    if not settings.RAG_RERANKER_ENABLED:
+        logger.info("[STARTUP] Re-ranker disabled, skipping warm-up")
+        _set_model_status("reranker", "pending", "Re-ranker (disabled)")
+        return True  # Not an error, just disabled
+    
+    _set_model_status("reranker", "loading", f"Re-ranker ({settings.RAG_RERANKER_MODEL})")
+    try:
+        logger.info(f"[STARTUP] Loading BGE re-ranker model: {settings.RAG_RERANKER_MODEL}…")
+        start_time = time.time()
+        
+        loop = asyncio.get_event_loop()
+        from app.services.reranker import get_reranker_service
+        
+        # Load the model (this triggers the download if not cached)
+        reranker = await loop.run_in_executor(None, get_reranker_service)
+        
+        # Verify model is loaded
+        is_available = await loop.run_in_executor(None, reranker.is_available)
+        
+        if not is_available:
+            logger.warning("[STARTUP] Re-ranker model failed to load")
+            _set_model_status("reranker", "error")
+            return False
+        
+        elapsed = time.time() - start_time
+        logger.info(f"[STARTUP] ✅ Re-ranker ready in {elapsed:.1f}s")
+        _set_model_status("reranker", "ready", f"Re-ranker ({settings.RAG_RERANKER_MODEL})")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[STARTUP] ❌ Failed to load re-ranker: {e}")
+        _set_model_status("reranker", "error")
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
@@ -188,7 +233,7 @@ async def warm_up_models() -> Dict[str, bool]:
     """
     Warm up all models at application startup.
 
-    Runs NER and embeddings in parallel, then waits for the LLM.
+    Runs NER, embeddings, and reranker in parallel, then waits for the LLM.
     Updates _warmup_status in real-time so the UI can poll progress.
     """
     global _warmup_status
@@ -201,10 +246,11 @@ async def warm_up_models() -> Dict[str, bool]:
     logger.info("[STARTUP] UI is available immediately while models load.")
     logger.info("=" * 60)
 
-    # NER + embeddings can be loaded in parallel
-    ner_result, embedding_result = await asyncio.gather(
+    # NER, embeddings, and reranker can be loaded in parallel
+    ner_result, embedding_result, reranker_result = await asyncio.gather(
         warm_up_ner_pipeline(),
         warm_up_embeddings(),
+        warm_up_reranker(),
     )
 
     # LLM depends on Ollama — start after HF models to avoid racing logs
@@ -214,6 +260,7 @@ async def warm_up_models() -> Dict[str, bool]:
         "ner": ner_result,
         "embeddings": embedding_result,
         "llm": llm_result,
+        "reranker": reranker_result,
     }
 
     _warmup_status["completed"] = True

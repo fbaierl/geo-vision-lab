@@ -92,6 +92,10 @@
                                     <span class="msi-dot loading"></span>
                                     <span class="msi-label">Embeddings (all-MiniLM-L6-v2)</span>
                                 </div>
+                                <div class="model-status-item" id="status-reranker">
+                                    <span class="msi-dot loading"></span>
+                                    <span class="msi-label">Re-ranker (BGE)</span>
+                                </div>
                                 <div class="model-status-item" id="status-llm">
                                     <span class="msi-dot loading"></span>
                                     <span class="msi-label">LLM — waiting for Ollama…</span>
@@ -244,6 +248,39 @@
                         <span class="service-name">LangSmith (EU)</span>
                         <span class="service-port">Cloud</span>
                     </a>
+                </div>
+                
+                <!-- RAG Configuration Panel -->
+                <div class="rag-config-panel" style="margin-top: 20px; padding: 16px; background: rgba(61, 174, 218, 0.05); border-radius: 8px; border: 1px solid rgba(61, 174, 218, 0.2);">
+                    <h4 style="margin: 0 0 12px 0; color: var(--cyan); font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                        <span>⚙</span> RAG Configuration
+                    </h4>
+                    
+                    <div class="rag-config-item" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <div>
+                            <label for="grader-toggle" style="color: var(--text); font-size: 13px; font-weight: 500;">Context Grading</label>
+                            <p style="margin: 2px 0 0 0; color: var(--muted); font-size: 11px;">Evaluate context relevance before generation</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="grader-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div class="rag-config-item" style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <label for="reranker-toggle" style="color: var(--text); font-size: 13px; font-weight: 500;">Re-ranking (BGE)</label>
+                            <p style="margin: 2px 0 0 0; color: var(--muted); font-size: 11px;">Improve precision with cross-encoder</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="reranker-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div id="rag-config-status" style="margin-top: 12px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 11px; color: var(--muted); display: none;">
+                        <span id="rag-status-text"></span>
+                    </div>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -2085,6 +2122,7 @@
             const models = status.models || {};
             setModelItemUI('status-ner',        (models.ner        || {}).status, (models.ner        || {}).label);
             setModelItemUI('status-embeddings', (models.embeddings || {}).status, (models.embeddings || {}).label);
+            setModelItemUI('status-reranker',   (models.reranker   || {}).status, (models.reranker   || {}).label);
             setModelItemUI('status-llm',        (models.llm        || {}).status, (models.llm        || {}).label);
 
             if (status.ready) {
@@ -2802,6 +2840,81 @@
         // Initialize ontology tab manager and import/export handler after classes are defined
         window.ontologyTabManager = new OntologyTabManager();
         window.ontologyImportExport = new OntologyImportExportHandler();
+        
+        // Load RAG configuration on page load
+        loadRAGConfig();
+        
+        // RAG Configuration functions
+        async function loadRAGConfig() {
+            try {
+                const res = await fetch('/api/v1/rag/config');
+                if (!res.ok) throw new Error('Failed to load RAG config');
+                const config = await res.json();
+                
+                // Update toggle states
+                document.getElementById('grader-toggle').checked = config.grader_enabled;
+                document.getElementById('reranker-toggle').checked = config.reranker_enabled;
+                
+                console.log('[RAG_CONFIG] Loaded configuration:', config);
+            } catch (error) {
+                console.warn('[RAG_CONFIG] Failed to load config:', error);
+            }
+        }
+        
+        async function saveRAGConfig(updates) {
+            try {
+                const statusEl = document.getElementById('rag-config-status');
+                const statusText = document.getElementById('rag-status-text');
+                
+                statusEl.style.display = 'block';
+                statusText.textContent = 'Saving...';
+                
+                const res = await fetch('/api/v1/rag/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                
+                if (!res.ok) throw new Error('Failed to save RAG config');
+                const config = await res.json();
+                
+                statusText.textContent = 'Configuration saved successfully';
+                statusEl.style.background = 'rgba(124, 179, 66, 0.2)';
+                statusEl.style.color = 'var(--green)';
+                
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 3000);
+                
+                console.log('[RAG_CONFIG] Saved configuration:', config);
+            } catch (error) {
+                console.error('[RAG_CONFIG] Failed to save config:', error);
+                const statusEl = document.getElementById('rag-config-status');
+                const statusText = document.getElementById('rag-status-text');
+                statusEl.style.display = 'block';
+                statusText.textContent = 'Failed to save configuration';
+                statusEl.style.background = 'rgba(229, 57, 53, 0.2)';
+                statusEl.style.color = 'var(--red)';
+            }
+        }
+        
+        // Add event listeners for toggles
+        document.addEventListener('DOMContentLoaded', function() {
+            const graderToggle = document.getElementById('grader-toggle');
+            const rerankerToggle = document.getElementById('reranker-toggle');
+            
+            if (graderToggle) {
+                graderToggle.addEventListener('change', function(e) {
+                    saveRAGConfig({ grader_enabled: e.target.checked });
+                });
+            }
+            
+            if (rerankerToggle) {
+                rerankerToggle.addEventListener('change', function(e) {
+                    saveRAGConfig({ reranker_enabled: e.target.checked });
+                });
+            }
+        });
     </script>
 
     <!-- Import Modal -->

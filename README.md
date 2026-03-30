@@ -40,6 +40,9 @@ GeoVision Lab is a RAG (Retrieval-Augmented Generation) platform for geopolitica
 - **Hybrid LLM Support** — Switch between local Ollama (qwen3.5:9b/4b) and cloud Groq (Llama 4 Scout) at runtime
 - **Model Switching** — Dynamic qwen3.5 selection (9b/4b) at runtime for local inference
 - **GPU Status Indicator** — Real-time display of GPU acceleration status
+- **Configurable RAG Features** — Toggle context grading and re-ranking on/off via UI or environment variables
+  - **Context Grading**: Evaluates retrieval quality before generation (Corrective RAG pattern)
+  - **BGE Re-ranker**: Improves precision with cross-encoder re-ranking (optional, +150ms latency)
 
 ### Test Data Included
 
@@ -54,23 +57,30 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': { 'fontSize': '11px', 'lineColor': '#666666'}}}%%
 flowchart TD
-    User["📥 User Query"] --> VectorSearch["🔍 VECTOR_SEARCH_NODE<br/>Archival RAG Lookup"]
-    
-    VectorSearch --> Agent["🤖 AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
-    
+    User["📥 User Query"] --> RAGSubgraph["🔍 RAG SUBGRAPH<br/>Retrieval + Grading"]
+
+    subgraph RAGSubgraph["📚 RAG SUBGRAPH"]
+        direction TB
+        VectorSearch["🔎 Vector Search<br/>Archival Lookup"]
+        Grader["📊 Grader<br/>Context Relevance"]
+        VectorSearch --> Grader
+    end
+
+    RAGSubgraph --> Agent["🤖 AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
+
     Agent --> ShouldContinue{"Has tool<br/>calls?"}
-    
+
     ShouldContinue -->|Yes| Tools["🛠️ TOOL_NODE<br/>DuckDuckGo / Wikipedia / Time"]
     ShouldContinue -->|No| Reviewer["👁️ REVIEWER_NODE<br/>QA Critic LLM"]
-    
+
     Tools --> Agent
-    
+
     Reviewer --> IsValid{"Response<br/>VALID?"}
-    
+
     IsValid -->|No, <3 attempts| Agent
     IsValid -->|No, ≥3 attempts| Final["📤 Final Output + Knowledge Graph"]
     IsValid -->|Yes| OntologySubgraph
-    
+
     subgraph OntologySubgraph["🕸️ ONTOLOGY_EXTRACTOR SUBGRAPH"]
         direction TB
         ExtractOntology["📋 extract_ontology<br/>Extract entities & links<br/>Identify gap references"]
@@ -101,17 +111,17 @@ flowchart TD
         LogHallucinated --> SessionOntology["📊 Session Ontology<br/>Persisted to MongoDB"]
         CreateLink --> SessionOntology
     end
-    
+
     style Geocode fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
-    
+
     SessionOntology --> Final
-    
+
     style User fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
     style Final fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
     style Agent fill:#1e3a5f,stroke:#3a5a8a,stroke-width:2px
     style Reviewer fill:#5f1e3a,stroke:#8a3a5a,stroke-width:2px
     style Tools fill:#5f4a1e,stroke:#8a6a3a,stroke-width:2px
-    style VectorSearch fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
+    style RAGSubgraph fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
     style SessionOntology fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
     style IsValid fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
     style HasGaps fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
@@ -122,10 +132,17 @@ flowchart TD
 
 **Flow Description:**
 
-1. **Vector Search** (mandatory first step) - Retrieves archival intelligence from MongoDB vector store
+1. **RAG Subgraph** (mandatory first step) - Retrieves and grades archival context:
+   - **Vector Search**: Searches MongoDB vector store for relevant documents
+   - **Grader**: Evaluates context relevance (RELEVANT, PARTIALLY_RELEVANT, IRRELEVANT)
+   - **Context Injection**: Relevant context is injected; irrelevant context triggers a hint to use web tools
+
 2. **Agent** - Worker LLM receives context, performs reasoning, decides on tool usage
+
 3. **Tools** - DuckDuckGo, Wikipedia, Time lookup (loop back to Agent for iterative reasoning)
+
 4. **Reviewer** - QA Critic validates response against constraints
+
 5. **Ontology Extractor Subgraph** (dashed border) - Two-pass extraction with gap resolution:
    - **extract_ontology**: Extract entities (7 types), extract links, identify missing references
    - **Process Entities**: Generate UUIDs for all entities
@@ -133,6 +150,7 @@ flowchart TD
    - **detect_gaps**: Check if any link targets don't exist as entities
    - **extract_gap_entities** (if gaps): Targeted LLM extraction for missing entities only
    - **merge_and_finalize**: Create entities with UUIDs, process all links, skip unresolvable
+
 6. **Final Output** - Response + accumulated knowledge graph persisted to MongoDB
 
 **Entity Types Extracted:**
@@ -300,6 +318,62 @@ GeoVision Lab supports **hybrid LLM deployment** with both local and cloud model
 4. Restart the application or toggle via Web Interface (if available)
 
 **Hybrid Strategy:** Use local qwen3.5 models for privacy-sensitive analysis and cloud Groq models for live events requiring up-to-date information. Switch between modes as needed.
+
+---
+
+## RAG Configuration
+
+GeoVision Lab supports **configurable RAG features** that can be toggled on/off independently via environment variables or the web UI.
+
+### Features
+
+| Feature | Description | Recommended |
+|---------|-------------|-------------|
+| **Context Grading** | Evaluates retrieval quality before generation (Corrective RAG pattern) | ✓ Enabled |
+| **BGE Re-ranker** | Improves precision with cross-encoder re-ranking | ✓ Enabled |
+
+### Configuration via Environment Variables
+
+Add to your `.env` file:
+
+```bash
+# RAG Features Configuration
+RAG_GRADER_ENABLED=true           # Enable/disable context grading
+RAG_RERANKER_ENABLED=true         # Enable/disable BGE re-ranker
+RAG_RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+RAG_RERANKER_TOP_K=3              # Number of results after re-ranking
+RAG_RERANKER_CANDIDATES_K=20      # Number of candidates to retrieve
+```
+
+### Configuration via Web UI
+
+1. Open the **Services** window in the web interface
+2. Find the **RAG Configuration** panel
+3. Toggle features on/off:
+   - **Context Grading**: Evaluate context relevance before generation
+   - **Re-ranking (BGE)**: Improve precision with cross-encoder
+
+Changes take effect immediately for new queries.
+
+### Feature Flows
+
+| Configuration | Flow | Use Case |
+|--------------|------|----------|
+| All disabled | Vector Search → Agent | Fastest, baseline quality |
+| Grader only | Vector Search → Grader → Agent | Prevents hallucinations from poor context |
+| Re-ranker only | Vector Search (k=20) → Re-rank → Agent | Better precision for technical queries |
+| Both enabled (default) | Vector Search (k=20) → Re-rank → Grader → Agent | Best quality for critical analysis |
+
+### When to Disable Features
+
+**Disable re-ranker for:**
+- Simple queries where vector search is sufficient
+- Latency-sensitive applications
+- Small document collections
+
+**Disable grader for:**
+- Maximum speed when you trust vector search quality
+- Testing and debugging
 
 ---
 

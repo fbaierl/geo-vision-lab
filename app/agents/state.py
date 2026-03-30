@@ -9,3 +9,8 @@ class AgentState(TypedDict):
     is_valid: bool
     vector_search_results: Optional[str]
     ontology: Optional[Any] # Will store SessionOntology.Dict since TypedDict serializes easier
+    
+    # RAG Subgraph outputs
+    rag_quality: Optional[str]  # RELEVANT, PARTIALLY_RELEVANT, IRRELEVANT
+    rag_context: Optional[str]  # Filtered context to inject into agent
+    rag_hint: Optional[str]  # Hint for agent when context is irrelevant
