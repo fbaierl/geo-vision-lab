@@ -469,7 +469,7 @@ async def process_query_stream(
                     continue
                     
                 active_model = _get_active_model_name()
-                if "reviewer" in tags:
+                if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
                     yield {"type": "status", "phase": "reviewing", "model": active_model}
                 elif "ontology_extractor" in tags:
                     yield {"type": "status", "phase": "extracting_ontology", "model": active_model}
@@ -611,7 +611,7 @@ async def process_query_stream(
                 tool_calls = getattr(output, "tool_calls", [])
 
                 # Skip reviewer here - it's captured in on_chain_end
-                if "reviewer" in tags:
+                if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
                     pass
                 elif tool_calls and content:
                     yield {
@@ -624,60 +624,59 @@ async def process_query_stream(
                 # Don't yield here to avoid duplicates
 
             elif kind == "on_chat_model_stream":
-                if "reviewer" in tags:
+                if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
                     continue
                 # Sub-graph LLM calls are handled internally
+                chunk = event.get("data", {}).get("chunk")
+                if chunk and hasattr(chunk, "content") and chunk.content:
+                    # Process content from ALL chunks, even if they have tool calls.
+                    # Tool call reasoning is often in chunks that also have tool_call_chunks present!
+                    content_chunk = chunk.content
+                    if isinstance(content_chunk, list):
+                        # Sometimes content is a list of dicts
+                        content_chunk = "".join([c.get("text", "") for c in content_chunk if isinstance(c, dict) and "text" in c])
+                    elif not isinstance(content_chunk, str):
+                        content_chunk = str(content_chunk)
 
-            chunk = event.get("data", {}).get("chunk")
-            if chunk and hasattr(chunk, "content") and chunk.content:
-                # Process content from ALL chunks, even if they have tool calls.
-                # Tool call reasoning is often in chunks that also have tool_call_chunks present!
-                content_chunk = chunk.content
-                if isinstance(content_chunk, list):
-                    # Sometimes content is a list of dicts
-                    content_chunk = "".join([c.get("text", "") for c in content_chunk if isinstance(c, dict) and "text" in c])
-                elif not isinstance(content_chunk, str):
-                    content_chunk = str(content_chunk)
-
-                # Remove tool_code and tool_call tags as they arrive
-                # Remove tool call artifacts
-                content_chunk = content_chunk.replace("<tool_code>", "").replace("</tool_code>", "")
-                content_chunk = content_chunk.replace("<tool_call>", "").replace("</tool_call>", "")
-                
-                if not content_chunk:
-                    continue
+                    # Remove tool_code and tool_call tags as they arrive
+                    # Remove tool call artifacts
+                    content_chunk = content_chunk.replace("<tool_code>", "").replace("</tool_code>", "")
+                    content_chunk = content_chunk.replace("<tool_call>", "").replace("</tool_call>", "")
                     
-                buffer += content_chunk
-                
-                while buffer:
-                    if not in_think:
-                        if "<think>" in buffer:
-                            idx = buffer.find("<think>")
-                            before = buffer[:idx]
-                            if before:
-                                if not streaming_started:
-                                    yield {"type": "status", "phase": "streaming"}
-                                    streaming_started = True
-                                yield {"type": "token", "content": before}
-                            buffer = buffer[idx + len("<think>"):]
-                            in_think = True
-                            # Emit thinking_start event
-                            yield {"type": "thinking_start"}
-                        else:
-                            idx = buffer.rfind("<")
-                            if idx == -1:
-                                if not streaming_started:
-                                    yield {"type": "status", "phase": "streaming"}
-                                    streaming_started = True
-                                yield {"type": "token", "content": buffer}
-                                buffer = ""
-                            else:
+                    if not content_chunk:
+                        continue
+                        
+                    buffer += content_chunk
+                    
+                    while buffer:
+                        if not in_think:
+                            if "<think>" in buffer:
+                                idx = buffer.find("<think>")
                                 before = buffer[:idx]
                                 if before:
                                     if not streaming_started:
                                         yield {"type": "status", "phase": "streaming"}
                                         streaming_started = True
                                     yield {"type": "token", "content": before}
+                                buffer = buffer[idx + len("<think>"):]
+                                in_think = True
+                                # Emit thinking_start event
+                                yield {"type": "thinking_start"}
+                            else:
+                                idx = buffer.rfind("<")
+                                if idx == -1:
+                                    if not streaming_started:
+                                        yield {"type": "status", "phase": "streaming"}
+                                        streaming_started = True
+                                    yield {"type": "token", "content": buffer}
+                                    buffer = ""
+                                else:
+                                    before = buffer[:idx]
+                                    if before:
+                                        if not streaming_started:
+                                            yield {"type": "status", "phase": "streaming"}
+                                            streaming_started = True
+                                        yield {"type": "token", "content": before}
                                 buffer = buffer[idx:]
                                 if len(buffer) > 15:
                                     if not streaming_started:
