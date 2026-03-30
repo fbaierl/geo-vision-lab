@@ -462,8 +462,12 @@ async def process_query_stream(
                     yield {"type": "status", "phase": "rag_retrieval", "tool": "RAG Subgraph"}
                 elif node_name == "grader":
                     yield {"type": "status", "phase": "rag_grading", "tool": "Grader"}
-            
+
             if kind == "on_chat_model_start":
+                # Skip grader, reviewer, ontology - only stream agent tokens
+                if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
+                    continue
+                    
                 active_model = _get_active_model_name()
                 if "reviewer" in tags:
                     yield {"type": "status", "phase": "reviewing", "model": active_model}
@@ -598,6 +602,10 @@ async def process_query_stream(
                         }
 
             elif kind == "on_chat_model_end":
+                # Skip grader, reviewer, ontology - already handled
+                if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
+                    continue
+                    
                 output = event.get("data", {}).get("output")
                 content = getattr(output, "content", "")
                 tool_calls = getattr(output, "tool_calls", [])
@@ -612,12 +620,8 @@ async def process_query_stream(
                         "summary": "Reasoning steps completed",
                         "content": content.strip()
                     }
-                elif content and not tool_calls:
-                    # Final response without tool calls - yield as token
-                    yield {
-                        "type": "token",
-                        "content": content.strip()
-                    }
+                # Note: Final response without tool calls is already streamed via on_chat_model_stream
+                # Don't yield here to avoid duplicates
 
             elif kind == "on_chat_model_stream":
                 if "reviewer" in tags:
