@@ -327,10 +327,10 @@ GeoVision Lab supports **configurable RAG features** that can be toggled on/off 
 
 ### Features
 
-| Feature | Description | Latency Impact | Recommended |
-|---------|-------------|----------------|-------------|
-| **Context Grading** | Evaluates retrieval quality before generation (Corrective RAG pattern) | +200ms | ✓ Enabled |
-| **BGE Re-ranker** | Improves precision with cross-encoder re-ranking | +150ms | Context-dependent |
+| Feature | Description | Recommended |
+|---------|-------------|-------------|
+| **Context Grading** | Evaluates retrieval quality before generation (Corrective RAG pattern) | ✓ Enabled |
+| **BGE Re-ranker** | Improves precision with cross-encoder re-ranking | ✓ Enabled |
 
 ### Configuration via Environment Variables
 
@@ -339,7 +339,7 @@ Add to your `.env` file:
 ```bash
 # RAG Features Configuration
 RAG_GRADER_ENABLED=true           # Enable/disable context grading
-RAG_RERANKER_ENABLED=false        # Enable/disable BGE re-ranker
+RAG_RERANKER_ENABLED=true         # Enable/disable BGE re-ranker
 RAG_RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 RAG_RERANKER_TOP_K=3              # Number of results after re-ranking
 RAG_RERANKER_CANDIDATES_K=20      # Number of candidates to retrieve
@@ -362,19 +362,18 @@ Changes take effect immediately for new queries.
 | All disabled | Vector Search → Agent | Fastest, baseline quality |
 | Grader only | Vector Search → Grader → Agent | Prevents hallucinations from poor context |
 | Re-ranker only | Vector Search (k=20) → Re-rank → Agent | Better precision for technical queries |
-| Both enabled | Vector Search (k=20) → Re-rank → Grader → Agent | Best quality for critical analysis |
+| Both enabled (default) | Vector Search (k=20) → Re-rank → Grader → Agent | Best quality for critical analysis |
 
-### When to Enable Re-ranker
-
-**Enable re-ranker for:**
-- Technical documents with specific terminology
-- Queries where precision matters more than latency
-- Large document collections (>1000 chunks)
+### When to Disable Features
 
 **Disable re-ranker for:**
 - Simple queries where vector search is sufficient
 - Latency-sensitive applications
 - Small document collections
+
+**Disable grader for:**
+- Maximum speed when you trust vector search quality
+- Testing and debugging
 
 ---
 

@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+router = APIRouter(prefix="/api/v1/rag", tags=["rag"])
 
 
 @router.get("/config", response_model=RAGConfig)
