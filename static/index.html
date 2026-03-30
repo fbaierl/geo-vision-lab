@@ -92,6 +92,10 @@
                                     <span class="msi-dot loading"></span>
                                     <span class="msi-label">Embeddings (all-MiniLM-L6-v2)</span>
                                 </div>
+                                <div class="model-status-item" id="status-reranker">
+                                    <span class="msi-dot loading"></span>
+                                    <span class="msi-label">Re-ranker (BGE)</span>
+                                </div>
                                 <div class="model-status-item" id="status-llm">
                                     <span class="msi-dot loading"></span>
                                     <span class="msi-label">LLM — waiting for Ollama…</span>
@@ -2118,6 +2122,7 @@
             const models = status.models || {};
             setModelItemUI('status-ner',        (models.ner        || {}).status, (models.ner        || {}).label);
             setModelItemUI('status-embeddings', (models.embeddings || {}).status, (models.embeddings || {}).label);
+            setModelItemUI('status-reranker',   (models.reranker   || {}).status, (models.reranker   || {}).label);
             setModelItemUI('status-llm',        (models.llm        || {}).status, (models.llm        || {}).label);
 
             if (status.ready) {
