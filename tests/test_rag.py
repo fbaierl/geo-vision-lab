@@ -15,13 +15,30 @@ def test_read_root():
         assert response.status_code == 200
 
 
+@patch("app.api.routes.health.get_warmup_status")
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
-def test_system_status_idle(mock_get):
+def test_system_status_idle(mock_get, mock_warmup_status):
     # Mock Ollama API response for an idle GPU (no model loaded)
     mock_response = MagicMock()
     mock_response.json.return_value = {"models": []}
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
+    
+    # Mock warmup status to indicate warmup is completed (no models loading)
+    mock_warmup_status.return_value = {
+        "started": True,
+        "completed": True,
+        "in_progress": False,
+        "models": {
+            "ner": {"status": "ready", "label": "NER (bert-base-NER)"},
+            "embeddings": {"status": "ready", "label": "Embeddings (all-MiniLM-L6-v2)"},
+            "llm": {"status": "ready", "label": "LLM (qwen3.5:4b)"},
+            "reranker": {"status": "ready", "label": "Re-ranker (BGE)"},
+        },
+        "results": {"ner": True, "embeddings": True, "llm": True, "reranker": True},
+        "ready": True,
+        "any_error": False,
+    }
 
     with TestClient(app) as client:
         response = client.get("/system/status")
@@ -32,8 +49,9 @@ def test_system_status_idle(mock_get):
         assert data["model_loaded"] is None
 
 
+@patch("app.api.routes.health.get_warmup_status")
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
-def test_system_status_engaged(mock_get):
+def test_system_status_engaged(mock_get, mock_warmup_status):
     # Mock Ollama API response for engaged GPU
     mock_response = MagicMock()
     mock_response.json.return_value = {
@@ -41,6 +59,22 @@ def test_system_status_engaged(mock_get):
     }
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
+    
+    # Mock warmup status to indicate warmup is completed
+    mock_warmup_status.return_value = {
+        "started": True,
+        "completed": True,
+        "in_progress": False,
+        "models": {
+            "ner": {"status": "ready", "label": "NER (bert-base-NER)"},
+            "embeddings": {"status": "ready", "label": "Embeddings (all-MiniLM-L6-v2)"},
+            "llm": {"status": "ready", "label": "LLM (qwen3.5:4b)"},
+            "reranker": {"status": "ready", "label": "Re-ranker (BGE)"},
+        },
+        "results": {"ner": True, "embeddings": True, "llm": True, "reranker": True},
+        "ready": True,
+        "any_error": False,
+    }
 
     with TestClient(app) as client:
         response = client.get("/system/status")
@@ -51,8 +85,9 @@ def test_system_status_engaged(mock_get):
         assert data["vram_bytes"] == 5000000000
 
 
+@patch("app.api.routes.health.get_warmup_status")
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
-def test_system_status_gpu_standby(mock_get):
+def test_system_status_gpu_standby(mock_get, mock_warmup_status):
     # Mock Ollama API response when model is loaded but VRAM=0 (GPU standby)
     mock_response = MagicMock()
     mock_response.json.return_value = {
@@ -60,6 +95,22 @@ def test_system_status_gpu_standby(mock_get):
     }
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
+    
+    # Mock warmup status to indicate warmup is completed
+    mock_warmup_status.return_value = {
+        "started": True,
+        "completed": True,
+        "in_progress": False,
+        "models": {
+            "ner": {"status": "ready", "label": "NER (bert-base-NER)"},
+            "embeddings": {"status": "ready", "label": "Embeddings (all-MiniLM-L6-v2)"},
+            "llm": {"status": "ready", "label": "LLM (qwen3.5:4b)"},
+            "reranker": {"status": "ready", "label": "Re-ranker (BGE)"},
+        },
+        "results": {"ner": True, "embeddings": True, "llm": True, "reranker": True},
+        "ready": True,
+        "any_error": False,
+    }
 
     with TestClient(app) as client:
         response = client.get("/system/status")
@@ -70,10 +121,27 @@ def test_system_status_gpu_standby(mock_get):
         assert data["vram_bytes"] == 0
 
 
+@patch("app.api.routes.health.get_warmup_status")
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
-def test_system_status_cpu_only(mock_get):
+def test_system_status_cpu_only(mock_get, mock_warmup_status):
     # Mock Ollama API failure (GPU not available)
     mock_get.side_effect = Exception("Connection refused")
+    
+    # Mock warmup status to indicate warmup is completed
+    mock_warmup_status.return_value = {
+        "started": True,
+        "completed": True,
+        "in_progress": False,
+        "models": {
+            "ner": {"status": "ready", "label": "NER (bert-base-NER)"},
+            "embeddings": {"status": "ready", "label": "Embeddings (all-MiniLM-L6-v2)"},
+            "llm": {"status": "ready", "label": "LLM (qwen3.5:4b)"},
+            "reranker": {"status": "ready", "label": "Re-ranker (BGE)"},
+        },
+        "results": {"ner": True, "embeddings": True, "llm": True, "reranker": True},
+        "ready": True,
+        "any_error": False,
+    }
 
     with TestClient(app) as client:
         response = client.get("/system/status")
