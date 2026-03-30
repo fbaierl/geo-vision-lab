@@ -421,14 +421,6 @@ async def process_query_stream(
     streaming_started = False
     done_sent = False
 
-    # Emit RAG subgraph status immediately (mandatory first step)
-    yield {
-        "type": "status",
-        "phase": "rag_retrieval",
-        "tool": "rag_subgraph",
-        "query": user_query,
-    }
-
     buffer = ""
     in_think = False
     think_buffer = ""

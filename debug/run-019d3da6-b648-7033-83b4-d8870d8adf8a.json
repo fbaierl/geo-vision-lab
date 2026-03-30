@@ -1,0 +1,95 @@
+{
+  "inputs": {
+    "rag_query": "When was hitler born?",
+    "vector_search_results": "ARCHIVAL INTELLIGENCE REPORT:\n0843.asp) 9 January 2009 at the Wayback Machine.\n77. Golden 2011, p. 94: \"He was born some 100 km (62 miles) south\nof Samarkand into a clan of the Barlas, a Turkicized tribe of\nMongol descent.\"\n78. This section incorporates text from the public domain Library of\nCongress Country Studies.\nChapin Metz, Helen (1989), \"Invasions of the Mongols and\nTamerlane\", Iran: a country study (https://web.archive.org/web/20\n080917085548/http://lcweb2.loc.gov/cgi-bin/query/r?frd/cstdy:@fi\neld(DOCID+ir0018)), Library of Congress Country Studies,\narchived from the original on 17 September 2008\n79. \"Isfahan: Iran's Hidden Jewel\" (https://web.archive.org/web/2010\n0717113459/http://www.smithsonianmag.com/people-places/Iran\ns-Hidden-Jewel.html?c=y&page=2). Smithsonianmag.com.\nArchived from the original (http://www.smithsonianmag.com/peop\nle-places/Irans-Hidden-Jewel.html?c=y&page=2) on 17 July\n2010. Retrieved 21 June 2013.\n80. Matthee 2008.\n81. Brown 2011, p. 432.\n82. Savory & Karamustafa 1998.\n\nTimur's empire and his military\ncampaigns\nSafavid Iran (1501–1722) at its greatest\nextent\nA map of the Afsharid Empire at its\ngreatest extent, in 1741–1745\nIran under the Qajar dynasty in the 19th\ncentury.\nReza Shah Pahlavi with Mohammad\nReza Pahlavi at Persepolis\nShah and Shahbanou of Iran with US\nPresident Jimmy Carter and King\nHussein of Jordan in 1977\nAyatollah Khomeini returns to\nIran after 14 years exile in\nFrance on 1 February 1979.\nAn Iranian soldier with gas mask during\nthe Iran–Iraq War\nDue in part to Nazi Germany's invasion of the Soviet Union, the Iranian government expected Germany to win the war and establish a powerful force on the Russian-Iranian border. Iran\nrejected British and Soviet demands to expel German residents from its borders. In response, the two Allies invaded in August 1941 and easily overwhelmed the weak Iranian army in\n\nnica.com/biography/Ruhollah-Khomeini) from the original on 22\nApril 2025. Retrieved 21 May 2025.\n113. PBS, American Experience, Jimmy Carter, \"444 Days: America\nReacts\" (https://www.pbs.org/wgbh/amex/carter/sfeature/sf_host\nage.html) Archived (https://web.archive.org/web/2011011922403\n1/https://www.pbs.org/wgbh/amex/carter/sfeature/sf_hostage.htm\nl) 19 January 2011 at the Wayback Machine. Retrieved 1\nOctober 2007\n114. Guests of the Ayatollah: The Iran Hostage Crisis: The First Battle\nin America's War with Militant Islam, Mark Bowden, p. 127, 200\n115. Razavi, Reza (2009). \"The Cultural Revolution in Iran, with Close\nRegard to the Universities, and its Impact on the Student\nMovement\" (http://www.tandfonline.com/doi/full/10.1080/0026320\n0802547586). Middle Eastern Studies. 45 (1): 1–17.\ndoi:10.1080/00263200802547586 (https://doi.org/10.1080%2F00\n263200802547586). ISSN 0026-3206 (https://search.worldcat.or\ng/issn/0026-3206). Retrieved 27 February 2026.",
+    "retrieved_docs": [
+      {
+        "page_content": "0843.asp) 9 January 2009 at the Wayback Machine.\n77. Golden 2011, p. 94: \"He was born some 100 km (62 miles) south\nof Samarkand into a clan of the Barlas, a Turkicized tribe of\nMongol descent.\"\n78. This section incorporates text from the public domain Library of\nCongress Country Studies.\nChapin Metz, Helen (1989), \"Invasions of the Mongols and\nTamerlane\", Iran: a country study (https://web.archive.org/web/20\n080917085548/http://lcweb2.loc.gov/cgi-bin/query/r?frd/cstdy:@fi\neld(DOCID+ir0018)), Library of Congress Country Studies,\narchived from the original on 17 September 2008\n79. \"Isfahan: Iran's Hidden Jewel\" (https://web.archive.org/web/2010\n0717113459/http://www.smithsonianmag.com/people-places/Iran\ns-Hidden-Jewel.html?c=y&page=2). Smithsonianmag.com.\nArchived from the original (http://www.smithsonianmag.com/peop\nle-places/Irans-Hidden-Jewel.html?c=y&page=2) on 17 July\n2010. Retrieved 21 June 2013.\n80. Matthee 2008.\n81. Brown 2011, p. 432.\n82. Savory & Karamustafa 1998.",
+        "metadata": {
+          "producer": "Skia/PDF m145",
+          "creator": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+          "creationdate": "2026-03-02T21:05:23+00:00",
+          "title": "Iran - Wikipedia",
+          "moddate": "2026-03-02T21:05:23+00:00",
+          "source": "/app/documents/pdf/Iran - Wikipedia.pdf",
+          "total_pages": 21,
+          "page": 10,
+          "page_label": "11"
+        },
+        "rerank_score": 0.01256199087947607,
+        "rerank_rank": 1
+      },
+      {
+        "page_content": "Timur's empire and his military\ncampaigns\nSafavid Iran (1501–1722) at its greatest\nextent\nA map of the Afsharid Empire at its\ngreatest extent, in 1741–1745\nIran under the Qajar dynasty in the 19th\ncentury.\nReza Shah Pahlavi with Mohammad\nReza Pahlavi at Persepolis\nShah and Shahbanou of Iran with US\nPresident Jimmy Carter and King\nHussein of Jordan in 1977\nAyatollah Khomeini returns to\nIran after 14 years exile in\nFrance on 1 February 1979.\nAn Iranian soldier with gas mask during\nthe Iran–Iraq War\nDue in part to Nazi Germany's invasion of the Soviet Union, the Iranian government expected Germany to win the war and establish a powerful force on the Russian-Iranian border. Iran\nrejected British and Soviet demands to expel German residents from its borders. In response, the two Allies invaded in August 1941 and easily overwhelmed the weak Iranian army in",
+        "metadata": {
+          "producer": "Skia/PDF m145",
+          "creator": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+          "creationdate": "2026-03-02T21:05:23+00:00",
+          "title": "Iran - Wikipedia",
+          "moddate": "2026-03-02T21:05:23+00:00",
+          "source": "/app/documents/pdf/Iran - Wikipedia.pdf",
+          "total_pages": 21,
+          "page": 2,
+          "page_label": "3"
+        },
+        "rerank_score": 0.011013481765985489,
+        "rerank_rank": 2
+      },
+      {
+        "page_content": "nica.com/biography/Ruhollah-Khomeini) from the original on 22\nApril 2025. Retrieved 21 May 2025.\n113. PBS, American Experience, Jimmy Carter, \"444 Days: America\nReacts\" (https://www.pbs.org/wgbh/amex/carter/sfeature/sf_host\nage.html) Archived (https://web.archive.org/web/2011011922403\n1/https://www.pbs.org/wgbh/amex/carter/sfeature/sf_hostage.htm\nl) 19 January 2011 at the Wayback Machine. Retrieved 1\nOctober 2007\n114. Guests of the Ayatollah: The Iran Hostage Crisis: The First Battle\nin America's War with Militant Islam, Mark Bowden, p. 127, 200\n115. Razavi, Reza (2009). \"The Cultural Revolution in Iran, with Close\nRegard to the Universities, and its Impact on the Student\nMovement\" (http://www.tandfonline.com/doi/full/10.1080/0026320\n0802547586). Middle Eastern Studies. 45 (1): 1–17.\ndoi:10.1080/00263200802547586 (https://doi.org/10.1080%2F00\n263200802547586). ISSN 0026-3206 (https://search.worldcat.or\ng/issn/0026-3206). Retrieved 27 February 2026.",
+        "metadata": {
+          "producer": "Skia/PDF m145",
+          "creator": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+          "creationdate": "2026-03-02T21:05:23+00:00",
+          "title": "Iran - Wikipedia",
+          "moddate": "2026-03-02T21:05:23+00:00",
+          "source": "/app/documents/pdf/Iran - Wikipedia.pdf",
+          "total_pages": 21,
+          "page": 10,
+          "page_label": "11"
+        },
+        "rerank_score": 0.005355835426598787,
+        "rerank_rank": 3
+      }
+    ],
+    "rag_quality": "",
+    "rag_context": "",
+    "rag_hint": ""
+  },
+  "outputs": {
+    "rag_quality": "RELEVANT",
+    "rag_context": "ARCHIVAL INTELLIGENCE REPORT:\n0843.asp) 9 January 2009 at the Wayback Machine.\n77. Golden 2011, p. 94: \"He was born some 100 km (62 miles) south\nof Samarkand into a clan of the Barlas, a Turkicized tribe of\nMongol descent.\"\n78. This section incorporates text from the public domain Library of\nCongress Country Studies.\nChapin Metz, Helen (1989), \"Invasions of the Mongols and\nTamerlane\", Iran: a country study (https://web.archive.org/web/20\n080917085548/http://lcweb2.loc.gov/cgi-bin/query/r?frd/cstdy:@fi\neld(DOCID+ir0018)), Library of Congress Country Studies,\narchived from the original on 17 September 2008\n79. \"Isfahan: Iran's Hidden Jewel\" (https://web.archive.org/web/2010\n0717113459/http://www.smithsonianmag.com/people-places/Iran\ns-Hidden-Jewel.html?c=y&page=2). Smithsonianmag.com.\nArchived from the original (http://www.smithsonianmag.com/peop\nle-places/Irans-Hidden-Jewel.html?c=y&page=2) on 17 July\n2010. Retrieved 21 June 2013.\n80. Matthee 2008.\n81. Brown 2011, p. 432.\n82. Savory & Karamustafa 1998.\n\nTimur's empire and his military\ncampaigns\nSafavid Iran (1501–1722) at its greatest\nextent\nA map of the Afsharid Empire at its\ngreatest extent, in 1741–1745\nIran under the Qajar dynasty in the 19th\ncentury.\nReza Shah Pahlavi with Mohammad\nReza Pahlavi at Persepolis\nShah and Shahbanou of Iran with US\nPresident Jimmy Carter and King\nHussein of Jordan in 1977\nAyatollah Khomeini returns to\nIran after 14 years exile in\nFrance on 1 February 1979.\nAn Iranian soldier with gas mask during\nthe Iran–Iraq War\nDue in part to Nazi Germany's invasion of the Soviet Union, the Iranian government expected Germany to win the war and establish a powerful force on the Russian-Iranian border. Iran\nrejected British and Soviet demands to expel German residents from its borders. In response, the two Allies invaded in August 1941 and easily overwhelmed the weak Iranian army in\n\nnica.com/biography/Ruhollah-Khomeini) from the original on 22\nApril 2025. Retrieved 21 May 2025.\n113. PBS, American Experience, Jimmy Carter, \"444 Days: America\nReacts\" (https://www.pbs.org/wgbh/amex/carter/sfeature/sf_host\nage.html) Archived (https://web.archive.org/web/2011011922403\n1/https://www.pbs.org/wgbh/amex/carter/sfeature/sf_hostage.htm\nl) 19 January 2011 at the Wayback Machine. Retrieved 1\nOctober 2007\n114. Guests of the Ayatollah: The Iran Hostage Crisis: The First Battle\nin America's War with Militant Islam, Mark Bowden, p. 127, 200\n115. Razavi, Reza (2009). \"The Cultural Revolution in Iran, with Close\nRegard to the Universities, and its Impact on the Student\nMovement\" (http://www.tandfonline.com/doi/full/10.1080/0026320\n0802547586). Middle Eastern Studies. 45 (1): 1–17.\ndoi:10.1080/00263200802547586 (https://doi.org/10.1080%2F00\n263200802547586). ISSN 0026-3206 (https://search.worldcat.or\ng/issn/0026-3206). Retrieved 27 February 2026."
+  },
+  "metadata": {
+    "LANGSMITH_ENDPOINT": "https://eu.api.smith.langchain.com",
+    "LANGSMITH_PROJECT": "geo-vision-lab",
+    "LANGSMITH_TRACING": "true",
+    "checkpoint_ns": "rag_subgraph:91a0401e-5bff-75fc-1b19-573f5f6a2214",
+    "langgraph_checkpoint_ns": "rag_subgraph:91a0401e-5bff-75fc-1b19-573f5f6a2214|grader:b1ffff40-7743-d228-279c-b3752d818319",
+    "langgraph_node": "grader",
+    "langgraph_path": [
+      "__pregel_pull",
+      "grader"
+    ],
+    "langgraph_step": 3,
+    "langgraph_triggers": [
+      "branch:to:grader"
+    ],
+    "ls_run_depth": 3,
+    "thread_id": "2008b184-1446-4a56-aee3-26ef785ee30e"
+  },
+  "langsmith": {
+    "organization": {
+      "name": "Personal",
+      "id": "a3df07d9-6d56-4892-8797-4d20e61cc904"
+    },
+    "workspace": {
+      "name": "Workspace 1",
+      "id": "77354fe5-f434-4a9d-9ff8-6226a016e262"
+    },
+    "tracing_project": {
+      "id": "85e9375b-4333-40f9-a762-cbe50c401f7a",
+      "name": "geo-vision-lab"
+    }
+  }
+}
