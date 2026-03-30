@@ -27,9 +27,9 @@ def test_system_status_idle(mock_get):
         response = client.get("/system/status")
         assert response.status_code == 200
         data = response.json()
-        assert data["gpu_engaged"] is False
         assert data["gpu_available"] is True
-        assert data["reason"] == "gpu_standby"
+        assert data["status"] == "idle"
+        assert data["model_loaded"] is None
 
 
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
@@ -46,10 +46,9 @@ def test_system_status_engaged(mock_get):
         response = client.get("/system/status")
         assert response.status_code == 200
         data = response.json()
-        assert data["gpu_engaged"] is True
         assert data["gpu_available"] is True
-        assert data["reason"] == "gpu"
-        assert data["model"] == "qwen3.5:4b"
+        assert data["model_loaded"] == "qwen3.5:4b"
+        assert data["vram_bytes"] == 5000000000
 
 
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
@@ -66,9 +65,9 @@ def test_system_status_gpu_standby(mock_get):
         response = client.get("/system/status")
         assert response.status_code == 200
         data = response.json()
-        assert data["gpu_engaged"] is False
         assert data["gpu_available"] is True
-        assert data["reason"] == "gpu_standby"
+        assert data["model_loaded"] == "qwen3.5:4b"
+        assert data["vram_bytes"] == 0
 
 
 @patch("app.api.routes.health.httpx.AsyncClient.get", new_callable=AsyncMock)
@@ -80,9 +79,8 @@ def test_system_status_cpu_only(mock_get):
         response = client.get("/system/status")
         assert response.status_code == 200
         data = response.json()
-        assert data["gpu_engaged"] is False
         assert data["gpu_available"] is False
-        assert "Connection refused" in data["reason"]
+        assert "Connection refused" in data["error"]
 
 
 @patch("app.api.routes.chat.process_query")
