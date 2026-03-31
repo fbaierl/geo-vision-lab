@@ -13,17 +13,22 @@ from app.api.routes import settings as settings_router
 
 class PollingFilter(logging.Filter):
     """Filter out repetitive /api/ps polling logs from httpx."""
+
     def filter(self, record):
         msg = record.getMessage()
-        if record.levelno == logging.INFO and 'GET' in msg and '/api/ps' in msg and '200 OK' in msg:
+        if (
+            record.levelno == logging.INFO
+            and "GET" in msg
+            and "/api/ps" in msg
+            and "200 OK" in msg
+        ):
             return False
         return True
 
 
 # Configure logging for Dozzle visibility
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.addFilter(PollingFilter())
@@ -72,16 +77,20 @@ os.makedirs("static", exist_ok=True)
 class NoCacheStaticFiles(StaticFiles):
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["method"] == "GET":
+
             async def send_with_no_cache(message):
                 if message["type"] == "http.response.start":
                     headers = list(message.get("headers", []))
-                    headers.extend([
-                        (b"cache-control", b"no-cache, no-store, must-revalidate"),
-                        (b"pragma", b"no-cache"),
-                        (b"expires", b"0"),
-                    ])
+                    headers.extend(
+                        [
+                            (b"cache-control", b"no-cache, no-store, must-revalidate"),
+                            (b"pragma", b"no-cache"),
+                            (b"expires", b"0"),
+                        ]
+                    )
                     message["headers"] = headers
                 await send(message)
+
             await super().__call__(scope, receive, send_with_no_cache)
         else:
             await super().__call__(scope, receive, send)

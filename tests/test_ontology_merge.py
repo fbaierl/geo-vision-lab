@@ -15,31 +15,42 @@ from app.services.ontology.merge import merge_ontologies
 class TestOntologyMerge:
     """Test suite for ontology merging functionality."""
 
-    def create_entity(self, name: str, type: str, uuid: str = None, mentions: list = None, properties: dict = None):
+    def create_entity(
+        self,
+        name: str,
+        type: str,
+        uuid: str = None,
+        mentions: list = None,
+        properties: dict = None,
+    ):
         """Helper to create test entities."""
         from uuid import uuid4
+
         entity = OntologyEntity(
             uuid=uuid4() if uuid is None else uuid,
             name=name,
             type=type,
             properties=properties or {},
             mentions=mentions or [],
-            created_by="test"
+            created_by="test",
         )
         if uuid:
             entity.uuid = uuid
         return entity
 
-    def create_link(self, source_uuid: str, target_uuid: str, type: str, uuid: str = None):
+    def create_link(
+        self, source_uuid: str, target_uuid: str, type: str, uuid: str = None
+    ):
         """Helper to create test links."""
         from uuid import uuid4
+
         link = OntologyLink(
             uuid=uuid4() if uuid is None else uuid,
             source_uuid=source_uuid,
             target_uuid=target_uuid,
             type=type,
             mentions=[],
-            created_by="test"
+            created_by="test",
         )
         if uuid:
             link.uuid = uuid
@@ -53,7 +64,7 @@ class TestOntologyMerge:
         """Test that entities with matching UUIDs are merged."""
         # Arrange
         uuid = "550e8400-e29b-41d4-a716-446655440000"
-        
+
         current = SessionOntology()
         entity1 = self.create_entity("Germany", "Location", uuid=uuid)
         entity1.mentions = [self.create_mention("Germany is in Europe")]
@@ -77,24 +88,36 @@ class TestOntologyMerge:
         # Arrange - Simulating the German Chancellors scenario
         uuid1 = "cc8498de-3f30-482c-82ad-00f0cb3490d1"
         uuid2 = "75144852-67c3-44d7-9c4d-a137674df771"
-        
+
         current = SessionOntology()
         olaf1 = self.create_entity("Olaf Scholz", "Person", uuid=uuid1)
-        olaf1.mentions = [self.create_mention("The current Chancellor of Germany is Olaf Scholz")]
+        olaf1.mentions = [
+            self.create_mention("The current Chancellor of Germany is Olaf Scholz")
+        ]
         current.entities[uuid1] = olaf1
 
         delta = SessionOntology()
         olaf2 = self.create_entity("Olaf Scholz", "Person", uuid=uuid2)
-        olaf2.mentions = [self.create_mention("The previous Chancellor of Germany before Olaf Scholz was Angela Merkel")]
+        olaf2.mentions = [
+            self.create_mention(
+                "The previous Chancellor of Germany before Olaf Scholz was Angela Merkel"
+            )
+        ]
         delta.entities[uuid2] = olaf2
 
         # Act
         merged = merge_ontologies(current, delta)
 
         # Assert - Should have only 1 Olaf Scholz, not 2
-        olaf_entities = [e for e in merged.entities.values() if e.name == "Olaf Scholz" and e.type == "Person"]
-        assert len(olaf_entities) == 1, f"Expected 1 Olaf Scholz, got {len(olaf_entities)}"
-        
+        olaf_entities = [
+            e
+            for e in merged.entities.values()
+            if e.name == "Olaf Scholz" and e.type == "Person"
+        ]
+        assert len(olaf_entities) == 1, (
+            f"Expected 1 Olaf Scholz, got {len(olaf_entities)}"
+        )
+
         # Should have both mentions
         assert len(olaf_entities[0].mentions) == 2
 
@@ -104,32 +127,48 @@ class TestOntologyMerge:
         uuid_germany_1 = "feaec317-051c-46ea-b2a6-5b5d7f402724"
         uuid_germany_2 = "049de5f6-8fca-44fe-81b6-f1cfd09cd784"
         uuid_germany_3 = "f866de32-2cb6-4b19-917e-0113d89a538e"
-        
+
         current = SessionOntology()
         germany1 = self.create_entity("Germany", "Location", uuid=uuid_germany_1)
-        germany1.mentions = [self.create_mention("The current Chancellor of Germany is Olaf Scholz")]
+        germany1.mentions = [
+            self.create_mention("The current Chancellor of Germany is Olaf Scholz")
+        ]
         germany1.properties = {"lat": 51.16, "lon": 10.45}
         current.entities[uuid_germany_1] = germany1
 
         delta = SessionOntology()
         germany2 = self.create_entity("Germany", "Location", uuid=uuid_germany_2)
-        germany2.mentions = [self.create_mention("The previous Chancellor of Germany before Olaf Scholz was Angela Merkel")]
+        germany2.mentions = [
+            self.create_mention(
+                "The previous Chancellor of Germany before Olaf Scholz was Angela Merkel"
+            )
+        ]
         delta.entities[uuid_germany_2] = germany2
-        
+
         germany3 = self.create_entity("Germany", "Location", uuid=uuid_germany_3)
-        germany3.mentions = [self.create_mention("The previous Chancellor of Germany before Angela Merkel was Gerhard Schröder.")]
+        germany3.mentions = [
+            self.create_mention(
+                "The previous Chancellor of Germany before Angela Merkel was Gerhard Schröder."
+            )
+        ]
         delta.entities[uuid_germany_3] = germany3
 
         # Act
         merged = merge_ontologies(current, delta)
 
         # Assert - Should have only 1 Germany
-        germany_entities = [e for e in merged.entities.values() if e.name == "Germany" and e.type == "Location"]
-        assert len(germany_entities) == 1, f"Expected 1 Germany, got {len(germany_entities)}"
-        
+        germany_entities = [
+            e
+            for e in merged.entities.values()
+            if e.name == "Germany" and e.type == "Location"
+        ]
+        assert len(germany_entities) == 1, (
+            f"Expected 1 Germany, got {len(germany_entities)}"
+        )
+
         # Should have all 3 mentions
         assert len(germany_entities[0].mentions) == 3
-        
+
         # Should preserve properties
         assert germany_entities[0].properties.get("lat") == 51.16
 
@@ -140,13 +179,13 @@ class TestOntologyMerge:
         olaf_uuid_2 = "75144852-67c3-44d7-9c4d-a137674df771"
         germany_uuid_1 = "feaec317-051c-46ea-b2a6-5b5d7f402724"
         germany_uuid_2 = "049de5f6-8fca-44fe-81b6-f1cfd09cd784"
-        
+
         current = SessionOntology()
         olaf1 = self.create_entity("Olaf Scholz", "Person", uuid=olaf_uuid_1)
         germany1 = self.create_entity("Germany", "Location", uuid=germany_uuid_1)
         current.entities[olaf_uuid_1] = olaf1
         current.entities[germany_uuid_1] = germany1
-        
+
         link1 = self.create_link(olaf_uuid_1, germany_uuid_1, "CHANCELLOR_OF")
         current.links[str(link1.uuid)] = link1
 
@@ -155,7 +194,7 @@ class TestOntologyMerge:
         germany2 = self.create_entity("Germany", "Location", uuid=germany_uuid_2)
         delta.entities[olaf_uuid_2] = olaf2
         delta.entities[germany_uuid_2] = germany2
-        
+
         link2 = self.create_link(olaf_uuid_2, germany_uuid_2, "CHANCELLOR_OF")
         delta.links[str(link2.uuid)] = link2
 
@@ -165,24 +204,28 @@ class TestOntologyMerge:
         # Assert - Links should point to deduplicated entities
         olaf_entities = [e for e in merged.entities.values() if e.name == "Olaf Scholz"]
         germany_entities = [e for e in merged.entities.values() if e.name == "Germany"]
-        
+
         assert len(olaf_entities) == 1
         assert len(germany_entities) == 1
-        
+
         olaf_uuid = str(olaf_entities[0].uuid)
         germany_uuid = str(germany_entities[0].uuid)
-        
+
         # All links should reference the consolidated UUIDs
         for link in merged.links.values():
-            assert str(link.source_uuid) == olaf_uuid, f"Link source {link.source_uuid} should be {olaf_uuid}"
-            assert str(link.target_uuid) == germany_uuid, f"Link target {link.target_uuid} should be {germany_uuid}"
+            assert str(link.source_uuid) == olaf_uuid, (
+                f"Link source {link.source_uuid} should be {olaf_uuid}"
+            )
+            assert str(link.target_uuid) == germany_uuid, (
+                f"Link target {link.target_uuid} should be {germany_uuid}"
+            )
 
     def test_mention_deduplication(self):
         """Test that duplicate mentions are not added when deduplicating by name."""
         # Arrange - Using different UUIDs to trigger name-based deduplication
         uuid1 = "550e8400-e29b-41d4-a716-446655440000"
         uuid2 = "550e8400-e29b-41d4-a716-446655440001"
-        
+
         current = SessionOntology()
         entity1 = self.create_entity("Angela Merkel", "Person", uuid=uuid1)
         mention1 = self.create_mention("Angela Merkel was Chancellor")
@@ -191,7 +234,9 @@ class TestOntologyMerge:
 
         delta = SessionOntology()
         entity2 = self.create_entity("Angela Merkel", "Person", uuid=uuid2)
-        mention1_duplicate = self.create_mention("Angela Merkel was Chancellor")  # Same text
+        mention1_duplicate = self.create_mention(
+            "Angela Merkel was Chancellor"
+        )  # Same text
         mention2_new = self.create_mention("She served from 2005 to 2021")
         entity2.mentions = [mention1_duplicate, mention2_new]
         delta.entities[uuid2] = entity2
@@ -200,7 +245,9 @@ class TestOntologyMerge:
         merged = merge_ontologies(current, delta)
 
         # Assert - Should have 2 unique mentions (duplicate filtered), not 3
-        angela_entities = [e for e in merged.entities.values() if e.name == "Angela Merkel"]
+        angela_entities = [
+            e for e in merged.entities.values() if e.name == "Angela Merkel"
+        ]
         assert len(angela_entities) == 1
         assert len(angela_entities[0].mentions) == 2
 
@@ -208,7 +255,7 @@ class TestOntologyMerge:
         """Test that properties are merged correctly."""
         # Arrange
         uuid = "550e8400-e29b-41d4-a716-446655440000"
-        
+
         current = SessionOntology()
         entity1 = self.create_entity("Berlin", "Location", uuid=uuid)
         entity1.properties = {"lat": 52.52, "country": "Germany"}
@@ -233,7 +280,7 @@ class TestOntologyMerge:
         # Arrange - "Georgia" can be a Location (country) or Person (name)
         uuid_location = "550e8400-e29b-41d4-a716-446655440001"
         uuid_person = "550e8400-e29b-41d4-a716-446655440002"
-        
+
         current = SessionOntology()
         georgia_loc = self.create_entity("Georgia", "Location", uuid=uuid_location)
         current.entities[uuid_location] = georgia_loc
@@ -248,7 +295,7 @@ class TestOntologyMerge:
         # Assert - Both should exist (homonyms)
         georgia_entities = [e for e in merged.entities.values() if e.name == "Georgia"]
         assert len(georgia_entities) == 2
-        
+
         types = {e.type for e in georgia_entities}
         assert "Location" in types
         assert "Person" in types
@@ -289,7 +336,7 @@ class TestOntologyMerge:
         # Arrange
         uuid1 = "550e8400-e29b-41d4-a716-446655440001"
         uuid2 = "550e8400-e29b-41d4-a716-446655440002"
-        
+
         current = SessionOntology()
         entity1 = self.create_entity("germany", "Location", uuid=uuid1)
         current.entities[uuid1] = entity1
@@ -302,5 +349,7 @@ class TestOntologyMerge:
         merged = merge_ontologies(current, delta)
 
         # Assert - Should be deduplicated despite case difference
-        germany_entities = [e for e in merged.entities.values() if e.name.lower() == "germany"]
+        germany_entities = [
+            e for e in merged.entities.values() if e.name.lower() == "germany"
+        ]
         assert len(germany_entities) == 1

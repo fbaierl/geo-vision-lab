@@ -36,7 +36,9 @@ class Settings(BaseSettings):
         return self.OLLAMA_BASE_URL
 
     # --- LLM Models ---
-    REASONING_LLM_MODEL_NAME: str = "qwen3.5:4b"  # Default: qwen3.5:4b, switchable to qwen3.5:9b
+    REASONING_LLM_MODEL_NAME: str = (
+        "qwen3.5:4b"  # Default: qwen3.5:4b, switchable to qwen3.5:9b
+    )
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
     # --- Online LLM (Groq) ---

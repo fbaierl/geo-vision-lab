@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 def _get_container():
     """Lazy import to avoid circular dependency."""
     from app.core.di import container
+
     return container
 
 
@@ -51,15 +52,19 @@ def _create_llm() -> BaseChatModel:
 
     if settings.USE_ONLINE_LLM:
         if not settings.GROQ_API_KEY:
-            logger.warning("[DI] Online LLM requested but GROQ_API_KEY not configured. Falling back to local LLM.")
+            logger.warning(
+                "[DI] Online LLM requested but GROQ_API_KEY not configured. Falling back to local LLM."
+            )
             return ChatOllama(
                 model=settings.REASONING_LLM_MODEL_NAME,
                 base_url=settings.OLLAMA_URL,
                 callback_manager=callback_manager,
-                timeout=120
+                timeout=120,
             )
 
-        logger.info(f"[DI] Creating online LLM (Groq): {settings.ONLINE_LLM_MODEL_NAME}")
+        logger.info(
+            f"[DI] Creating online LLM (Groq): {settings.ONLINE_LLM_MODEL_NAME}"
+        )
         llm = ChatGroq(
             model=settings.ONLINE_LLM_MODEL_NAME,
             api_key=settings.GROQ_API_KEY,
@@ -69,12 +74,14 @@ def _create_llm() -> BaseChatModel:
             llm = llm.with_config(callback_manager=callback_manager)
         return llm
     else:
-        logger.info(f"[DI] Creating local LLM (Ollama): {settings.REASONING_LLM_MODEL_NAME}")
+        logger.info(
+            f"[DI] Creating local LLM (Ollama): {settings.REASONING_LLM_MODEL_NAME}"
+        )
         return ChatOllama(
             model=settings.REASONING_LLM_MODEL_NAME,
             base_url=settings.OLLAMA_URL,
             callback_manager=callback_manager,
-            timeout=120  # Increased timeout for complex reasoning
+            timeout=120,  # Increased timeout for complex reasoning
         )
 
 

@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class SystemStatusEnum(str, Enum):
     """System status enum for /system/status endpoint."""
+
     IDLE = "idle"  # GPU available, no model loaded
     LOADING_MODEL = "loading_model"  # Model being loaded
     READY = "ready"  # Model loaded, waiting for work
@@ -32,6 +33,7 @@ def set_processing_state(is_processing: bool, query: str = None):
     _processing_state["current_query"] = query
     if is_processing:
         from datetime import datetime
+
         _processing_state["started_at"] = datetime.utcnow().isoformat()
     else:
         _processing_state["started_at"] = None
@@ -45,7 +47,7 @@ def get_processing_state() -> dict:
 @router.get("/system/status")
 async def system_status():
     """Return system status including GPU engagement and model lifecycle states.
-    
+
     Response includes:
     - status: System status enum (idle, loading_model, ready, processing, error)
     - gpu_available: Whether GPU is available
@@ -63,7 +65,9 @@ async def system_status():
     if warmup_status.get("any_error"):
         base_status = SystemStatusEnum.ERROR
         error_msg = "One or more models failed to load during startup"
-    elif not warmup_status.get("completed", False) and warmup_status.get("in_progress", False):
+    elif not warmup_status.get("completed", False) and warmup_status.get(
+        "in_progress", False
+    ):
         base_status = SystemStatusEnum.LOADING_MODEL
         error_msg = None
     elif warmup_status.get("ready", False):

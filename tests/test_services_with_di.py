@@ -12,62 +12,58 @@ from app.services.location_prioritizer import LocationPrioritizerService
 
 class TestVectorStoreService:
     """Test VectorStoreService with injected dependencies."""
-    
+
     def test_similarity_search(self):
         """Test vector search with mock dependencies."""
         # Create mocks
         mock_embeddings = MagicMock()
         mock_client = MagicMock()
         mock_collection = MagicMock()
-        
+
         # Setup mock behavior
         mock_embeddings.embed_query.return_value = [0.1] * 384
         mock_collection.aggregate.return_value = [
             {"page_content": "Result 1", "metadata": {"source": "test.pdf"}},
-            {"page_content": "Result 2", "metadata": {"source": "test.pdf"}}
+            {"page_content": "Result 2", "metadata": {"source": "test.pdf"}},
         ]
-        
+
         # Create service with injected dependencies
         service = VectorStoreService(
-            embeddings=mock_embeddings,
-            client=mock_client,
-            collection=mock_collection
+            embeddings=mock_embeddings, client=mock_client, collection=mock_collection
         )
-        
+
         # Call method
         results = service.similarity_search("test query", k=2)
-        
+
         # Verify
         assert len(results) == 2
         assert results[0]["page_content"] == "Result 1"
         mock_embeddings.embed_query.assert_called_once_with("test query")
-    
+
     def test_insert_documents(self):
         """Test document insertion with mock dependencies."""
         # Create mocks
         mock_embeddings = MagicMock()
         mock_client = MagicMock()
         mock_collection = MagicMock()
-        
+
         # Setup mock behavior
         mock_embeddings.embed_documents.return_value = [[0.1] * 384, [0.2] * 384]
-        
+
         # Create service
         service = VectorStoreService(
-            embeddings=mock_embeddings,
-            client=mock_client,
-            collection=mock_collection
+            embeddings=mock_embeddings, client=mock_client, collection=mock_collection
         )
-        
+
         # Prepare test documents
         documents = [
             {"page_content": "Doc 1", "metadata": {"source": "test.pdf"}},
-            {"page_content": "Doc 2", "metadata": {"source": "test.pdf"}}
+            {"page_content": "Doc 2", "metadata": {"source": "test.pdf"}},
         ]
-        
+
         # Call method
         service.insert_documents(documents)
-        
+
         # Verify
         mock_collection.delete_many.assert_called_once()
         mock_embeddings.embed_documents.assert_called_once()
@@ -76,21 +72,22 @@ class TestVectorStoreService:
 
 class TestLocationExtractorService:
     """Test LocationExtractorService with injected dependencies."""
-    
+
     def test_extract_locations_with_ner(self):
         """Test NER extraction with mock pipeline."""
         # Create mock NER pipeline
         mock_ner = MagicMock()
         mock_ner.return_value = [
             {"entity_group": "GPE", "word": "Paris", "entity_text": "Paris"},
-            {"entity_group": "LOC", "word": "Eiffel Tower", "entity_text": "Eiffel Tower"}
+            {
+                "entity_group": "LOC",
+                "word": "Eiffel Tower",
+                "entity_text": "Eiffel Tower",
+            },
         ]
 
         # Create service (no reviewer_llm needed)
-        service = LocationExtractorService(
-            ner_pipeline=mock_ner,
-            geocode_cache={}
-        )
+        service = LocationExtractorService(ner_pipeline=mock_ner, geocode_cache={})
 
         # Call method
         locations = service.extract_locations_with_ner("Paris is beautiful")
@@ -109,14 +106,18 @@ class TestLocationExtractorService:
         # Pre-populate cache
         cache = {
             "Paris": [
-                {"name": "Paris", "lat": 48.8566, "lon": 2.3522, "display_name": "Paris, France", "type": "city", "country": "France"}
+                {
+                    "name": "Paris",
+                    "lat": 48.8566,
+                    "lon": 2.3522,
+                    "display_name": "Paris, France",
+                    "type": "city",
+                    "country": "France",
+                }
             ]
         }
 
-        service = LocationExtractorService(
-            ner_pipeline=mock_ner,
-            geocode_cache=cache
-        )
+        service = LocationExtractorService(ner_pipeline=mock_ner, geocode_cache=cache)
 
         # Call method - should use cache, not call Nominatim
         results = service.geocode_location("Paris")
@@ -143,16 +144,37 @@ class TestLocationPrioritizerService:
 
         # Test locations with full geocoding data (including display_name and country)
         locations = [
-            {"name": "Paris", "type": "city", "lat": 48.8566, "lon": 2.3522, "display_name": "Paris, France", "country": "France"},
-            {"name": "Paris", "type": "city", "lat": 33.8, "lon": -96.6, "display_name": "Paris, Texas, USA", "country": "USA"},
-            {"name": "London", "type": "city", "lat": 51.5074, "lon": -0.1278, "display_name": "London, UK", "country": "UK"},
+            {
+                "name": "Paris",
+                "type": "city",
+                "lat": 48.8566,
+                "lon": 2.3522,
+                "display_name": "Paris, France",
+                "country": "France",
+            },
+            {
+                "name": "Paris",
+                "type": "city",
+                "lat": 33.8,
+                "lon": -96.6,
+                "display_name": "Paris, Texas, USA",
+                "country": "USA",
+            },
+            {
+                "name": "London",
+                "type": "city",
+                "lat": 51.5074,
+                "lon": -0.1278,
+                "display_name": "London, UK",
+                "country": "UK",
+            },
         ]
 
         # Call method
         result = service.prioritize_locations(
             query="Tell me about Paris",
             locations=locations,
-            response_text="Paris is the capital of France..."
+            response_text="Paris is the capital of France...",
         )
 
         # Verify
@@ -173,15 +195,29 @@ class TestLocationPrioritizerService:
 
         # Test locations with full geocoding data
         locations = [
-            {"name": "Paris", "type": "city", "lat": 48.8566, "lon": 2.3522, "display_name": "Paris, France", "country": "France"},
-            {"name": "France", "type": "country", "lat": 46.603354, "lon": 1.888334, "display_name": "France", "country": "France"}
+            {
+                "name": "Paris",
+                "type": "city",
+                "lat": 48.8566,
+                "lon": 2.3522,
+                "display_name": "Paris, France",
+                "country": "France",
+            },
+            {
+                "name": "France",
+                "type": "country",
+                "lat": 46.603354,
+                "lon": 1.888334,
+                "display_name": "France",
+                "country": "France",
+            },
         ]
 
         # Call method - should use fallback
         result = service.prioritize_locations(
             query="Tell me about Paris",
             locations=locations,
-            response_text="Paris is the capital of France..."
+            response_text="Paris is the capital of France...",
         )
 
         # Verify fallback returned results
@@ -189,6 +225,7 @@ class TestLocationPrioritizerService:
         # In fallback, country is prioritized over city
         types = [loc["type"] for loc in result]
         assert "country" in types or "city" in types
+
 
 class TestServiceIntegrationWithDI:
     """Test getting services via DI container with overrides."""
@@ -202,15 +239,13 @@ class TestServiceIntegrationWithDI:
         assert service.client is override_mongo
         assert service.embeddings is override_embeddings
 
-    def test_get_location_extractor_with_overrides(
-        self, override_ner_pipeline
-    ):
+    def test_get_location_extractor_with_overrides(self, override_ner_pipeline):
         """Test getting location extractor via DI with overrides."""
         # Get service via DI with override
         from app.services.location_extractor import LocationExtractorService
+
         service = LocationExtractorService(
-            ner_pipeline=override_ner_pipeline,
-            geocode_cache={}
+            ner_pipeline=override_ner_pipeline, geocode_cache={}
         )
 
         # Verify it uses our mock

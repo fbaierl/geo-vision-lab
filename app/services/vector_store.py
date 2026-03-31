@@ -27,10 +27,7 @@ class VectorStoreService:
     """
 
     def __init__(
-        self,
-        embeddings: HuggingFaceEmbeddings,
-        client: MongoClient,
-        collection: Any
+        self, embeddings: HuggingFaceEmbeddings, client: MongoClient, collection: Any
     ):
         self.embeddings = embeddings
         self.client = client
@@ -68,7 +65,7 @@ class VectorStoreService:
     def similarity_search(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
         """Perform vector similarity search."""
         from app.core.config import settings
-        
+
         query_embedding = self.embed_query(query)
 
         pipeline = [
@@ -78,12 +75,10 @@ class VectorStoreService:
                     "path": "embedding",
                     "queryVector": query_embedding,
                     "numCandidates": 100,
-                    "limit": k
+                    "limit": k,
                 }
             },
-            {
-                "$unset": ["embedding", "_id"]
-            }
+            {"$unset": ["embedding", "_id"]},
         ]
 
         results = list(self.collection.aggregate(pipeline))
@@ -94,15 +89,18 @@ class VectorStoreService:
 # Backward-compatible functions (using DI internally)
 # =============================================================================
 
+
 def ensure_vector_index() -> None:
     """Create vector search index if it doesn't exist."""
     from app.core.di_services import ensure_vector_index as di_ensure_vector_index
+
     di_ensure_vector_index()
 
 
 def get_collection() -> Any:
     """Get MongoDB collection (backward compatibility for tests)."""
     from app.core.di_database import get_collection as di_get_collection
+
     return di_get_collection()
 
 
@@ -113,11 +111,13 @@ def get_vector_store() -> VectorStoreService:
     This is the recommended way to get a VectorStoreService instance.
     """
     from app.core.di_services import get_vector_store as di_get_vector_store
+
     return di_get_vector_store()
 
 
 # Legacy function wrappers for backward compatibility
 # These will be deprecated in future versions
+
 
 def embed_documents(texts: List[str]) -> List[List[float]]:
     """Embed multiple documents (legacy wrapper)."""

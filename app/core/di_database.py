@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 def _get_container():
     """Lazy import to avoid circular dependency."""
     from app.core.di import container
+
     return container
 
 
@@ -74,7 +75,9 @@ def ensure_vector_index() -> None:
 
         for idx in existing_indexes:
             if idx.get("name") == settings.VECTOR_INDEX_NAME:
-                logger.info(f"[DI] Vector index '{settings.VECTOR_INDEX_NAME}' already exists")
+                logger.info(
+                    f"[DI] Vector index '{settings.VECTOR_INDEX_NAME}' already exists"
+                )
                 return
 
         logger.info(f"[DI] Creating vector index '{settings.VECTOR_INDEX_NAME}'...")
@@ -86,12 +89,9 @@ def ensure_vector_index() -> None:
                         "type": "vector",
                         "numDimensions": settings.EMBEDDING_DIMENSIONS,
                         "path": "embedding",
-                        "similarity": "cosine"
+                        "similarity": "cosine",
                     },
-                    {
-                        "type": "filter",
-                        "path": "metadata.source"
-                    }
+                    {"type": "filter", "path": "metadata.source"},
                 ]
             },
             name=settings.VECTOR_INDEX_NAME,

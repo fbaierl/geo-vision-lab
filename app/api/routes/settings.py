@@ -19,6 +19,7 @@ router = APIRouter()
 
 class SettingsResponse(BaseModel):
     """Response model for GET /settings."""
+
     # Local LLM settings
     local_llm_enabled: bool
     current_local_model: str
@@ -32,7 +33,7 @@ class SettingsResponse(BaseModel):
 
     # Combined model list for UI
     all_models: list[dict]
-    
+
     # Actual active model name (for display purposes)
     active_model_name: str
     active_model_type: str  # "local" or "online"
@@ -40,12 +41,13 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdateRequest(BaseModel):
     """Request model for POST /settings."""
+
     # Model selection
     model: Optional[str] = None
-    
+
     # Online LLM toggle
     use_online_llm: Optional[bool] = None
-    
+
     # Online LLM model selection
     online_model: Optional[str] = None
 
@@ -53,7 +55,7 @@ class SettingsUpdateRequest(BaseModel):
 @router.get("/settings")
 async def get_settings():
     """Get all runtime settings.
-    
+
     Returns current configuration for:
     - Local LLM (Ollama) models
     - Online LLM (Groq) models
@@ -62,29 +64,39 @@ async def get_settings():
     """
     # Build combined model list with type indicators
     all_models = []
-    
+
     # Add local models
     for model in settings.AVAILABLE_REASONING_MODELS:
-        all_models.append({
-            "id": model,
-            "name": model,
-            "type": "local",
-            "provider": "Ollama",
-            "current": model == settings.REASONING_LLM_MODEL_NAME and not settings.USE_ONLINE_LLM
-        })
-    
+        all_models.append(
+            {
+                "id": model,
+                "name": model,
+                "type": "local",
+                "provider": "Ollama",
+                "current": model == settings.REASONING_LLM_MODEL_NAME
+                and not settings.USE_ONLINE_LLM,
+            }
+        )
+
     # Add online models
     for model in settings.AVAILABLE_ONLINE_MODELS:
-        all_models.append({
-            "id": model,
-            "name": model,
-            "type": "online",
-            "provider": "Groq",
-            "current": model == settings.ONLINE_LLM_MODEL_NAME and settings.USE_ONLINE_LLM
-        })
+        all_models.append(
+            {
+                "id": model,
+                "name": model,
+                "type": "online",
+                "provider": "Groq",
+                "current": model == settings.ONLINE_LLM_MODEL_NAME
+                and settings.USE_ONLINE_LLM,
+            }
+        )
 
     # Determine active model name and type
-    active_model_name = settings.ONLINE_LLM_MODEL_NAME if settings.USE_ONLINE_LLM else settings.REASONING_LLM_MODEL_NAME
+    active_model_name = (
+        settings.ONLINE_LLM_MODEL_NAME
+        if settings.USE_ONLINE_LLM
+        else settings.REASONING_LLM_MODEL_NAME
+    )
     active_model_type = "online" if settings.USE_ONLINE_LLM else "local"
 
     return SettingsResponse(
@@ -97,19 +109,19 @@ async def get_settings():
         groq_api_key_configured=settings.is_groq_api_key_configured(),
         all_models=all_models,
         active_model_name=active_model_name,
-        active_model_type=active_model_type
+        active_model_type=active_model_type,
     )
 
 
 @router.post("/settings")
 async def update_settings(request: SettingsUpdateRequest):
     """Update runtime settings.
-    
+
     Accepts:
     - model: Switch to a specific model (local or online)
     - use_online_llm: Toggle online LLM mode (true/false)
     - online_model: Set the online LLM model name
-    
+
     Returns updated settings or error if configuration is invalid.
     """
     # Handle online LLM toggle
@@ -120,11 +132,11 @@ async def update_settings(request: SettingsUpdateRequest):
                 content={
                     "success": False,
                     "error": "groq_api_key_missing",
-                    "message": "Groq API key is required to enable online LLM. Please add GROQ_API_KEY to your .env file."
-                }
+                    "message": "Groq API key is required to enable online LLM. Please add GROQ_API_KEY to your .env file.",
+                },
             )
         settings.set_online_llm_enabled(request.use_online_llm)
-    
+
     # Handle online model selection
     if request.online_model is not None:
         if not settings.set_online_llm_model(request.online_model):
@@ -133,10 +145,10 @@ async def update_settings(request: SettingsUpdateRequest):
                 content={
                     "success": False,
                     "error": "invalid_online_model",
-                    "message": f"Invalid online model. Available: {settings.AVAILABLE_ONLINE_MODELS}"
-                }
+                    "message": f"Invalid online model. Available: {settings.AVAILABLE_ONLINE_MODELS}",
+                },
             )
-    
+
     # Handle generic model selection (for backward compatibility)
     if request.model is not None:
         # Try local models first
@@ -151,8 +163,8 @@ async def update_settings(request: SettingsUpdateRequest):
                     content={
                         "success": False,
                         "error": "groq_api_key_missing",
-                        "message": "Groq API key is required to use online models."
-                    }
+                        "message": "Groq API key is required to use online models.",
+                    },
                 )
             settings.set_online_llm_model(request.model)
             settings.set_online_llm_enabled(True)
@@ -162,13 +174,14 @@ async def update_settings(request: SettingsUpdateRequest):
                 content={
                     "success": False,
                     "error": "invalid_model",
-                    "message": f"Invalid model. Available: {settings.AVAILABLE_REASONING_MODELS + settings.AVAILABLE_ONLINE_MODELS}"
-                }
+                    "message": f"Invalid model. Available: {settings.AVAILABLE_REASONING_MODELS + settings.AVAILABLE_ONLINE_MODELS}",
+                },
             )
-    
+
     # Clear DI container cache so new model is picked up
     from app.core.di import container
+
     container._instances.clear()
-    
+
     # Return updated settings
     return await get_settings()

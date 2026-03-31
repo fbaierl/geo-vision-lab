@@ -23,6 +23,7 @@ class Location:
         city: City name (optional)
         relevance: Relevance score (0.0-1.0) for prioritization
     """
+
     name: str
     lat: float
     lon: float
@@ -73,6 +74,7 @@ class Location:
 @dataclass(frozen=True)
 class LocationType:
     """Enumeration of location types as frozen dataclass for immutability."""
+
     COUNTRY = "country"
     REGION = "region"
     CITY = "city"
