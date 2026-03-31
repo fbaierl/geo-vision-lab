@@ -71,7 +71,7 @@ def grade_context(state: Dict[str, Any]) -> Dict[str, Any]:
     messages = [SystemMessage(content=prompt)]
     
     try:
-        response = llm.invoke(messages)
+        response = llm.invoke(messages, config={"tags": ["grader"]})
         grade = response.content.strip().upper()
         
         # Extract just the grade word

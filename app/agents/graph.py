@@ -68,6 +68,9 @@ Start your response with VALID or INVALID."""
 logger = logging.getLogger("agent_flow")
 
 
+
+
+
 def should_continue(state: AgentState) -> Literal[NODE_TOOLS, NODE_REVIEWER]:
     last_message = state[STATE_KEY_MESSAGES][-1]
     if getattr(last_message, "tool_calls", None):
@@ -348,13 +351,28 @@ def get_graph():
     workflow.add_edge(NODE_RAG_SUBGRAPH, NODE_AGENT)
 
     # Agent decides whether to use tools or go to reviewer
-    workflow.add_conditional_edges(NODE_AGENT, should_continue)
+    workflow.add_conditional_edges(
+        NODE_AGENT, 
+        should_continue,
+        {
+            NODE_TOOLS: NODE_TOOLS,
+            NODE_REVIEWER: NODE_REVIEWER
+        }
+    )
 
     # Tools loop back to agent for further reasoning
     workflow.add_edge(NODE_TOOLS, NODE_AGENT)
 
     # Reviewer validates or sends back for revision
-    workflow.add_conditional_edges(NODE_REVIEWER, check_validation)
+    workflow.add_conditional_edges(
+        NODE_REVIEWER, 
+        check_validation,
+        {
+            NODE_AGENT: NODE_AGENT,
+            NODE_ONTOLOGY_EXTRACTOR: NODE_ONTOLOGY_EXTRACTOR,
+            "__end__": "__end__"
+        }
+    )
 
     # Ontology sub-graph processes entities, then ends
     workflow.add_edge(NODE_ONTOLOGY_EXTRACTOR, "__end__")
@@ -411,11 +429,11 @@ async def process_query_stream(
     logger.info(
         f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'"
     )
-    
+
     # Set processing state
     from app.api.routes.health import set_processing_state
     set_processing_state(True, user_query)
-    
+
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     streaming_started = False
@@ -426,12 +444,26 @@ async def process_query_stream(
     think_buffer = ""
 
     try:
+        logger.info(f"[QUERY-STREAM] >>> Starting astream_events (thread={thread_id})")
+        event_count = 0
         async for event in app_graph.astream_events(inputs, config=config, version="v2"):
+            event_count += 1
             kind = event.get("event")
             tags = event.get("tags", [])
+            event_name = event.get("name", "unknown")
 
-            # Debug logging for event tracing
-            logger.debug(f"[STREAM EVENT] kind={kind}, name={event.get('name')}, tags={tags}")
+            # Debug logging for event tracing - log every event for now
+            logger.info(f"[STREAM EVENT #{event_count}] kind={kind}, name={event_name}, tags={tags}")
+            
+            # Log tool-related events explicitly
+            if "tool" in event_name.lower() or "tool" in str(tags).lower():
+                logger.info(f"[STREAM EVENT] Tool event detected: {event_name}")
+                if kind == "on_tool_start":
+                    logger.info(f"[STREAM EVENT] >>> Tool START: {event_name}")
+                elif kind == "on_tool_end":
+                    logger.info(f"[STREAM EVENT] <<< Tool END: {event_name}")
+                elif kind == "on_tool_error":
+                    logger.error(f"[STREAM EVENT] ✗ Tool ERROR: {event_name} - {event.get('data', {}).get('error', 'Unknown')}")
 
             # Check for Ollama connection/model errors
             if kind == "on_chain_error" or kind == "on_llm_error":
@@ -624,7 +656,16 @@ async def process_query_stream(
                 # Don't yield here to avoid duplicates
 
             elif kind == "on_chat_model_stream":
+                # Debug: log all chat model stream events with their tags
+                event_name = event.get("name", "unknown")
+                logger.info(f"[STREAM DEBUG] on_chat_model_stream: name={event_name}, tags={tags}")
+                
                 if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
+                    logger.info("[STREAM DEBUG] Skipping grader/reviewer/ontology tokens")
+                    continue
+                # Also skip if the event name contains grader
+                if "grader" in event_name.lower():
+                    logger.info("[STREAM DEBUG] Skipping grader event by name")
                     continue
                 # Sub-graph LLM calls are handled internally
                 chunk = event.get("data", {}).get("chunk")
@@ -677,56 +718,56 @@ async def process_query_stream(
                                             yield {"type": "status", "phase": "streaming"}
                                             streaming_started = True
                                         yield {"type": "token", "content": before}
-                                buffer = buffer[idx:]
-                                if len(buffer) > 15:
-                                    if not streaming_started:
-                                        yield {"type": "status", "phase": "streaming"}
-                                        streaming_started = True
-                                    yield {"type": "token", "content": buffer}
-                                    buffer = ""
+                                    buffer = buffer[idx:]
+                                    if len(buffer) > 15:
+                                        if not streaming_started:
+                                            yield {"type": "status", "phase": "streaming"}
+                                            streaming_started = True
+                                        yield {"type": "token", "content": buffer}
+                                        buffer = ""
                                 break
-                    else: # in_think
-                        if "</think>" in buffer:
-                            idx = buffer.find("</think>")
-                            think_content = buffer[:idx]
-                            
-                            # Stream the remaining think content as tokens
-                            if think_content:
-                                yield {"type": "thinking_token", "content": think_content}
-                            
-                            yield {
-                                "type": "thinking_end"
-                            }
-                            
-                            # Also emit as tool_result for backward compatibility
-                            yield {
-                                "type": "tool_result",
-                                "tool": "reasoning",
-                                "summary": "Reasoning steps completed",
-                                "content": (think_buffer + think_content).strip()
-                            }
-                            
-                            think_buffer = ""
-                            buffer = buffer[idx + len("</think>"):]
-                            in_think = False
-                        else:
-                            idx = buffer.rfind("<")
-                            if idx == -1:
-                                # Stream this chunk of thinking content
-                                think_buffer += buffer
-                                yield {"type": "thinking_token", "content": buffer}
-                                buffer = ""
+                        else:  # in_think
+                            if "</think>" in buffer:
+                                idx = buffer.find("</think>")
+                                think_content = buffer[:idx]
+                                
+                                # Stream the remaining think content as tokens
+                                if think_content:
+                                    yield {"type": "thinking_token", "content": think_content}
+                                
+                                yield {
+                                    "type": "thinking_end"
+                                }
+                                
+                                # Also emit as tool_result for backward compatibility
+                                yield {
+                                    "type": "tool_result",
+                                    "tool": "reasoning",
+                                    "summary": "Reasoning steps completed",
+                                    "content": (think_buffer + think_content).strip()
+                                }
+                                
+                                think_buffer = ""
+                                buffer = buffer[idx + len("</think>"):]
+                                in_think = False
                             else:
-                                # Stream partial thinking content
-                                partial = buffer[:idx]
-                                if partial:
-                                    think_buffer += partial
-                                    yield {"type": "thinking_token", "content": partial}
-                                buffer = buffer[idx:]
-                                if len(buffer) > 15:
+                                idx = buffer.rfind("<")
+                                if idx == -1:
+                                    # Stream this chunk of thinking content
                                     think_buffer += buffer
                                     yield {"type": "thinking_token", "content": buffer}
                                     buffer = ""
+                                else:
+                                    # Stream partial thinking content
+                                    partial = buffer[:idx]
+                                    if partial:
+                                        think_buffer += partial
+                                        yield {"type": "thinking_token", "content": partial}
+                                    buffer = buffer[idx:]
+                                    if len(buffer) > 15:
+                                        think_buffer += buffer
+                                        yield {"type": "thinking_token", "content": buffer}
+                                        buffer = ""
                                 break
 
     except Exception as e:
