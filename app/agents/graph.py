@@ -661,11 +661,11 @@ async def process_query_stream(
                 logger.info(f"[STREAM DEBUG] on_chat_model_stream: name={event_name}, tags={tags}")
                 
                 if "grader" in tags or "reviewer" in tags or "ontology_extractor" in tags:
-                    logger.info(f"[STREAM DEBUG] Skipping grader/reviewer/ontology tokens")
+                    logger.info("[STREAM DEBUG] Skipping grader/reviewer/ontology tokens")
                     continue
                 # Also skip if the event name contains grader
                 if "grader" in event_name.lower():
-                    logger.info(f"[STREAM DEBUG] Skipping grader event by name")
+                    logger.info("[STREAM DEBUG] Skipping grader event by name")
                     continue
                 # Sub-graph LLM calls are handled internally
                 chunk = event.get("data", {}).get("chunk")

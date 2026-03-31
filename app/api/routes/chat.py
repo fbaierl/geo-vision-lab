@@ -65,7 +65,7 @@ async def chat_stream_endpoint(
         yield f"data: {meta}\n\n"
 
         try:
-            logger.info(f"[CHAT_STREAM] >>> Starting event generator loop")
+            logger.info("[CHAT_STREAM] >>> Starting event generator loop")
             event_count = 0
             async for evt in process_query_stream(query, thread_id=session_id):
                 event_count += 1

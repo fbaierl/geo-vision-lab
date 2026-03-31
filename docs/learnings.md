@@ -78,3 +78,8 @@ Technically, **any** Instruction-tuned LLM can "reason" if prompted correctly, b
 2.  **Response Latency**: A model performing reasoning will take longer to "start" its final answer because it's busy generating the "thought" tokens first.
 3.  **Log Inspection**: Check the `app_flow` logs. If the model output contains a logical breakdown of its search strategy before the actual tool call, it's effectively reasoning.
 4.  **Hardware Check**: In our `docker-compose.yml`, the `geovision-ollama` container logs will show the VRAM usage. Larger reasoning models (9B) will consume significantly more VRAM than the tiny reviewer model (0.5B).
+## Case Studies & Debugging Lessons
+
+Detailed analysis of specific architectural challenges and their resolutions:
+
+- [Resolving Persistent Streaming Hangs (2026-03-31)](learnings/2026-03-31-streaming-hangs.md) — Exploration of Python indentation traps, thread deadlocks, and LangGraph streaming architecture.

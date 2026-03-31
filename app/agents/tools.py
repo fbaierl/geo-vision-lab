@@ -38,7 +38,7 @@ def web_search(query: str) -> str:
         logger.info(f"[WEB_SEARCH] Attempting wikipedia.summary('{query}')...")
         results = _run_with_timeout(wikipedia.summary, 10.0, query, sentences=4)
         logger.info(f"[WEB_SEARCH] ✓ Summary retrieved ({len(results)} chars)")
-        logger.info(f"[WEB_SEARCH] <<< END - Success")
+        logger.info("[WEB_SEARCH] <<< END - Success")
         return f"LIVE WEB INTELLIGENCE:\n{coord_str}{results}"
     except wikipedia.exceptions.PageError as e:
         logger.warning(f"[WEB_SEARCH] PageError: {e}")
@@ -47,7 +47,7 @@ def web_search(query: str) -> str:
         matches = _run_with_timeout(wikipedia.search, 10.0, query, results=3)
         logger.info(f"[WEB_SEARCH] Search returned {len(matches)} matches: {matches}")
         if not matches:
-            logger.warning(f"[WEB_SEARCH] <<< END - No matches found")
+            logger.warning("[WEB_SEARCH] <<< END - No matches found")
             return f"No Wikipedia article found for '{query}'."
         try:
             logger.info(f"[WEB_SEARCH] Attempting fallback page retrieval: '{matches[0]}'...")
@@ -55,10 +55,10 @@ def web_search(query: str) -> str:
             logger.info(f"[WEB_SEARCH] ✓ Fallback page retrieved: {page.title}")
             coords = getattr(page, 'coordinates', None)
             coord_str = f"Coordinates: {coords[0]}, {coords[1]}\n" if coords else ""
-            logger.info(f"[WEB_SEARCH] Attempting fallback summary...")
+            logger.info("[WEB_SEARCH] Attempting fallback summary...")
             results = _run_with_timeout(wikipedia.summary, 10.0, matches[0], sentences=4)
             logger.info(f"[WEB_SEARCH] ✓ Fallback summary retrieved ({len(results)} chars)")
-            logger.info(f"[WEB_SEARCH] <<< END - Fallback success")
+            logger.info("[WEB_SEARCH] <<< END - Fallback success")
             return f"LIVE WEB INTELLIGENCE (closest match: {matches[0]}):\n{coord_str}{results}"
         except Exception as inner:
             logger.error(f"[WEB_SEARCH] ✗ Fallback failed: {type(inner).__name__}: {inner}")
@@ -71,7 +71,7 @@ def web_search(query: str) -> str:
             logger.info(f"[WEB_SEARCH] Attempting disambiguation resolution: '{e.options[0]}'...")
             results = _run_with_timeout(wikipedia.summary, 10.0, e.options[0], sentences=4)
             logger.info(f"[WEB_SEARCH] ✓ Disambiguation resolved ({len(results)} chars)")
-            logger.info(f"[WEB_SEARCH] <<< END - Disambiguation resolved")
+            logger.info("[WEB_SEARCH] <<< END - Disambiguation resolved")
             return f"LIVE WEB INTELLIGENCE (resolved: {e.options[0]}):\n{results}"
         except Exception as inner:
             logger.error(f"[WEB_SEARCH] ✗ Disambiguation resolution failed: {type(inner).__name__}: {inner}")
