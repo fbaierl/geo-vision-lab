@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock
 from langchain_core.messages import AIMessageChunk
-from app.agents.graph import process_query_stream
+from app.services.streaming import process_query_stream
 
 @pytest.mark.asyncio
 async def test_process_query_stream_thinking_tags_no_hang():

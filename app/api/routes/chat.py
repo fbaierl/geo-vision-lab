@@ -3,7 +3,8 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse, StreamingResponse
-from app.agents.graph import process_query, process_query_stream
+from app.agents.graph import process_query
+from app.services.streaming import process_query_stream
 
 
 class DateTimeEncoder(json.JSONEncoder):
