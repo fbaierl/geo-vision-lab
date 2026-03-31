@@ -53,18 +53,30 @@ async def chat_stream_endpoint(
         return JSONResponse({"answer": "Empty transmission."}, status_code=400)
 
     session_id = thread_id if thread_id else str(uuid.uuid4())
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[CHAT_STREAM] >>> Starting stream endpoint (query='{query[:50]}...', thread={session_id})")
 
     async def event_generator():
         # Send session metadata first
         meta = json_dumps({"type": "meta", "thread_id": session_id})
+        logger.info(f"[CHAT_STREAM] Sending metadata: thread_id={session_id}")
         yield f"data: {meta}\n\n"
 
         try:
+            logger.info(f"[CHAT_STREAM] >>> Starting event generator loop")
+            event_count = 0
             async for evt in process_query_stream(query, thread_id=session_id):
+                event_count += 1
+                evt_type = evt.get("type", "unknown")
+                logger.info(f"[CHAT_STREAM] Event #{event_count}: type={evt_type}")
                 data = json_dumps(evt)
                 yield f"data: {data}\n\n"
+            logger.info(f"[CHAT_STREAM] <<< Event generator complete ({event_count} events)")
         except Exception as e:
-            print(f"[ERROR] Stream failed: {e}")
+            logger.error(f"[CHAT_STREAM] ✗ Stream failed: {e}")
+            logger.exception("[CHAT_STREAM] Full stack trace:")
             err = json_dumps({"type": "error", "content": str(e)})
             yield f"data: {err}\n\n"
 

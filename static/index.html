@@ -1940,6 +1940,9 @@
                             } else if (evt.type === 'tool_result') {
                                 // Display tool result in reasoning step
                                 addReasoningResult(evt.tool, evt.summary, evt.content);
+                            } else if (evt.type === 'rag_result') {
+                                // Display RAG retrieval result in reasoning panel
+                                addReasoningResult(evt.tool || 'RAG', evt.summary, evt.hint || `Quality: ${evt.quality}`);
                             } else if (evt.type === 'ontology_updated') {
                                 // Handle ontology updates - render graph & map
                                 if (mapsLoading) mapsLoading.style.display = 'none';
