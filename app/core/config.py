@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     LANGSMITH_PROJECT: str = "geo-vision-lab"
     LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"  # EU endpoint
 
+    # --- Langfuse Tracing (Alternative to LangSmith) ---
+    # Get API key at: https://cloud.langfuse.com or self-host
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
     # --- Available Reasoning Models ---
     AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b"]
 

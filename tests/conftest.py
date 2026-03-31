@@ -20,10 +20,11 @@ def client():
 
 @pytest.fixture(autouse=True)
 def disable_langsmith_tracing(monkeypatch):
-    """Disable LangSmith tracing for all tests to avoid cluttering the dashboard."""
+    """Disable LangSmith and Langfuse tracing for all tests to avoid cluttering dashboards."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "LANGSMITH_TRACING", False)
+    monkeypatch.setattr(settings, "LANGFUSE_ENABLED", False)
     yield
 
 

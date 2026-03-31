@@ -18,10 +18,15 @@ Testing:
 from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
 from langchain_core.language_models.chat_models import BaseChatModel
+from typing import TYPE_CHECKING
 import logging
 
 from app.core.config import settings
-from app.core.langsmith_config import get_callback_manager
+from app.core.langfuse_config import get_callback_manager as get_langfuse_callback_manager
+from app.core.langsmith_config import get_callback_manager as get_langsmith_callback_manager
+
+if TYPE_CHECKING:
+    from langchain_core.callbacks import CallbackManager
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +36,29 @@ def _get_container():
     from app.core.di import container
 
     return container
+
+
+def _get_callback_manager() -> "CallbackManager":
+    """Get callback manager for tracing.
+    
+    Priority: Langfuse > LangSmith > None
+    Only one tracing backend is active at a time.
+    """
+    from langchain_core.callbacks import CallbackManager
+    
+    # Try Langfuse first (if enabled)
+    if settings.LANGFUSE_ENABLED:
+        logger.info("[DI] Using Langfuse for tracing")
+        return get_langfuse_callback_manager()
+    
+    # Fallback to LangSmith
+    if settings.LANGSMITH_TRACING:
+        logger.info("[DI] Using LangSmith for tracing")
+        return get_langsmith_callback_manager()
+    
+    # No tracing enabled
+    logger.info("[DI] No tracing enabled")
+    return CallbackManager(handlers=[])
 
 
 def _create_llm() -> BaseChatModel:
@@ -48,7 +76,7 @@ def _create_llm() -> BaseChatModel:
 
     Timeout set to 120 seconds for long responses.
     """
-    callback_manager = get_callback_manager()
+    callback_manager = _get_callback_manager()
 
     if settings.USE_ONLINE_LLM:
         if not settings.GROQ_API_KEY:

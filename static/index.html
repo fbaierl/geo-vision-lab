@@ -248,6 +248,11 @@
                         <span class="service-name">LangSmith (EU)</span>
                         <span class="service-port">Cloud</span>
                     </a>
+                    <a class="service-link" href="https://cloud.langfuse.com/" target="_blank">
+                        <span class="service-icon">◇</span>
+                        <span class="service-name">Langfuse</span>
+                        <span class="service-port">Cloud</span>
+                    </a>
                 </div>
                 
                 <!-- RAG Configuration Panel -->
@@ -1248,13 +1253,66 @@
         loadCurrentModel();
 
         // Chat functions
+        let currentMessageId = null;  // Track current message ID for feedback
+        
         function addMessage(content, isUser = false) {
             const msg = document.createElement('div');
             msg.className = `chat-message ${isUser ? 'user' : ''}`;
-            msg.innerHTML = `<div class="chat-message-content markdown-content">${content}</div>`;
+            
+            // Add feedback buttons for assistant messages
+            const feedbackHtml = !isUser 
+                ? `<div class="feedback-buttons" data-message-id="${currentMessageId || ''}">
+                    <button class="feedback-btn thumbs-up" title="Helpful" onclick="submitFeedback('thumbs_up')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                        </svg>
+                    </button>
+                    <button class="feedback-btn thumbs-down" title="Not helpful" onclick="submitFeedback('thumbs_down')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                        </svg>
+                    </button>
+                   </div>`
+                : '';
+            
+            msg.innerHTML = `<div class="chat-message-avatar">${isUser ? '👤' : '◈'}</div>
+                <div class="chat-message-content markdown-content">${content}</div>
+                ${feedbackHtml}`;
             chatMessages.appendChild(msg);
             chatMessages.scrollTop = chatMessages.scrollHeight;
             return msg.querySelector('.chat-message-content');
+        }
+        
+        async function submitFeedback(rating) {
+            if (!window.currentThreadId) {
+                showToast('No active session', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        thread_id: window.currentThreadId,
+                        message_id: currentMessageId,
+                        rating: rating,
+                    })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Feedback recorded: ${rating === 'thumbs_up' ? 'Helpful' : 'Not helpful'}`, 'success');
+                    // Disable feedback buttons after submission
+                    const buttons = document.querySelectorAll('.feedback-buttons');
+                    buttons.forEach(btn => btn.style.pointerEvents = 'none');
+                } else {
+                    showToast('Failed to submit feedback', 'error');
+                }
+            } catch (e) {
+                console.error('Feedback error:', e);
+                showToast('Failed to submit feedback', 'error');
+            }
         }
 
         function addHistory(q) {
@@ -1889,6 +1947,8 @@
             if (graphLoading) graphLoading.style.display = 'flex';
 
             const responseEl = addMessage('');
+            // Generate a unique message ID for feedback tracking
+            currentMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             rawStreamBuffer = '';
 
             const t0 = Date.now();

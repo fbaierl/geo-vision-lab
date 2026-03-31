@@ -620,6 +620,46 @@ html, body {
     color: var(--text);
 }
 
+.feedback-buttons {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.feedback-buttons:hover {
+    opacity: 1;
+}
+
+.feedback-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.feedback-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--cyan);
+    border-color: var(--cyan);
+}
+
+.feedback-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.chat-message.user .feedback-buttons {
+    display: none;
+}
+
 .chat-input-container {
     padding: 10px;
     border-top: 1px solid var(--border);
