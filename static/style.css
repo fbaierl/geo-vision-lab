@@ -130,6 +130,122 @@ html, body {
     gap: 12px;
 }
 
+/* Top bar RAG config */
+.top-bar-rag-config {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    background: rgba(61, 174, 233, 0.06);
+    border: 1px solid rgba(61, 174, 233, 0.15);
+    border-radius: var(--radius-control);
+}
+
+.rag-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    opacity: 0.7;
+}
+
+.rag-toggles {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.rag-inline-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.rag-inline-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.rag-info-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s ease;
+}
+
+.rag-info-trigger:hover {
+    opacity: 1;
+}
+
+.rag-info-trigger svg {
+    width: 12px;
+    height: 12px;
+}
+
+.rag-info-box {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 280px;
+    padding: 12px 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: all 0.15s ease;
+    pointer-events: none;
+}
+
+.rag-info-trigger:hover .rag-info-box {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.rag-info-box strong {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-bottom: 6px;
+}
+
+.rag-info-box p {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+/* Small toggle variant for top bar */
+.toggle-sm {
+    width: 32px !important;
+    height: 16px !important;
+}
+
+.toggle-sm .toggle-slider:before {
+    height: 12px !important;
+    width: 12px !important;
+    left: 1px !important;
+    bottom: 1px !important;
+}
+
+.toggle-sm input:checked + .toggle-slider:before {
+    transform: translateX(16px) !important;
+}
+
 /* Top Menu (File, Edit, etc.) */
 .top-menu {
     display: flex;
@@ -2395,6 +2511,27 @@ html, body {
     background: var(--accent-bright);
 }
 
+/* ═══ Ontology Window Emphasis ═══ */
+.window.graph-window {
+    border: 1px solid rgba(61, 174, 233, 0.3);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(61, 174, 233, 0.08);
+}
+
+.window.graph-window.focused {
+    border-color: rgba(61, 174, 233, 0.6);
+    box-shadow: 0 6px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(61, 174, 233, 0.2), 0 0 30px rgba(61, 174, 233, 0.12);
+}
+
+.window.graph-window .window-header {
+    background: linear-gradient(90deg, rgba(61, 174, 233, 0.08) 0%, transparent 60%);
+    border-bottom-color: rgba(61, 174, 233, 0.25);
+}
+
+.window.graph-window.focused .window-header {
+    background: linear-gradient(90deg, rgba(61, 174, 233, 0.12) 0%, transparent 60%);
+    border-bottom-color: rgba(61, 174, 233, 0.4);
+}
+
 /* ═══ RAG Configuration Panel ═══ */
 .rag-config-panel {
     margin-top: 16px;
@@ -2475,9 +2612,9 @@ html, body {
 .table-view-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     height: 100%;
-    overflow-y: auto;
+    overflow: hidden;
     padding: 8px;
 }
 
@@ -2486,6 +2623,19 @@ html, body {
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.table-section:first-child {
+    flex: 1;
+    min-height: 0;
+}
+
+.table-section:last-child {
+    flex: 1;
+    min-height: 0;
 }
 
 .table-section-header {
@@ -2514,7 +2664,8 @@ html, body {
 }
 
 .table-wrapper {
-    max-height: 200px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
 }
 

@@ -39,6 +39,47 @@
         </div>
         
         <div class="header-right">
+            <div class="top-bar-rag-config" id="top-bar-rag-config">
+                <span class="rag-label">RAG</span>
+                <div class="rag-toggles">
+                    <div class="rag-inline-toggle">
+                        <label for="grader-toggle" class="rag-inline-label">Grader</label>
+                        <label class="toggle-switch toggle-sm">
+                            <input type="checkbox" id="grader-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="rag-info-trigger" data-info="grader">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <div class="rag-info-box">
+                                <strong>Context Grading</strong>
+                                <p>Before the LLM generates an answer, a small model evaluates each retrieved document for relevance to your query. Irrelevant documents are filtered out, reducing noise and hallucination. Significantly improves answer quality when the vector search returns mixed results.</p>
+                            </div>
+                        </span>
+                    </div>
+                    <div class="rag-inline-toggle">
+                        <label for="reranker-toggle" class="rag-inline-label">Rerank</label>
+                        <label class="toggle-switch toggle-sm">
+                            <input type="checkbox" id="reranker-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="rag-info-trigger" data-info="reranker">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <div class="rag-info-box">
+                                <strong>Re-ranking (BGE)</strong>
+                                <p>After initial retrieval, a cross-encoder model (BAAI/bge-reranker-v2-m3) re-scores all candidate documents by jointly encoding the query and each document together. This captures semantic relevance far better than vector similarity alone. The top 3 results are kept for context.</p>
+                            </div>
+                        </span>
+                    </div>
+                </div>
+            </div>
             <div class="status-pill processing" id="pill-processing">
                 <div class="dot"></div>
                 <span>Processing</span>
@@ -248,39 +289,6 @@
                         <span class="service-name">LangSmith (EU)</span>
                         <span class="service-port">Cloud</span>
                     </a>
-                </div>
-                
-                <!-- RAG Configuration Panel -->
-                <div class="rag-config-panel" style="margin-top: 20px; padding: 16px; background: rgba(61, 174, 218, 0.05); border-radius: 8px; border: 1px solid rgba(61, 174, 218, 0.2);">
-                    <h4 style="margin: 0 0 12px 0; color: var(--cyan); font-size: 14px; display: flex; align-items: center; gap: 8px;">
-                        <span>⚙</span> RAG Configuration
-                    </h4>
-                    
-                    <div class="rag-config-item" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <div>
-                            <label for="grader-toggle" style="color: var(--text); font-size: 13px; font-weight: 500;">Context Grading</label>
-                            <p style="margin: 2px 0 0 0; color: var(--muted); font-size: 11px;">Evaluate context relevance before generation</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="grader-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    
-                    <div class="rag-config-item" style="display: flex; align-items: center; justify-content: space-between;">
-                        <div>
-                            <label for="reranker-toggle" style="color: var(--text); font-size: 13px; font-weight: 500;">Re-ranking (BGE)</label>
-                            <p style="margin: 2px 0 0 0; color: var(--muted); font-size: 11px;">Improve precision with cross-encoder</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="reranker-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    
-                    <div id="rag-config-status" style="margin-top: 12px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 11px; color: var(--muted); display: none;">
-                        <span id="rag-status-text"></span>
-                    </div>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -964,7 +972,8 @@
                     const rightColWidth = availableWidth * 0.50;
                     const smallHeight = availableHeight * 0.30;
                     const tallHeight = availableHeight * 0.65;
-                    const mapGraphHeight = availableHeight * 0.40;
+                    const mapsHeight = availableHeight * 0.25;
+                    const graphHeight = availableHeight * 0.70;
                     
                     // Sort windows by priority
                     const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-graph', 'window-history', 'window-services'];
@@ -1015,16 +1024,16 @@
                             win.element.style.left = padding + leftColWidth + padding + 'px';
                             win.element.style.top = midY + 'px';
                         } else if (win.id === 'window-maps') {
-                            // Right column - top half
+                            // Right column - top (smaller)
                             win.element.style.width = rightColWidth + 'px';
-                            win.element.style.height = mapGraphHeight + 'px';
+                            win.element.style.height = mapsHeight + 'px';
                             win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                             win.element.style.top = padding + 'px';
-                            rightY = padding + mapGraphHeight + padding;
+                            rightY = padding + mapsHeight + padding;
                         } else if (win.id === 'window-graph') {
-                            // Right column - bottom half
+                            // Right column - bottom (larger)
                             win.element.style.width = rightColWidth + 'px';
-                            win.element.style.height = mapGraphHeight + 'px';
+                            win.element.style.height = graphHeight + 'px';
                             win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                             win.element.style.top = rightY + 'px';
                         }
@@ -3269,9 +3278,6 @@
         window.ontologyTabManager = new OntologyTabManager();
         window.ontologyImportExport = new OntologyImportExportHandler();
         
-        // Load RAG configuration on page load
-        loadRAGConfig();
-        
         // RAG Configuration functions
         async function loadRAGConfig() {
             try {
@@ -3342,6 +3348,15 @@
                     saveRAGConfig({ reranker_enabled: e.target.checked });
                 });
             }
+        });
+
+        // Close menus when clicking outside
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.menu-item').forEach(menu => {
+                if (!menu.contains(e.target)) {
+                    menu.classList.remove('open');
+                }
+            });
         });
     </script>
 

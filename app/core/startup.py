@@ -197,7 +197,7 @@ async def warm_up_reranker() -> bool:
 
     if not settings.RAG_RERANKER_ENABLED:
         logger.info("[STARTUP] Re-ranker disabled, skipping warm-up")
-        _set_model_status("reranker", "pending", "Re-ranker (disabled)")
+        _set_model_status("reranker", "ready", "Re-ranker (disabled)")
         return True  # Not an error, just disabled
 
     _set_model_status(

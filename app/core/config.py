@@ -66,8 +66,8 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 produces 384-dim vectors
 
     # --- RAG Features (Runtime Toggles) ---
-    RAG_GRADER_ENABLED: bool = True  # Enable/disable context grading
-    RAG_RERANKER_ENABLED: bool = True  # Enable/disable BGE re-ranker
+    RAG_GRADER_ENABLED: bool = False  # Enable/disable context grading
+    RAG_RERANKER_ENABLED: bool = False  # Enable/disable BGE re-ranker
     RAG_RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RAG_RERANKER_TOP_K: int = 3  # Final results after re-ranking
     RAG_RERANKER_CANDIDATES_K: int = 20  # Candidates to retrieve for re-ranking
