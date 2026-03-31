@@ -9,7 +9,9 @@ from datetime import datetime
 from app.models.ontology import SessionOntology, OntologyEntity, OntologyLink
 
 
-def merge_ontologies(current: SessionOntology, delta: SessionOntology) -> SessionOntology:
+def merge_ontologies(
+    current: SessionOntology, delta: SessionOntology
+) -> SessionOntology:
     """
     Merge delta into current ontology.
 
@@ -27,13 +29,13 @@ def merge_ontologies(current: SessionOntology, delta: SessionOntology) -> Sessio
     """
     merged = SessionOntology()
     merged.entities = dict(current.entities)
-    
+
     # Build name+type -> UUID mapping for existing entities
     name_to_uuid = {}
     for uuid_str, entity in current.entities.items():
         key = f"{entity.name.lower()}|{entity.type}"
         name_to_uuid[key] = uuid_str
-    
+
     # Track UUID remapping for link updates
     uuid_remap = {}
 
@@ -57,20 +59,22 @@ def merge_ontologies(current: SessionOntology, delta: SessionOntology) -> Sessio
                 # Duplicate found - merge into existing entity
                 existing_uuid = name_to_uuid[key]
                 existing = merged.entities[existing_uuid]
-                
+
                 # Add new mentions
                 for mention in new_entity.mentions:
                     # Avoid duplicate mentions
-                    if not any(m.source_text == mention.source_text for m in existing.mentions):
+                    if not any(
+                        m.source_text == mention.source_text for m in existing.mentions
+                    ):
                         existing.mentions.append(mention)
-                
+
                 # Merge properties (new info takes precedence)
                 for k, v in new_entity.properties.items():
                     if v is not None and k not in existing.properties:
                         existing.properties[k] = v
-                
+
                 existing.updated_at = datetime.utcnow()
-                
+
                 # Record UUID remapping for link updates
                 uuid_remap[uuid_str] = existing_uuid
             else:
@@ -86,7 +90,7 @@ def merge_ontologies(current: SessionOntology, delta: SessionOntology) -> Sessio
             # Convert UUID objects to strings for lookup
             source_uuid_str = str(new_link.source_uuid)
             target_uuid_str = str(new_link.target_uuid)
-            
+
             source_uuid = uuid_remap.get(source_uuid_str, source_uuid_str)
             target_uuid = uuid_remap.get(target_uuid_str, target_uuid_str)
 
@@ -99,7 +103,7 @@ def merge_ontologies(current: SessionOntology, delta: SessionOntology) -> Sessio
                 properties=new_link.properties,
                 mentions=new_link.mentions,
                 created_at=new_link.created_at,
-                updated_at=new_link.updated_at
+                updated_at=new_link.updated_at,
             )
             merged.links[uuid_str] = remapped_link
 

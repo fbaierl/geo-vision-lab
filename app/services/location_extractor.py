@@ -45,7 +45,7 @@ class LocationExtractorService:
     def __init__(
         self,
         ner_pipeline: Any,
-        geocode_cache: Optional[Dict[str, Optional[List[Dict[str, Any]]]]] = None
+        geocode_cache: Optional[Dict[str, Optional[List[Dict[str, Any]]]]] = None,
     ):
         self.ner_pipeline = ner_pipeline
         self.geocode_cache = geocode_cache if geocode_cache is not None else {}
@@ -79,16 +79,20 @@ class LocationExtractorService:
                         loc_type = {
                             "GPE": "country",
                             "LOC": "landmark",
-                            "FAC": "landmark"
+                            "FAC": "landmark",
                         }.get(entity_label, "other")
 
-                        locations.append({
-                            "name": entity_text,
-                            "type": loc_type,
-                            "label": entity_label
-                        })
+                        locations.append(
+                            {
+                                "name": entity_text,
+                                "type": loc_type,
+                                "label": entity_label,
+                            }
+                        )
 
-            logger.info(f"[LOCATION_EXTRACTOR] Found {len(locations)} location(s) via NER")
+            logger.info(
+                f"[LOCATION_EXTRACTOR] Found {len(locations)} location(s) via NER"
+            )
             return locations
         except Exception as e:
             logger.error(f"[LOCATION_EXTRACTOR] NER pipeline error: {e}")
@@ -115,31 +119,36 @@ class LocationExtractorService:
                 # Use custom URL if configured (self-hosted Nominatim)
                 if NOMINATIM_URL:
                     from geopy.adapters import HTTPAdapter
+
                     geolocator = Nominatim(
                         user_agent="geovision_lab_location_extractor",
-                        adapter_factory=HTTPAdapter
+                        adapter_factory=HTTPAdapter,
                     )
                     # Override default URL
-                    geolocator.base_url = NOMINATIM_URL.replace('/search', '')
+                    geolocator.base_url = NOMINATIM_URL.replace("/search", "")
                 else:
-                    geolocator = Nominatim(user_agent="geovision_lab_location_extractor")
+                    geolocator = Nominatim(
+                        user_agent="geovision_lab_location_extractor"
+                    )
 
                 results = geolocator.geocode(
                     location_name,
                     timeout=NOMINATIM_TIMEOUT,
                     addressdetails=1,
                     limit=10,
-                    exactly_one=False
+                    exactly_one=False,
                 )
 
                 if not results:
-                    logger.debug(f"[LOCATION_EXTRACTOR] No results for: {location_name}")
+                    logger.debug(
+                        f"[LOCATION_EXTRACTOR] No results for: {location_name}"
+                    )
                     self.geocode_cache[location_name] = []
                     return []
 
                 candidates = []
                 for result in results:
-                    raw_address = result.raw.get('address', {})
+                    raw_address = result.raw.get("address", {})
 
                     candidate = {
                         "name": location_name,
@@ -147,13 +156,15 @@ class LocationExtractorService:
                         "lon": result.longitude,
                         "display_name": result.address,
                         "type": self._classify_location_type(raw_address),
-                        "country": raw_address.get('country', 'Unknown'),
-                        "state": raw_address.get('state', ''),
-                        "city": raw_address.get('city', raw_address.get('town', ''))
+                        "country": raw_address.get("country", "Unknown"),
+                        "state": raw_address.get("state", ""),
+                        "city": raw_address.get("city", raw_address.get("town", "")),
                     }
                     candidates.append(candidate)
 
-                logger.debug(f"[LOCATION_EXTRACTOR] Found {len(candidates)} candidate(s) for '{location_name}'")
+                logger.debug(
+                    f"[LOCATION_EXTRACTOR] Found {len(candidates)} candidate(s) for '{location_name}'"
+                )
                 self.geocode_cache[location_name] = candidates
                 return candidates
 
@@ -166,17 +177,21 @@ class LocationExtractorService:
                     time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
                 else:
                     error_msg = f"Nominatim rate limit exceeded after {max_retries} attempts. Consider using self-hosted Nominatim."
-                    self.geocoding_errors.append({
-                        "location": location_name,
-                        "error": "rate_limit",
-                        "message": error_msg
-                    })
+                    self.geocoding_errors.append(
+                        {
+                            "location": location_name,
+                            "error": "rate_limit",
+                            "message": error_msg,
+                        }
+                    )
                     logger.error(f"[LOCATION_EXTRACTOR] {error_msg}")
                     self.geocode_cache[location_name] = []
                     return []
 
             except (GeocoderTimedOut, GeocoderServiceError) as e:
-                logger.warning(f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}")
+                logger.warning(
+                    f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}"
+                )
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                 else:
@@ -192,33 +207,30 @@ class LocationExtractorService:
 
         Priority: country > state > city > town > village > landmark
         """
-        if 'country' in address and len(address) == 1:
+        if "country" in address and len(address) == 1:
             return "country"
-        elif 'state' in address and 'country' in address and len(address) <= 3:
+        elif "state" in address and "country" in address and len(address) <= 3:
             return "region"
-        elif 'city' in address:
+        elif "city" in address:
             return "city"
-        elif 'town' in address:
+        elif "town" in address:
             return "town"
-        elif 'village' in address:
+        elif "village" in address:
             return "village"
-        elif 'suburb' in address or 'neighbourhood' in address:
+        elif "suburb" in address or "neighbourhood" in address:
             return "neighbourhood"
         else:
             return "landmark"
 
     def extract_and_geocode_locations(
-        self,
-        text: str,
-        query: str = "",
-        response_text: str = ""
+        self, text: str, query: str = "", response_text: str = ""
     ) -> List[Dict[str, Any]]:
         """
         Full pipeline: Extract locations with NER and geocode with ALL candidates.
-        
+
         Returns ALL geocoded candidates without filtering.
         The prioritizer node is responsible for selecting relevant locations.
-        
+
         Note: query and response_text parameters are kept for API compatibility
         but are no longer used for filtering.
         """
@@ -250,6 +262,7 @@ class LocationExtractorService:
 # DI factory function
 # =============================================================================
 
+
 def get_location_extractor() -> LocationExtractorService:
     """
     Get location extractor service with dependencies from DI container.
@@ -257,6 +270,5 @@ def get_location_extractor() -> LocationExtractorService:
     This is the recommended way to get a LocationExtractorService instance.
     """
     return LocationExtractorService(
-        ner_pipeline=get_ner_pipeline(),
-        geocode_cache=get_geocode_cache()
+        ner_pipeline=get_ner_pipeline(), geocode_cache=get_geocode_cache()
     )

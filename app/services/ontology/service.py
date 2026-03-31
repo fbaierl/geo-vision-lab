@@ -42,14 +42,11 @@ class OntologyService:
             ontology: Ontology to save
         """
         self.db.sessions.update_one(
-            {"thread_id": thread_id},
-            {"$set": {"ontology": ontology.to_array_format()}}
+            {"thread_id": thread_id}, {"$set": {"ontology": ontology.to_array_format()}}
         )
 
     def get_entity_by_uuid(
-        self,
-        thread_id: str,
-        entity_uuid: UUID
+        self, thread_id: str, entity_uuid: UUID
     ) -> Optional[OntologyEntity]:
         """
         Get entity by UUID.
@@ -64,11 +61,7 @@ class OntologyService:
         ontology = self.load_ontology(thread_id)
         return ontology.entities.get(str(entity_uuid))
 
-    def get_entity_by_name(
-        self,
-        thread_id: str,
-        name: str
-    ) -> List[OntologyEntity]:
+    def get_entity_by_name(self, thread_id: str, name: str) -> List[OntologyEntity]:
         """
         Find entities by name (returns list for homonyms).
 
@@ -86,10 +79,7 @@ class OntologyService:
         return [e for e in ontology.entities.values() if e.name.lower() == name_lower]
 
     def get_neighbors(
-        self,
-        thread_id: str,
-        entity_uuid: UUID,
-        hops: int = 1
+        self, thread_id: str, entity_uuid: UUID, hops: int = 1
     ) -> List[OntologyEntity]:
         """
         Get entities connected to given entity within N hops.
@@ -125,9 +115,7 @@ class OntologyService:
         return neighbors
 
     def get_links_for_entity(
-        self,
-        thread_id: str,
-        entity_uuid: UUID
+        self, thread_id: str, entity_uuid: UUID
     ) -> List[OntologyLink]:
         """
         Get all links involving this entity.
@@ -141,15 +129,13 @@ class OntologyService:
         """
         ontology = self.load_ontology(thread_id)
         return [
-            link for link in ontology.links.values()
+            link
+            for link in ontology.links.values()
             if link.source_uuid == entity_uuid or link.target_uuid == entity_uuid
         ]
 
     def get_entity_graph(
-        self,
-        thread_id: str,
-        entity_uuid: UUID,
-        hops: int = 2
+        self, thread_id: str, entity_uuid: UUID, hops: int = 2
     ) -> SessionOntology:
         """
         Get full subgraph for an entity (entity + neighbors + links between them).
@@ -165,9 +151,7 @@ class OntologyService:
         ontology = self.load_ontology(thread_id)
 
         # Get all entities in the subgraph
-        subgraph_entities = {
-            str(entity_uuid): ontology.entities.get(str(entity_uuid))
-        }
+        subgraph_entities = {str(entity_uuid): ontology.entities.get(str(entity_uuid))}
         neighbors = self.get_neighbors(thread_id, entity_uuid, hops=hops)
         for neighbor in neighbors:
             subgraph_entities[str(neighbor.uuid)] = neighbor
@@ -179,7 +163,4 @@ class OntologyService:
             if link.source_uuid in entity_uuids and link.target_uuid in entity_uuids:
                 subgraph_links[str(link.uuid)] = link
 
-        return SessionOntology(
-            entities=subgraph_entities,
-            links=subgraph_links
-        )
+        return SessionOntology(entities=subgraph_entities, links=subgraph_links)

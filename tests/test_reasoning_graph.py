@@ -5,6 +5,7 @@ from app.agents.graph import should_continue, call_model, vector_search_node
 
 # --- should_continue node tests ---
 
+
 def test_should_continue_with_tools():
     # When the last message has tool calls, we should go to 'tools'
     mock_message = MagicMock()
@@ -13,6 +14,7 @@ def test_should_continue_with_tools():
 
     result = should_continue(state)
     assert result == "tools"
+
 
 def test_should_continue_without_tools():
     # When the last message has no tool calls, we should go to reviewer
@@ -26,13 +28,14 @@ def test_should_continue_without_tools():
 
 # --- call_model node tests ---
 
+
 def test_call_model(override_reasoning_llm):
     """Test call_model with DI override for reasoning LLM."""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.content = "I have the answer."
     override_reasoning_llm.invoke.return_value = mock_response
-    
+
     state = {"messages": [HumanMessage(content="Hello")]}
     result = call_model(state)
 
@@ -42,6 +45,7 @@ def test_call_model(override_reasoning_llm):
 
 
 # --- vector_search_node tests ---
+
 
 def test_vector_search_node_no_query():
     """Test vector_search_node with no query."""

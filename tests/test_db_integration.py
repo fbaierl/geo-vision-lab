@@ -185,8 +185,8 @@ def test_real_db_ingestion_and_search(mongodb_container, monkeypatch):
 
     # Vector search is now handled by vector_search_node, not as a tool
     vector_search_results = result.get("vector_search_results", "")
-    assert "ARCHIVAL INTELLIGENCE" in str(vector_search_results) or "Antarctica" in str(result), (
-        f"Expected vector search results in state: {result}"
-    )
+    assert "ARCHIVAL INTELLIGENCE" in str(vector_search_results) or "Antarctica" in str(
+        result
+    ), f"Expected vector search results in state: {result}"
 
     container.reset_overrides()

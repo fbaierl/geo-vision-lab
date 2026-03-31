@@ -31,20 +31,17 @@ class LocationPrioritizerService:
         self.llm = llm
 
     def prioritize_locations(
-        self,
-        query: str,
-        locations: List[Dict[str, Any]],
-        response_text: str
+        self, query: str, locations: List[Dict[str, Any]], response_text: str
     ) -> List[Dict[str, Any]]:
         """
         Use LLM to filter and prioritize locations based on their relevance to the query.
-        
+
         Receives ALL geocoding candidates (flat list) and selects the best candidate
         for each unique location name, then filters by relevance.
 
         Args:
             query: The original user query
-            locations: List of ALL geocoded candidates with name, type, lat, lon, 
+            locations: List of ALL geocoded candidates with name, type, lat, lon,
                        display_name, country (may contain multiple candidates for same location)
             response_text: The agent's response text (for context)
 
@@ -57,7 +54,7 @@ class LocationPrioritizerService:
         # Group candidates by location name
         candidates_by_name = {}
         for loc in locations:
-            name = loc['name'].lower()
+            name = loc["name"].lower()
             if name not in candidates_by_name:
                 candidates_by_name[name] = []
             candidates_by_name[name].append(loc)
@@ -124,10 +121,12 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
             # Disable reasoning mode for this structured JSON task.
             # The shared LLM still uses reasoning for the main agent graph.
             response = self.llm.invoke(prompt, reasoning=False)
-            response_content = response.content if hasattr(response, 'content') else str(response)
+            response_content = (
+                response.content if hasattr(response, "content") else str(response)
+            )
 
             # Parse JSON from response
-            json_match = re.search(r'\[.*\]', response_content, re.DOTALL)
+            json_match = re.search(r"\[.*\]", response_content, re.DOTALL)
             if not json_match:
                 logger.warning("[LOCATION_PRIORITIZER] No JSON array found in response")
                 return self._fallback_prioritize(candidates_by_name)
@@ -139,10 +138,10 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
             location_names = list(candidates_by_name.keys())
 
             for selection in selections:
-                loc_idx = selection.get('location_index')
-                cand_idx = selection.get('candidate_index')
-                relevance = selection.get('relevance', 0.0)
-                reason = selection.get('reason', 'No reason provided')
+                loc_idx = selection.get("location_index")
+                cand_idx = selection.get("candidate_index")
+                relevance = selection.get("relevance", 0.0)
+                reason = selection.get("reason", "No reason provided")
 
                 if loc_idx is not None and 0 <= loc_idx < len(location_names):
                     name = location_names[loc_idx]
@@ -152,15 +151,15 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
                     if cand_idx == -1:
                         # Create an exclusion entry for debugging
                         excluded_entry = {
-                            'name': name,
-                            'relevance': 0.0,
-                            'selection_reason': reason,
-                            'excluded': True,
-                            'display_name': f'[EXCLUDED] {name}',
-                            'lat': None,
-                            'lon': None,
-                            'type': 'unknown',
-                            'country': 'N/A'
+                            "name": name,
+                            "relevance": 0.0,
+                            "selection_reason": reason,
+                            "excluded": True,
+                            "display_name": f"[EXCLUDED] {name}",
+                            "lat": None,
+                            "lon": None,
+                            "type": "unknown",
+                            "country": "N/A",
                         }
                         result.append(excluded_entry)
                         logger.info(
@@ -168,8 +167,8 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
                         )
                     elif cand_idx is not None and 0 <= cand_idx < len(candidates):
                         selected = candidates[cand_idx].copy()
-                        selected['relevance'] = relevance
-                        selected['selection_reason'] = reason
+                        selected["relevance"] = relevance
+                        selected["selection_reason"] = reason
                         if relevance > 0:
                             result.append(selected)
                             logger.info(
@@ -178,7 +177,7 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
                             )
                         else:
                             # Even selected candidates can have 0 relevance if not useful
-                            selected['excluded'] = True
+                            selected["excluded"] = True
                             result.append(selected)
                             logger.info(
                                 f"[LOCATION_PRIORITIZER] Selected but excluded: {selected['name']} → "
@@ -186,7 +185,7 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
                             )
 
             # Sort by relevance (descending) and limit to 5
-            result.sort(key=lambda x: x['relevance'], reverse=True)
+            result.sort(key=lambda x: x["relevance"], reverse=True)
             result = result[:5]
 
             logger.info(f"[LOCATION_PRIORITIZER] Filtered to {len(result)} location(s)")
@@ -196,21 +195,25 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
             logger.error(f"[LOCATION_PRIORITIZER] Failed to prioritize: {e}")
             return self._fallback_prioritize(candidates_by_name)
 
-    def _select_best_candidate(self, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _select_best_candidate(
+        self, candidates: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """Select the best candidate from a list (highest specificity)."""
         # Priority: country > region > city > town > village > landmark
         type_priority = {
-            'country': 1,
-            'region': 2,
-            'city': 3,
-            'town': 4,
-            'village': 5,
-            'neighbourhood': 6,
-            'landmark': 7
+            "country": 1,
+            "region": 2,
+            "city": 3,
+            "town": 4,
+            "village": 5,
+            "neighbourhood": 6,
+            "landmark": 7,
         }
-        return min(candidates, key=lambda x: type_priority.get(x['type'], 99))
+        return min(candidates, key=lambda x: type_priority.get(x["type"], 99))
 
-    def _fallback_prioritize(self, candidates_by_name: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    def _fallback_prioritize(
+        self, candidates_by_name: Dict[str, List[Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
         """
         Fallback prioritization when LLM fails.
         Simple heuristic: select best candidate per location, countries/regions first, limit to 5.
@@ -222,26 +225,23 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
             best_candidates.append(best)
 
         # Priority order: country > region > city > landmark
-        type_priority = {
-            'country': 1,
-            'region': 2,
-            'city': 3,
-            'landmark': 4
-        }
+        type_priority = {"country": 1, "region": 2, "city": 3, "landmark": 4}
 
         # Sort by type priority
-        sorted_locs = sorted(best_candidates, key=lambda x: type_priority.get(x['type'], 5))
+        sorted_locs = sorted(
+            best_candidates, key=lambda x: type_priority.get(x["type"], 5)
+        )
 
         # Assign relevance scores
         result = []
         for i, loc in enumerate(sorted_locs[:5]):
             loc = loc.copy()
             if i == 0:
-                loc['relevance'] = 1.0
+                loc["relevance"] = 1.0
             elif i < 3:
-                loc['relevance'] = 0.7
+                loc["relevance"] = 0.7
             else:
-                loc['relevance'] = 0.4
+                loc["relevance"] = 0.4
             result.append(loc)
 
         return result[:5]
@@ -250,6 +250,7 @@ IMPORTANT: Return ALL location groups with relevance and reason. Use candidate_i
 # =============================================================================
 # DI factory function
 # =============================================================================
+
 
 def get_location_prioritizer() -> LocationPrioritizerService:
     """

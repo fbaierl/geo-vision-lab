@@ -1,8 +1,8 @@
 """
 Streaming Service for GeoVision Lab.
 
-This module provides the central logic for processing LLM streams and converting them 
-into UI-ready events. It decouples the complex streaming event loop from the 
+This module provides the central logic for processing LLM streams and converting them
+into UI-ready events. It decouples the complex streaming event loop from the
 LangGraph topology in graph.py.
 
 Key Responsibilities:
@@ -11,19 +11,21 @@ Key Responsibilities:
 3. Suppressing internal grader/reviewer outputs from the user-facing stream.
 4. Auto-saving sessions and ontologies after query completion.
 """
+
 import logging
 import re
-from typing import Literal, AsyncGenerator, Dict, Any, Generator
+from typing import AsyncGenerator, Dict, Any, Generator
 from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
 
 from app.core.config import settings
 from app.core.constants import (
-    STATE_KEY_RAG_CONTEXT, STATE_KEY_RAG_QUALITY, STATE_KEY_RAG_HINT,
-    STATE_KEY_ONTOLOGY
+    STATE_KEY_RAG_QUALITY,
+    STATE_KEY_RAG_HINT,
+    STATE_KEY_ONTOLOGY,
 )
 
 logger = logging.getLogger("geovision_app")
+
 
 def _get_active_model_name() -> str:
     """Get the currently active model name for display."""
@@ -31,71 +33,85 @@ def _get_active_model_name() -> str:
         return settings.ONLINE_LLM_MODEL_NAME
     return settings.REASONING_LLM_MODEL_NAME
 
+
 def _format_blocks(text: str) -> list[str]:
-    clean_text = re.sub(r"^ARCHIVAL INTELLIGENCE REPORT:\n*", "", text, flags=re.IGNORECASE)
-    clean_text = re.sub(r"^LIVE WEB INTELLIGENCE(?: \(.*?\))?:\n*", "", clean_text, flags=re.IGNORECASE)
-    clean_text = re.sub(r"^LIVE WEB SEARCH RESULTS:\n*", "", clean_text, flags=re.IGNORECASE)
-    
+    clean_text = re.sub(
+        r"^ARCHIVAL INTELLIGENCE REPORT:\n*", "", text, flags=re.IGNORECASE
+    )
+    clean_text = re.sub(
+        r"^LIVE WEB INTELLIGENCE(?: \(.*?\))?:\n*", "", clean_text, flags=re.IGNORECASE
+    )
+    clean_text = re.sub(
+        r"^LIVE WEB SEARCH RESULTS:\n*", "", clean_text, flags=re.IGNORECASE
+    )
+
     if "\n\n" in clean_text:
         blocks = [b.strip() for b in clean_text.split("\n\n") if b.strip()]
     else:
         blocks = [b.strip() for b in clean_text.split("\n") if b.strip()]
-        
+
     return blocks if blocks else [text]
+
 
 def _summarise_tool_output(output) -> str:
     """Create a short summary of tool output for the activity trail."""
     text = output.content if hasattr(output, "content") else str(output)
     if not text or "Error" in text:
         return "No results found"
-    
+
     blocks = _format_blocks(text)
     return f"Retrieved {len(blocks)} text block{'s' if len(blocks) != 1 else ''}"
 
+
 class StreamingResponseParser:
     """A stateful parser for LLM streaming output that handles think tags and partial tokens.
-    
+
     This parser acts as a state machine to:
     1. Identify and extract <think> blocks into separate UI events.
     2. Buffer partial characters to avoid breaking tags like '<think>' across chunks.
     3. Suppress technical tags like <tool_code> from the user chat.
     """
-    
+
     def __init__(self):
-        self.buffer = ""        # Buffer for raw characters
+        self.buffer = ""  # Buffer for raw characters
         self.think_buffer = ""  # Accmulated thinking content for tool_result fallback
-        self.in_think = False   # State: currently parsing a <think> block
-        self.in_tool_code = False # State: currently suppressing a <tool_code> block
+        self.in_think = False  # State: currently parsing a <think> block
+        self.in_tool_code = False  # State: currently suppressing a <tool_code> block
         self.streaming_started = False
 
-    def process_chunk(self, content_chunk: str) -> Generator[Dict[str, Any], None, None]:
+    def process_chunk(
+        self, content_chunk: str
+    ) -> Generator[Dict[str, Any], None, None]:
         """Process a text chunk from the LLM and yield UI-ready events."""
         if not content_chunk:
             return
 
         self.buffer += content_chunk
-        
+
         while self.buffer:
             if not self.in_think and not self.in_tool_code:
                 # Priority: Check for <think> then <tool_code> then <tool_call>
                 think_idx = self.buffer.find("<think>")
                 tool_code_idx = self.buffer.find("<tool_code>")
                 tool_call_idx = self.buffer.find("<tool_call>")
-                
+
                 # Find the earliest tag
                 found_tags = []
-                if think_idx != -1: found_tags.append((think_idx, "<think>"))
-                if tool_code_idx != -1: found_tags.append((tool_code_idx, "<tool_code>"))
-                if tool_call_idx != -1: found_tags.append((tool_call_idx, "<tool_call>"))
-                
+                if think_idx != -1:
+                    found_tags.append((think_idx, "<think>"))
+                if tool_code_idx != -1:
+                    found_tags.append((tool_code_idx, "<tool_code>"))
+                if tool_call_idx != -1:
+                    found_tags.append((tool_call_idx, "<tool_call>"))
+
                 if found_tags:
                     found_tags.sort()
                     idx, tag = found_tags[0]
                     before = self.buffer[:idx]
                     if before:
                         yield from self._yield_token(before)
-                    
-                    self.buffer = self.buffer[idx + len(tag):]
+
+                    self.buffer = self.buffer[idx + len(tag) :]
                     if tag == "<think>":
                         self.in_think = True
                         yield {"type": "thinking_start"}
@@ -115,7 +131,7 @@ class StreamingResponseParser:
                         if len(self.buffer) > 15:
                             yield from self._yield_token(self.buffer)
                             self.buffer = ""
-                    break # Wait for more chunks
+                    break  # Wait for more chunks
             elif self.in_think:
                 if "</think>" in self.buffer:
                     idx = self.buffer.find("</think>")
@@ -123,16 +139,16 @@ class StreamingResponseParser:
                     if think_content:
                         yield {"type": "thinking_token", "content": think_content}
                         self.think_buffer += think_content
-                    
+
                     yield {"type": "thinking_end"}
                     yield {
                         "type": "tool_result",
                         "tool": "reasoning",
                         "summary": "Reasoning steps completed",
-                        "content": self.think_buffer.strip()
+                        "content": self.think_buffer.strip(),
                     }
                     self.think_buffer = ""
-                    self.buffer = self.buffer[idx + len("</think>"):]
+                    self.buffer = self.buffer[idx + len("</think>") :]
                     self.in_think = False
                 else:
                     # Detect potential closing tag </think>
@@ -152,7 +168,7 @@ class StreamingResponseParser:
             elif self.in_tool_code:
                 if "</tool_code>" in self.buffer:
                     idx = self.buffer.find("</tool_code>")
-                    self.buffer = self.buffer[idx + len("</tool_code>"):]
+                    self.buffer = self.buffer[idx + len("</tool_code>") :]
                     self.in_tool_code = False
                 else:
                     # Just consume everything until we see </tool_code>
@@ -189,15 +205,16 @@ class StreamingResponseParser:
                 "type": "tool_result",
                 "tool": "reasoning",
                 "summary": "Reasoning steps completed",
-                "content": self.think_buffer.strip()
+                "content": self.think_buffer.strip(),
             }
         self.buffer = ""
+
 
 async def process_query_stream(
     user_query: str, thread_id: str = "default", graph_override=None
 ) -> AsyncGenerator[dict, None]:
     """Process a user query with conversational memory and stream events for UI.
-    
+
     This is the primary entry point for the chat interface. It:
     1. Invokes the LangGraph agent with astream_events.
     2. Filters internal events (grader/reviewer/subgraphs).
@@ -206,20 +223,22 @@ async def process_query_stream(
     """
     # Deferred import to avoid circular dependency with graph.py
     from app.agents.graph import app_graph
+
     graph = graph_override or app_graph
-    
+
     logger.info(
         f"\n[QUERY-STREAM] New query received (thread={thread_id}): '{user_query}'"
     )
 
     # Set processing state
     from app.api.routes.health import set_processing_state
+
     set_processing_state(True, user_query)
 
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     done_sent = False
-    
+
     parser = StreamingResponseParser()
 
     try:
@@ -233,34 +252,41 @@ async def process_query_stream(
             if kind in ["on_chain_error", "on_llm_error", "on_chat_model_error"]:
                 error_msg = event.get("data", {}).get("error", "Unknown error")
                 logger.error(f"[STREAM ERROR] {kind}: {error_msg}")
-                yield {
-                    "type": "error",
-                    "content": f"LLM error: {str(error_msg)}"
-                }
+                yield {"type": "error", "content": f"LLM error: {str(error_msg)}"}
                 return
 
             if kind == "on_chain_start":
                 node_name = event.get("name", "")
                 if node_name == "rag_subgraph":
-                    yield {"type": "status", "phase": "rag_retrieval", "tool": "RAG Subgraph"}
+                    yield {
+                        "type": "status",
+                        "phase": "rag_retrieval",
+                        "tool": "RAG Subgraph",
+                    }
                 elif node_name == "grader":
                     yield {"type": "status", "phase": "rag_grading", "tool": "Grader"}
 
             elif kind == "on_chat_model_start":
                 if any(t in tags for t in ["grader", "reviewer", "ontology_extractor"]):
                     continue
-                    
+
                 active_model = _get_active_model_name()
                 if parser.streaming_started:
                     yield {"type": "status", "phase": "revising", "model": active_model}
                 else:
-                    yield {"type": "status", "phase": "reasoning", "model": active_model}
+                    yield {
+                        "type": "status",
+                        "phase": "reasoning",
+                        "model": active_model,
+                    }
 
             elif kind == "on_tool_start":
                 tool_name = event.get("name", "unknown")
                 tool_input = event.get("data", {}).get("input", {})
                 query_used = tool_input.get("query", "")
-                phase = "vector_search" if tool_name == "vector_search" else "online_search"
+                phase = (
+                    "vector_search" if tool_name == "vector_search" else "online_search"
+                )
                 yield {
                     "type": "status",
                     "phase": phase,
@@ -284,7 +310,11 @@ async def process_query_stream(
                     output = event.get("data", {}).get("output", {})
                     rag_quality = output.get(STATE_KEY_RAG_QUALITY, "IRRELEVANT")
                     rag_hint = output.get(STATE_KEY_RAG_HINT, "")
-                    summary = f"Archival intelligence retrieved (Quality: {rag_quality})" if rag_quality != "IRRELEVANT" else "No relevant archival data found"
+                    summary = (
+                        f"Archival intelligence retrieved (Quality: {rag_quality})"
+                        if rag_quality != "IRRELEVANT"
+                        else "No relevant archival data found"
+                    )
                     yield {
                         "type": "rag_result",
                         "tool": "RAG Subgraph",
@@ -296,13 +326,23 @@ async def process_query_stream(
                 node_name = event.get("name", "")
                 if "review" in node_name.lower():
                     output = event.get("data", {}).get("output", {})
-                    reviewer_result = output.get("reviewer_result", "") if isinstance(output, dict) else ""
-                    if reviewer_result and isinstance(reviewer_result, str) and reviewer_result.strip():
+                    reviewer_result = (
+                        output.get("reviewer_result", "")
+                        if isinstance(output, dict)
+                        else ""
+                    )
+                    if (
+                        reviewer_result
+                        and isinstance(reviewer_result, str)
+                        and reviewer_result.strip()
+                    ):
                         is_valid = reviewer_result.startswith("VALID")
                         yield {
                             "type": "validation_result",
                             "tool": "QA Reviewer",
-                            "summary": "Analysis validated" if is_valid else "Analysis revised",
+                            "summary": "Analysis validated"
+                            if is_valid
+                            else "Analysis revised",
                             "content": reviewer_result,
                         }
 
@@ -310,19 +350,36 @@ async def process_query_stream(
                     output = event.get("data", {}).get("output", {})
                     ontology_state = output.get(STATE_KEY_ONTOLOGY, {})
                     if ontology_state:
-                        entities = getattr(ontology_state, "entities", {}) if not isinstance(ontology_state, dict) else ontology_state.get("entities", {})
-                        links = getattr(ontology_state, "links", {}) if not isinstance(ontology_state, dict) else ontology_state.get("links", {})
-                        
+                        entities = (
+                            getattr(ontology_state, "entities", {})
+                            if not isinstance(ontology_state, dict)
+                            else ontology_state.get("entities", {})
+                        )
+                        links = (
+                            getattr(ontology_state, "links", {})
+                            if not isinstance(ontology_state, dict)
+                            else ontology_state.get("links", {})
+                        )
+
                         def serialize_obj(obj):
-                            return obj.model_dump(mode='json') if hasattr(obj, "model_dump") else obj
+                            return (
+                                obj.model_dump(mode="json")
+                                if hasattr(obj, "model_dump")
+                                else obj
+                            )
 
                         yield {
                             "type": "ontology_updated",
                             "tool": "ontology_subgraph",
                             "summary": f"Graph updated: {len(entities)} entities, {len(links)} relationships",
                             "ontology": {
-                                "entities": {str(k): serialize_obj(v) for k, v in entities.items()},
-                                "links": {str(k): serialize_obj(v) for k, v in links.items()}
+                                "entities": {
+                                    str(k): serialize_obj(v)
+                                    for k, v in entities.items()
+                                },
+                                "links": {
+                                    str(k): serialize_obj(v) for k, v in links.items()
+                                },
                             },
                         }
 
@@ -337,7 +394,7 @@ async def process_query_stream(
                         "type": "tool_result",
                         "tool": "reasoning",
                         "summary": "Reasoning steps completed",
-                        "content": content.strip()
+                        "content": content.strip(),
                     }
 
             elif kind == "on_chat_model_stream":
@@ -350,7 +407,13 @@ async def process_query_stream(
                 if chunk and hasattr(chunk, "content") and chunk.content:
                     content_chunk = chunk.content
                     if isinstance(content_chunk, list):
-                        content_chunk = "".join([c.get("text", "") for c in content_chunk if isinstance(c, dict) and "text" in c])
+                        content_chunk = "".join(
+                            [
+                                c.get("text", "")
+                                for c in content_chunk
+                                if isinstance(c, dict) and "text" in c
+                            ]
+                        )
                     elif not isinstance(content_chunk, str):
                         content_chunk = str(content_chunk)
 
@@ -372,29 +435,42 @@ async def process_query_stream(
         try:
             # We must import graph's app_graph here to get the state
             from app.agents.graph import app_graph
+
             final_state = await graph.aget_state(config)
             messages = final_state.values.get("messages", [])
             ontology_state = final_state.values.get("ontology", {})
-            
+
             serializable_messages = []
             for msg in messages:
-                msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else {"content": str(msg)}
+                msg_dict = (
+                    msg.model_dump()
+                    if hasattr(msg, "model_dump")
+                    else {"content": str(msg)}
+                )
                 msg_type = msg_dict.get("type", None)
-                if msg_type == "human": msg_dict["role"] = "user"
-                elif msg_type == "ai": msg_dict["role"] = "assistant"
-                elif msg_type == "system": msg_dict["role"] = "system"
-                elif msg_type == "tool": msg_dict["role"] = "tool"
+                if msg_type == "human":
+                    msg_dict["role"] = "user"
+                elif msg_type == "ai":
+                    msg_dict["role"] = "assistant"
+                elif msg_type == "system":
+                    msg_dict["role"] = "system"
+                elif msg_type == "tool":
+                    msg_dict["role"] = "tool"
                 serializable_messages.append(msg_dict)
-            
+
             serializable_ontology = {"entities": {}, "links": {}}
             if ontology_state:
                 if hasattr(ontology_state, "model_dump"):
-                    serializable_ontology = ontology_state.model_dump(mode='json')
-            
+                    serializable_ontology = ontology_state.model_dump(mode="json")
+
             import httpx
+
             async with httpx.AsyncClient() as client:
                 save_url = f"http://localhost:8000/api/sessions/{thread_id}/save"
-                save_data = {"messages": serializable_messages, "ontology": serializable_ontology}
+                save_data = {
+                    "messages": serializable_messages,
+                    "ontology": serializable_ontology,
+                }
                 await client.post(save_url, json=save_data, timeout=10.0)
         except Exception as save_error:
             logger.error(f"[AUTO-SAVE] Error: {save_error}")

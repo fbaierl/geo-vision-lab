@@ -22,6 +22,7 @@ def client():
 def disable_langsmith_tracing(monkeypatch):
     """Disable LangSmith tracing for all tests to avoid cluttering the dashboard."""
     from app.core.config import settings
+
     monkeypatch.setattr(settings, "LANGSMITH_TRACING", False)
     yield
 
@@ -63,17 +64,22 @@ def mock_mongo_client():
             class MockCursor:
                 def __iter__(self):
                     return iter(sessions_store.values())
+
                 def sort(self, *args, **kwargs):
                     return self
+
             return MockCursor()
         elif "thread_id" in query:
             # Return matching session
             result = sessions_store.get(query["thread_id"])
+
             class MockCursor:
                 def __iter__(self):
                     return iter([result]) if result else iter([])
+
                 def sort(self, *args, **kwargs):
                     return self
+
             return MockCursor()
         return MagicMock(__iter__=lambda self: iter([]))
 
@@ -162,6 +168,7 @@ def mock_ner_pipeline():
 def override_mongo(mock_mongo_client):
     """Override MongoDB client with mock."""
     from app.core.di import container, get_mongo_client
+
     # Reset instances cache to ensure fresh mock is used
     container._instances.clear()
     container.override(get_mongo_client, lambda: mock_mongo_client)
@@ -171,12 +178,13 @@ def override_mongo(mock_mongo_client):
 @pytest.fixture
 def client_with_mongo_mock(override_mongo):
     """Create a test client with MongoDB mocked.
-    
+
     This fixture ensures the MongoDB mock is set up BEFORE the client is created.
     Use this for tests that need MongoDB operations.
     """
     from app.main import app
     from fastapi.testclient import TestClient
+
     # override_mongo runs first due to dependency，ensuring mock is ready
     with TestClient(app) as test_client:
         yield test_client
@@ -186,6 +194,7 @@ def client_with_mongo_mock(override_mongo):
 def override_embeddings(mock_embeddings):
     """Override embeddings with mock."""
     from app.core.di import get_embeddings
+
     container.override(get_embeddings, lambda: mock_embeddings)
     return mock_embeddings
 
@@ -194,6 +203,7 @@ def override_embeddings(mock_embeddings):
 def override_reasoning_llm(mock_reasoning_llm):
     """Override LLM with mock (single LLM for all tasks)."""
     from app.core.di import get_llm
+
     container.override(get_llm, lambda: mock_reasoning_llm)
     return mock_reasoning_llm
 
@@ -202,5 +212,6 @@ def override_reasoning_llm(mock_reasoning_llm):
 def override_ner_pipeline(mock_ner_pipeline):
     """Override NER pipeline with mock."""
     from app.core.di import get_ner_pipeline
+
     container.override(get_ner_pipeline, lambda: mock_ner_pipeline)
     return mock_ner_pipeline

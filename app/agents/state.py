@@ -3,13 +3,16 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 import operator
 
+
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     validation_attempts: Annotated[int, operator.add]
     is_valid: bool
     vector_search_results: Optional[str]
-    ontology: Optional[Any] # Will store SessionOntology.Dict since TypedDict serializes easier
-    
+    ontology: Optional[
+        Any
+    ]  # Will store SessionOntology.Dict since TypedDict serializes easier
+
     # RAG Subgraph outputs
     rag_quality: Optional[str]  # RELEVANT, PARTIALLY_RELEVANT, IRRELEVANT
     rag_context: Optional[str]  # Filtered context to inject into agent

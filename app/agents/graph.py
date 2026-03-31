@@ -1,8 +1,7 @@
-from typing import Literal, Dict, Any, Generator
+from typing import Literal, Dict, Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 import logging
-import re
 from datetime import datetime
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
@@ -14,16 +13,24 @@ from app.agents.rag_subgraph import run_rag_subgraph
 from app.core.di_llm import get_llm
 from app.core.di_services import get_vector_store
 from app.core.constants import (
-    NODE_AGENT, NODE_TOOLS, NODE_REVIEWER,
-    NODE_ONTOLOGY_EXTRACTOR, NODE_RAG_SUBGRAPH,
-    VALIDATION_VALID, STATE_KEY_MESSAGES, STATE_KEY_VECTOR_SEARCH_RESULTS,
-    STATE_KEY_ONTOLOGY, STATE_KEY_VALIDATION_ATTEMPTS, STATE_KEY_IS_VALID,
-    STATE_KEY_RAG_CONTEXT, STATE_KEY_RAG_QUALITY, STATE_KEY_RAG_HINT,
+    NODE_AGENT,
+    NODE_TOOLS,
+    NODE_REVIEWER,
+    NODE_ONTOLOGY_EXTRACTOR,
+    NODE_RAG_SUBGRAPH,
+    VALIDATION_VALID,
+    STATE_KEY_MESSAGES,
+    STATE_KEY_VECTOR_SEARCH_RESULTS,
+    STATE_KEY_ONTOLOGY,
+    STATE_KEY_VALIDATION_ATTEMPTS,
+    STATE_KEY_IS_VALID,
+    STATE_KEY_RAG_CONTEXT,
+    STATE_KEY_RAG_QUALITY,
+    STATE_KEY_RAG_HINT,
 )
 from app.agents.ontology_subgraph import ontology_subgraph
 from app.models.ontology import SessionOntology
 from app.services.ontology.merge import merge_ontologies
-from app.core.config import settings
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -58,9 +65,6 @@ Start your response with VALID or INVALID."""
 logger = logging.getLogger("agent_flow")
 
 
-
-
-
 def should_continue(state: AgentState) -> Literal[NODE_TOOLS, NODE_REVIEWER]:
     last_message = state[STATE_KEY_MESSAGES][-1]
     if getattr(last_message, "tool_calls", None):
@@ -93,8 +97,12 @@ def vector_search_node(state: AgentState):
         results = vector_store.similarity_search(query, k=3)
 
         if not results:
-            logger.info("[VECTOR_SEARCH_NODE] No archival data found in historical intelligence database.")
-            return {STATE_KEY_VECTOR_SEARCH_RESULTS: "No archival data found in historical intelligence database."}
+            logger.info(
+                "[VECTOR_SEARCH_NODE] No archival data found in historical intelligence database."
+            )
+            return {
+                STATE_KEY_VECTOR_SEARCH_RESULTS: "No archival data found in historical intelligence database."
+            }
 
         # Format results like the vector_search tool does
         results_text = "\n\n".join([doc.get("page_content", "") for doc in results])
@@ -122,7 +130,7 @@ def call_model(state: AgentState):
     # Inject RAG context (from RAG subgraph) into the agent prompt
     rag_context = state.get(STATE_KEY_RAG_CONTEXT, "")
     rag_hint = state.get(STATE_KEY_RAG_HINT, "")
-    
+
     vector_context = ""
     if rag_context:
         vector_context = f"\n\n---\nARCHIVAL INTELLIGENCE (from vector search):\n{rag_context}\n---\n\n"
@@ -134,9 +142,9 @@ def call_model(state: AgentState):
     else:
         logger.info("[AGENT] No RAG context or hint available")
 
-    messages = [SystemMessage(content=system_msg + vector_context + time_prompt)] + list(
-        state["messages"]
-    )
+    messages = [
+        SystemMessage(content=system_msg + vector_context + time_prompt)
+    ] + list(state["messages"])
     logger.info(f"[AGENT] Invoking LLM with {len(messages)} messages")
     response = llm_with_tools.invoke(messages)
 
@@ -146,7 +154,9 @@ def call_model(state: AgentState):
         logger.info(response.content)
         logger.info("[AGENT] === REASONING OUTPUT END ===")
     if hasattr(response, "tool_calls") and response.tool_calls:
-        logger.info(f"[AGENT] Tool calls requested: {[tc['name'] for tc in response.tool_calls]}")
+        logger.info(
+            f"[AGENT] Tool calls requested: {[tc['name'] for tc in response.tool_calls]}"
+        )
 
     logger.info("[AGENT] Reasoning phase complete")
     return {STATE_KEY_MESSAGES: [response]}
@@ -161,7 +171,9 @@ def review_response(state: AgentState, config: RunnableConfig):
     user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     user_query = user_msgs[0].content if user_msgs else "N/A"
     last_message = state[STATE_KEY_MESSAGES][-1]
-    assistant_response = last_message.content if hasattr(last_message, "content") else str(last_message)
+    assistant_response = (
+        last_message.content if hasattr(last_message, "content") else str(last_message)
+    )
 
     logger.info(f"[QA_REVIEWER] Query: {user_query[:50]}...")
     logger.info(f"[QA_REVIEWER] Response length: {len(assistant_response)} chars")
@@ -172,18 +184,26 @@ def review_response(state: AgentState, config: RunnableConfig):
     logger.info(VALIDATION_VALID)
     logger.info("[QA_REVIEWER] === END ===")
 
-    return {STATE_KEY_IS_VALID: True, STATE_KEY_VALIDATION_ATTEMPTS: 1, "reviewer_result": VALIDATION_VALID}
+    return {
+        STATE_KEY_IS_VALID: True,
+        STATE_KEY_VALIDATION_ATTEMPTS: 1,
+        "reviewer_result": VALIDATION_VALID,
+    }
 
 
 def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_ONTOLOGY_EXTRACTOR]:
     # If it's valid, proceed to ontology extraction
     if state.get(STATE_KEY_IS_VALID):
-        logger.debug("[AGENT LOG] Reviewer approved. Transitioning to 'ontology_extractor'.")
+        logger.debug(
+            "[AGENT LOG] Reviewer approved. Transitioning to 'ontology_extractor'."
+        )
         return NODE_ONTOLOGY_EXTRACTOR
 
     attempts = state.get(STATE_KEY_VALIDATION_ATTEMPTS, 0)
     if attempts >= 3:
-        logger.debug(f"[AGENT LOG] Max validation attempts ({attempts}) reached. Forcing '__end__'.")
+        logger.debug(
+            f"[AGENT LOG] Max validation attempts ({attempts}) reached. Forcing '__end__'."
+        )
         return "__end__"
 
     logger.debug("[AGENT LOG] Reviewer rejected. Transitioning back to 'agent'.")
@@ -202,23 +222,41 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
 
     # Get the last assistant message (the final response)
     last_message = state[STATE_KEY_MESSAGES][-1]
-    assistant_response = last_message.content if hasattr(last_message, "content") else ""
+    assistant_response = (
+        last_message.content if hasattr(last_message, "content") else ""
+    )
 
     # Build full conversation context from ALL messages (not just the first query)
     user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
-    assistant_msgs = [m for m in state[STATE_KEY_MESSAGES] if hasattr(m, "content") and not isinstance(m, HumanMessage)]
+    assistant_msgs = [
+        m
+        for m in state[STATE_KEY_MESSAGES]
+        if hasattr(m, "content") and not isinstance(m, HumanMessage)
+    ]
 
     # Build conversation history for context
     full_context_parts = []
     for i, (user_msg, assistant_msg) in enumerate(zip(user_msgs, assistant_msgs), 1):
-        user_content = user_msg.content if hasattr(user_msg, "content") else str(user_msg)
-        assistant_content = assistant_msg.content if hasattr(assistant_msg, "content") else str(assistant_msg)
-        full_context_parts.append(f"Turn {i}:\nUser: {user_content}\nAssistant: {assistant_content}")
+        user_content = (
+            user_msg.content if hasattr(user_msg, "content") else str(user_msg)
+        )
+        assistant_content = (
+            assistant_msg.content
+            if hasattr(assistant_msg, "content")
+            else str(assistant_msg)
+        )
+        full_context_parts.append(
+            f"Turn {i}:\nUser: {user_content}\nAssistant: {assistant_content}"
+        )
 
     # Include any remaining user messages without assistant responses (current query)
     if len(user_msgs) > len(assistant_msgs):
         remaining_user_msg = user_msgs[-1]
-        user_content = remaining_user_msg.content if hasattr(remaining_user_msg, "content") else str(remaining_user_msg)
+        user_content = (
+            remaining_user_msg.content
+            if hasattr(remaining_user_msg, "content")
+            else str(remaining_user_msg)
+        )
         full_context_parts.append(f"Current Query:\nUser: {user_content}")
 
     full_context = "\n\n".join(full_context_parts) if full_context_parts else ""
@@ -232,10 +270,12 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
         subgraph_input = {
             "user_query": full_context,
             "assistant_response": assistant_response,
-            "query_id": "default"
+            "query_id": "default",
         }
 
-        logger.debug(f"[ONTOLOGY_SUBGRAPH] Invoking sub-graph with {len(assistant_response)} chars of assistant response")
+        logger.debug(
+            f"[ONTOLOGY_SUBGRAPH] Invoking sub-graph with {len(assistant_response)} chars of assistant response"
+        )
 
         # Run sub-graph
         subgraph_result = ontology_subgraph.invoke(subgraph_input)
@@ -243,7 +283,9 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
 
         # Log sub-graph result details
         if delta:
-            logger.info(f"[ONTOLOGY_SUBGRAPH] Sub-graph returned {len(delta.entities)} entities and {len(delta.links)} links")
+            logger.info(
+                f"[ONTOLOGY_SUBGRAPH] Sub-graph returned {len(delta.entities)} entities and {len(delta.links)} links"
+            )
         else:
             logger.warning("[ONTOLOGY_SUBGRAPH] Sub-graph returned None or empty delta")
 
@@ -260,27 +302,33 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
 
         entity_count = len(current_ontology.entities)
         link_count = len(current_ontology.links)
-        logger.info(f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links accumulated.")
+        logger.info(
+            f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links accumulated."
+        )
         return {STATE_KEY_ONTOLOGY: current_ontology}
 
     except Exception as e:
         logger.error(f"[ONTOLOGY_SUBGRAPH] ✗ Sub-graph failed: {e}")
         logger.exception("[ONTOLOGY_SUBGRAPH] Full stack trace:")
-        logger.error(f"[ONTOLOGY_SUBGRAPH] Assistant response length: {len(assistant_response)} chars")
-        logger.debug(f"[ONTOLOGY_SUBGRAPH] Assistant response preview: {assistant_response[:500]}...")
+        logger.error(
+            f"[ONTOLOGY_SUBGRAPH] Assistant response length: {len(assistant_response)} chars"
+        )
+        logger.debug(
+            f"[ONTOLOGY_SUBGRAPH] Assistant response preview: {assistant_response[:500]}..."
+        )
         return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
 
 
 def run_rag_subgraph_node(state: AgentState) -> Dict[str, Any]:
     """
     Run the RAG subgraph to retrieve and grade context.
-    
+
     This wraps the RAG subgraph and maps state between main graph and sub-graph.
     """
     logger.info("=" * 80)
     logger.info("[RAG_SUBGRAPH_NODE] Starting RAG subgraph")
     logger.info("=" * 80)
-    
+
     # Extract user query from the first HumanMessage
     user_msgs = [m for m in state[STATE_KEY_MESSAGES] if isinstance(m, HumanMessage)]
     if not user_msgs:
@@ -288,30 +336,32 @@ def run_rag_subgraph_node(state: AgentState) -> Dict[str, Any]:
         return {
             STATE_KEY_RAG_QUALITY: "IRRELEVANT",
             STATE_KEY_RAG_CONTEXT: "",
-            STATE_KEY_RAG_HINT: "NOTE: No query provided."
+            STATE_KEY_RAG_HINT: "NOTE: No query provided.",
         }
-    
+
     query = user_msgs[0].content
     logger.info(f"[RAG_SUBGRAPH_NODE] Query: '{query}'")
-    
+
     try:
         # Run the RAG subgraph
         rag_result = run_rag_subgraph(query)
-        
+
         rag_quality = rag_result.get("rag_quality", "IRRELEVANT")
         rag_context = rag_result.get("rag_context", "")
         rag_hint = rag_result.get("rag_hint", "")
-        
+
         logger.info(f"[RAG_SUBGRAPH_NODE] RAG quality: {rag_quality}")
-        logger.info(f"[RAG_SUBGRAPH_NODE] Context length: {len(rag_context) if rag_context else 0} chars")
+        logger.info(
+            f"[RAG_SUBGRAPH_NODE] Context length: {len(rag_context) if rag_context else 0} chars"
+        )
         logger.info(f"[RAG_SUBGRAPH_NODE] Hint: {'Yes' if rag_hint else 'No'}")
-        
+
         return {
             STATE_KEY_RAG_QUALITY: rag_quality,
             STATE_KEY_RAG_CONTEXT: rag_context,
-            STATE_KEY_RAG_HINT: rag_hint
+            STATE_KEY_RAG_HINT: rag_hint,
         }
-        
+
     except Exception as e:
         logger.error(f"[RAG_SUBGRAPH_NODE] RAG subgraph failed: {e}")
         logger.exception("[RAG_SUBGRAPH_NODE] Full stack trace:")
@@ -319,7 +369,7 @@ def run_rag_subgraph_node(state: AgentState) -> Dict[str, Any]:
         return {
             STATE_KEY_RAG_QUALITY: "IRRELEVANT",
             STATE_KEY_RAG_CONTEXT: "",
-            STATE_KEY_RAG_HINT: "NOTE: Archival search encountered an error. Use web search tools for information."
+            STATE_KEY_RAG_HINT: "NOTE: Archival search encountered an error. Use web search tools for information.",
         }
 
 
@@ -342,12 +392,9 @@ def get_graph():
 
     # Agent decides whether to use tools or go to reviewer
     workflow.add_conditional_edges(
-        NODE_AGENT, 
+        NODE_AGENT,
         should_continue,
-        {
-            NODE_TOOLS: NODE_TOOLS,
-            NODE_REVIEWER: NODE_REVIEWER
-        }
+        {NODE_TOOLS: NODE_TOOLS, NODE_REVIEWER: NODE_REVIEWER},
     )
 
     # Tools loop back to agent for further reasoning
@@ -355,13 +402,13 @@ def get_graph():
 
     # Reviewer validates or sends back for revision
     workflow.add_conditional_edges(
-        NODE_REVIEWER, 
+        NODE_REVIEWER,
         check_validation,
         {
             NODE_AGENT: NODE_AGENT,
             NODE_ONTOLOGY_EXTRACTOR: NODE_ONTOLOGY_EXTRACTOR,
-            "__end__": "__end__"
-        }
+            "__end__": "__end__",
+        },
     )
 
     # Ontology sub-graph processes entities, then ends
@@ -373,7 +420,6 @@ def get_graph():
 app_graph = get_graph()
 
 
-
 # External interface
 def process_query(user_query: str, thread_id: str = "default") -> str:
     """Process a user query with conversational memory (non-streaming)."""
@@ -381,11 +427,11 @@ def process_query(user_query: str, thread_id: str = "default") -> str:
     inputs = {"messages": [HumanMessage(content=user_query)]}
     config = {"configurable": {"thread_id": thread_id}}
     result = app_graph.invoke(inputs, config=config)
-    
+
     # Find the last assistant message (not system feedback)
     for msg in reversed(result["messages"]):
         if hasattr(msg, "type") and msg.type == "ai":
             return msg.content
-    
+
     # Fallback to last message if no AI message found
     return result["messages"][-1].content

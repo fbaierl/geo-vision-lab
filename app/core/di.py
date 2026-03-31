@@ -60,6 +60,7 @@ def get_ontology_service() -> OntologyService:
     Returns:
         OntologyService instance
     """
+
     def factory():
         db = get_database()
         return OntologyService(db)

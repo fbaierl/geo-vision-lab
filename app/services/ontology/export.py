@@ -21,8 +21,7 @@ class OntologyExportService:
 
     @staticmethod
     def export_to_json(
-        ontology: SessionOntology,
-        metadata: Optional[dict] = None
+        ontology: SessionOntology, metadata: Optional[dict] = None
     ) -> str:
         """
         Export ontology to JSON string using GeoVision Lab format v1.0.
@@ -58,19 +57,17 @@ class OntologyExportService:
                 **metadata,
                 "exported_at": datetime.utcnow().isoformat() + "Z",
                 "entity_count": len(ontology.entities),
-                "link_count": len(ontology.links)
+                "link_count": len(ontology.links),
             },
-            "entities": [e.model_dump(mode='json') for e in ontology.entities.values()],
-            "links": [link.model_dump(mode='json') for link in ontology.links.values()]
+            "entities": [e.model_dump(mode="json") for e in ontology.entities.values()],
+            "links": [link.model_dump(mode="json") for link in ontology.links.values()],
         }
 
         return json.dumps(export_data, indent=2, default=str)
 
     @staticmethod
     def export_to_file(
-        ontology: SessionOntology,
-        filepath: str,
-        metadata: Optional[dict] = None
+        ontology: SessionOntology, filepath: str, metadata: Optional[dict] = None
     ):
         """
         Export ontology to JSON file.
@@ -81,7 +78,7 @@ class OntologyExportService:
             metadata: Optional metadata
         """
         json_str = OntologyExportService.export_to_json(ontology, metadata)
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             f.write(json_str)
 
     @staticmethod
@@ -100,22 +97,24 @@ class OntologyExportService:
             SessionOntology object
         """
         data = json.loads(json_str)
-        
+
         # Check if it's GeoVision Lab format v1.0
         if "$schema" in data or "version" in data:
             # New format - extract entities and links from the structure
             entities_data = data.get("entities", [])
             links_data = data.get("links", [])
-            
+
             # Reconstruct SessionOntology from arrays
             ontology = SessionOntology()
             for e in entities_data:
                 from app.models.ontology import OntologyEntity
+
                 entity = OntologyEntity.model_validate(e)
                 ontology.entities[str(entity.uuid)] = entity
 
             for link_data in links_data:
                 from app.models.ontology import OntologyLink
+
                 link = OntologyLink.model_validate(link_data)
                 ontology.links[str(link.uuid)] = link
 
@@ -135,14 +134,13 @@ class OntologyExportService:
         Returns:
             SessionOntology object
         """
-        with open(filepath, 'r') as f:
+        with open(filepath, "r") as f:
             json_str = f.read()
         return OntologyExportService.import_from_json(json_str)
 
     @staticmethod
     def merge_imported_ontology(
-        current: SessionOntology,
-        imported: SessionOntology
+        current: SessionOntology, imported: SessionOntology
     ) -> SessionOntology:
         """
         Merge imported ontology with current session ontology.

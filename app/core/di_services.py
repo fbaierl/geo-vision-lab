@@ -28,29 +28,32 @@ logger = logging.getLogger(__name__)
 def get_vector_store() -> Any:
     """Get vector store service instance."""
     from app.services.vector_store import VectorStoreService
+
     return VectorStoreService(
         embeddings=get_embeddings(),
         client=get_mongo_client(),
-        collection=get_collection()
+        collection=get_collection(),
     )
 
 
 def get_location_extractor() -> Any:
     """Get location extractor service instance."""
     from app.services.location_extractor import LocationExtractorService
+
     return LocationExtractorService(
-        ner_pipeline=get_ner_pipeline(),
-        geocode_cache=get_geocode_cache()
+        ner_pipeline=get_ner_pipeline(), geocode_cache=get_geocode_cache()
     )
 
 
 def get_location_prioritizer() -> Any:
     """Get location prioritizer service instance."""
     from app.services.location_prioritizer import LocationPrioritizerService
+
     return LocationPrioritizerService(llm=get_llm())
 
 
 def ensure_vector_index() -> None:
     """Create vector search index if it doesn't exist."""
     from app.core.di_database import ensure_vector_index as di_ensure_vector_index
+
     di_ensure_vector_index()

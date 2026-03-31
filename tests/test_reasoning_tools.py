@@ -4,6 +4,7 @@ import wikipedia
 
 # --- web_search tests ---
 
+
 @patch("app.agents.tools.wikipedia.summary")
 def test_web_search_success(mock_wikipedia_summary):
     mock_wikipedia_summary.return_value = "This is a summary of NATO."
@@ -18,7 +19,9 @@ def test_web_search_success(mock_wikipedia_summary):
 @patch("app.agents.tools.wikipedia.summary")
 @patch("app.agents.tools.wikipedia.search")
 @patch("app.agents.tools.wikipedia.page")
-def test_web_search_page_error_match_found(mock_wikipedia_page, mock_wikipedia_search, mock_wikipedia_summary):
+def test_web_search_page_error_match_found(
+    mock_wikipedia_page, mock_wikipedia_search, mock_wikipedia_summary
+):
     # First call raises PageError (page not found)
     # The summary inside the except block should succeed
     mock_wikipedia_summary.side_effect = [
@@ -26,7 +29,7 @@ def test_web_search_page_error_match_found(mock_wikipedia_page, mock_wikipedia_s
         "This is a summary of NATO.",
     ]
     mock_wikipedia_search.return_value = ["NATO"]
-    
+
     mock_page = MagicMock()
     mock_page.coordinates = [10.0, 20.0]
     mock_wikipedia_page.return_value = mock_page
@@ -41,7 +44,9 @@ def test_web_search_page_error_match_found(mock_wikipedia_page, mock_wikipedia_s
 @patch("app.agents.tools.wikipedia.summary")
 @patch("app.agents.tools.wikipedia.search")
 def test_web_search_page_error_no_match(mock_wikipedia_search, mock_wikipedia_summary):
-    mock_wikipedia_summary.side_effect = wikipedia.exceptions.PageError("Unknown_Topic_XYZ")
+    mock_wikipedia_summary.side_effect = wikipedia.exceptions.PageError(
+        "Unknown_Topic_XYZ"
+    )
     mock_wikipedia_search.return_value = []
 
     result = web_search.invoke({"query": "Unknown_Topic_XYZ"})
@@ -52,7 +57,9 @@ def test_web_search_page_error_no_match(mock_wikipedia_search, mock_wikipedia_su
 @patch("app.agents.tools.wikipedia.summary")
 def test_web_search_disambiguation_error(mock_wikipedia_summary):
     mock_wikipedia_summary.side_effect = [
-        wikipedia.exceptions.DisambiguationError("Mercury", ["Mercury (planet)", "Mercury (element)"]),
+        wikipedia.exceptions.DisambiguationError(
+            "Mercury", ["Mercury (planet)", "Mercury (element)"]
+        ),
         "This is a summary about Mercury the planet.",
     ]
 
@@ -63,6 +70,7 @@ def test_web_search_disambiguation_error(mock_wikipedia_summary):
 
 
 # --- duckduckgo_search tests ---
+
 
 @patch("langchain_community.tools.DuckDuckGoSearchRun.run")
 def test_duckduckgo_search_success(mock_ddg_run):
@@ -81,4 +89,7 @@ def test_duckduckgo_search_error(mock_ddg_run):
 
     result = duckduckgo_search.invoke({"query": "Space news"})
 
-    assert "Failed to retrieve duckduckgo web information on 'Space news'. Error: Rate limit exceeded" in result
+    assert (
+        "Failed to retrieve duckduckgo web information on 'Space news'. Error: Rate limit exceeded"
+        in result
+    )

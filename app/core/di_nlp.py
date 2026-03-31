@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 def _get_container():
     """Lazy import to avoid circular dependency."""
     from app.core.di import container
+
     return container
 
 
@@ -51,10 +52,7 @@ def _create_ner_pipeline() -> Any:
     model = AutoModelForTokenClassification.from_pretrained(model_name)
 
     ner_pipeline = pipeline(
-        "ner",
-        model=model,
-        tokenizer=tokenizer,
-        aggregation_strategy="simple"
+        "ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple"
     )
 
     return ner_pipeline

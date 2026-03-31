@@ -23,7 +23,7 @@ def test_system_status_idle(mock_get, mock_warmup_status):
     mock_response.json.return_value = {"models": []}
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
-    
+
     # Mock warmup status to indicate warmup is completed (no models loading)
     mock_warmup_status.return_value = {
         "started": True,
@@ -59,7 +59,7 @@ def test_system_status_engaged(mock_get, mock_warmup_status):
     }
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
-    
+
     # Mock warmup status to indicate warmup is completed
     mock_warmup_status.return_value = {
         "started": True,
@@ -95,7 +95,7 @@ def test_system_status_gpu_standby(mock_get, mock_warmup_status):
     }
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
-    
+
     # Mock warmup status to indicate warmup is completed
     mock_warmup_status.return_value = {
         "started": True,
@@ -126,7 +126,7 @@ def test_system_status_gpu_standby(mock_get, mock_warmup_status):
 def test_system_status_cpu_only(mock_get, mock_warmup_status):
     # Mock Ollama API failure (GPU not available)
     mock_get.side_effect = Exception("Connection refused")
-    
+
     # Mock warmup status to indicate warmup is completed
     mock_warmup_status.return_value = {
         "started": True,
@@ -154,7 +154,7 @@ def test_system_status_cpu_only(mock_get, mock_warmup_status):
 @patch("app.api.routes.chat.process_query")
 def test_chat_non_streaming(mock_process_query):
     mock_process_query.return_value = "This is a mock response from the agent."
-    
+
     response = client.post(
         "/chat",
         data={

@@ -25,7 +25,7 @@ def get_langsmith_client() -> Optional[Client]:
     """Get LangSmith client if tracing is enabled."""
     if not is_langsmith_enabled():
         return None
-    
+
     try:
         client = Client(
             api_url=settings.LANGSMITH_ENDPOINT,
@@ -41,11 +41,11 @@ def get_langchain_tracer() -> Optional[LangChainTracer]:
     """Get LangChain tracer if tracing is enabled."""
     if not is_langsmith_enabled():
         return None
-    
+
     client = get_langsmith_client()
     if not client:
         return None
-    
+
     try:
         tracer = LangChainTracer(
             client=client,

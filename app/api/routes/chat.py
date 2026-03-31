@@ -9,6 +9,7 @@ from app.services.streaming import process_query_stream
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles datetime objects."""
+
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -54,10 +55,13 @@ async def chat_stream_endpoint(
         return JSONResponse({"answer": "Empty transmission."}, status_code=400)
 
     session_id = thread_id if thread_id else str(uuid.uuid4())
-    
+
     import logging
+
     logger = logging.getLogger(__name__)
-    logger.info(f"[CHAT_STREAM] >>> Starting stream endpoint (query='{query[:50]}...', thread={session_id})")
+    logger.info(
+        f"[CHAT_STREAM] >>> Starting stream endpoint (query='{query[:50]}...', thread={session_id})"
+    )
 
     async def event_generator():
         # Send session metadata first
@@ -74,7 +78,9 @@ async def chat_stream_endpoint(
                 logger.info(f"[CHAT_STREAM] Event #{event_count}: type={evt_type}")
                 data = json_dumps(evt)
                 yield f"data: {data}\n\n"
-            logger.info(f"[CHAT_STREAM] <<< Event generator complete ({event_count} events)")
+            logger.info(
+                f"[CHAT_STREAM] <<< Event generator complete ({event_count} events)"
+            )
         except Exception as e:
             logger.error(f"[CHAT_STREAM] ✗ Stream failed: {e}")
             logger.exception("[CHAT_STREAM] Full stack trace:")
