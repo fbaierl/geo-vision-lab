@@ -2944,30 +2944,6 @@
                 } else if (graphEmptyState) {
                     graphEmptyState.style.display = 'flex';
                 }
-
-                // Extract map locations and render map
-                const mapContainer = document.getElementById('map-container');
-                const mapEmptyState = document.getElementById('map-empty-state');
-                const locations = Object.values(ontology.entities || {}).filter(
-                    e => e.type === 'Location' && e.properties && e.properties.lat && e.properties.lon
-                ).map(e => ({
-                    name: e.name,
-                    type: e.type,
-                    lat: e.properties.lat,
-                    lon: e.properties.lon,
-                    relevance: e.properties.relevance || 0.5
-                }));
-
-                if (mapContainer && locations.length > 0) {
-                    renderMap(locations, mapContainer);
-                    if (mapEmptyState) mapEmptyState.style.display = 'none';
-                    const winData = windowManager.windows.get('window-maps');
-                    if (winData && winData.minimized) {
-                        windowManager.restoreWindow('window-maps');
-                    }
-                } else if (mapEmptyState) {
-                    mapEmptyState.style.display = 'flex';
-                }
             }
 
             async loadSessions() {
