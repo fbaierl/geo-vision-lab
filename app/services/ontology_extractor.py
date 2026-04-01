@@ -18,7 +18,12 @@ logger = logging.getLogger("agent_flow")
 class OntologyExtractorService:
     def __init__(self, llm):
         self.llm = llm
-        self.is_groq = isinstance(llm, ChatGroq)
+        # Detect Groq even when wrapped with with_config()
+        self.is_groq = (
+            isinstance(llm, ChatGroq)
+            or "ChatGroq" in type(llm).__name__
+            or "ChatGroq" in str(type(llm))
+        )
 
         # We use a formal structured system prompt with concrete examples.
         # The model must replace ALL placeholder values with actual extracted data.

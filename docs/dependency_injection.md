@@ -64,9 +64,12 @@ class VectorStoreService:
 │  │  get_embeddings()       → HuggingFaceEmbeddings      │   │
 │  │  get_llm()              → ChatOllama                 │   │
 │  │  get_ner_pipeline()     → HuggingFace NER Pipeline   │   │
+│  │  get_neo4j_driver()     → Neo4j Driver               │   │
+│  │  get_graph_store()      → GraphStoreService          │   │
 │  │  get_vector_store()     → VectorStoreService         │   │
 │  │  get_location_extractor() → LocationExtractorService │   │
 │  │  get_location_prioritizer() → LocationPrioritizer... │   │
+│  │  get_ontology_service() → OntologyService            │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                             ↓ uses
@@ -78,6 +81,11 @@ class VectorStoreService:
 │  │ - embeddings     │  │ - ner_pipeline       │            │
 │  │ - client         │  │ - geocode_cache      │            │
 │  │ - collection     │  │                      │            │
+│  └──────────────────┘  └──────────────────────┘            │
+│  ┌──────────────────┐  ┌──────────────────────┐            │
+│  │ GraphStore       │  │ OntologyService      │            │
+│  │ Service          │  │ - graph_store        │            │
+│  │ - driver         │  │                      │            │
 │  └──────────────────┘  └──────────────────────┘            │
 │  ┌──────────────────┐                                      │
 │  │ LocationPrior....│                                      │

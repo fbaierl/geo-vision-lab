@@ -44,6 +44,30 @@ services:
       retries: 5
       start_period: 30s
 
+  neo4j:
+    image: neo4j:5.26
+    container_name: geovision-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/geovision
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "geovision", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
   mongo-express:
     image: mongo-express:latest
     container_name: geovision-mongo-express
@@ -84,12 +108,17 @@ services:
     environment:
       - OLLAMA_HOST=http://geovision-ollama:11434
       - MONGODB_URI=mongodb://geovision-mongodb:27017/geovision?directConnection=true
+      - NEO4J_URI=bolt://geovision-neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=geovision
       - LANGSMITH_TRACING=true
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
       - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://eu.api.smith.langchain.com}
       - LANGSMITH_PROJECT=geo-vision-lab
     depends_on:
       mongodb:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
       ollama:
         condition: service_started
@@ -149,6 +178,10 @@ volumes:
   mongodb_data:
   mongodb_configdb:
   mongodb_mongot:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
   ollama_data:
   hf_cache:
   loki_data:

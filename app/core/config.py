@@ -23,6 +23,11 @@ class Settings(BaseSettings):
             return self.MONGODB_URI
         return f"mongodb://{self.MONGODB_SERVER}:{self.MONGODB_PORT}/{self.MONGODB_DB}"
 
+    # --- Graph Database (Neo4j) ---
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "geovision"
+
     # --- LLM & Embedding ---
     # Support both OLLAMA_HOST (docker-compose) and OLLAMA_BASE_URL (direct)
     OLLAMA_HOST: Optional[str] = None  # From docker-compose
