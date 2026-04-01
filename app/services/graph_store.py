@@ -61,6 +61,23 @@ class GraphStoreService:
     ) -> None:
         """Create or merge an entity node."""
         now = datetime.utcnow().isoformat()
+
+        # Sanitize properties: serialize nested dicts/lists to JSON strings
+        sanitized_props = {}
+        for key, value in (properties or {}).items():
+            if isinstance(value, (dict, list)):
+                sanitized_props[key] = json.dumps(value)
+                logger.info(f"[GRAPH_STORE] Serialized property '{key}' to JSON: {value!r}")
+            else:
+                sanitized_props[key] = value
+        
+        # Debug: log all property types before sending to Neo4j
+        for key, value in sanitized_props.items():
+            value_type = value.__class__.__name__
+            logger.info(f"[GRAPH_STORE] Property '{key}': type={value_type}, value={value!r}")
+            if isinstance(value, dict):
+                logger.error(f"[GRAPH_STORE] WARNING: Property '{key}' is still a dict: {value!r}")
+
         props = {
             "uuid": uuid,
             "name": name,
@@ -69,7 +86,7 @@ class GraphStoreService:
             "created_at": now,
             "updated_at": now,
             "created_by": created_by,
-            **(properties or {}),
+            **sanitized_props,
         }
         mentions_json = json.dumps(
             [
@@ -85,6 +102,10 @@ class GraphStoreService:
         ON CREATE SET e += $props
         ON MATCH SET e.updated_at = $now, e.mentions = e.mentions + $mentions
         """
+        
+        # Log the full props dict for debugging
+        logger.info(f"[GRAPH_STORE] Full props dict: {props!r}")
+        
         self._run_write(
             query,
             {
@@ -94,7 +115,7 @@ class GraphStoreService:
                 "mentions": mentions_json,
             },
         )
-        logger.debug("[GRAPH_STORE] Created/merged entity: %s (%s)", name, uuid)
+        logger.info(f"[GRAPH_STORE] Created/merged entity: {name} ({uuid}) with props keys: {list(props.keys())}")
 
     def get_entity_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
         """Get entity by UUID."""
@@ -156,6 +177,21 @@ class GraphStoreService:
         """Create a relationship between two entities."""
         now = datetime.utcnow().isoformat()
         rel_type = self._type_to_rel_type(type)
+        
+        # Sanitize properties: serialize nested dicts/lists to JSON strings
+        sanitized_props = {}
+        for key, value in (properties or {}).items():
+            if isinstance(value, (dict, list)):
+                sanitized_props[key] = json.dumps(value)
+                logger.info(f"[GRAPH_STORE] Serialized link property '{key}' to JSON: {value!r}")
+            else:
+                sanitized_props[key] = value
+        
+        # Debug: log any dict values that might have slipped through
+        for key, value in sanitized_props.items():
+            if isinstance(value, dict):
+                logger.error(f"[GRAPH_STORE] WARNING: Link property '{key}' is still a dict: {value!r}")
+        
         mentions_json = json.dumps(
             [
                 m.model_dump(mode="json") if hasattr(m, "model_dump") else m
@@ -179,7 +215,7 @@ class GraphStoreService:
                 "target_uuid": target_uuid,
                 "type": type,
                 "thread_id": thread_id,
-                "properties": properties or {},
+                "properties": json.dumps(sanitized_props),
                 "mentions": mentions_json,
                 "now": now,
             },

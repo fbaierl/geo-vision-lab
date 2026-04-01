@@ -227,6 +227,12 @@ graph TB
     AGENT --> NOM
 ```
 
+### Data Storage Strategy: Polyglot Persistence
+
+The platform purposefully duplicates session ontology data across two databases to optimize for different read/write patterns:
+- **MongoDB (UI State & Snapshots)**: Acts as the primary document store. The entire session context (chat messages and the raw JSON ontology tree) is continually saved here. This allows the backend to restore a session's UI state instantly with an $O(1)$ query, without needing to reconstruct the graph structure from scratch.
+- **Neo4j (AI Querying & Traversal)**: The ontology is synchronously mirrored to Neo4j. This graph database allows the AI agent to execute complex, multi-hop Cypher queries (e.g., finding all indirectly affiliated organizations of a person) in milliseconds during the reasoning pipeline.
+
 For detailed technology decisions, see [Technology Choices](docs/technology.md).
 
 For agent orchestration details, see [Agent Workflow](docs/agent_workflow.md).
@@ -305,10 +311,13 @@ GeoVision Lab supports **hybrid LLM deployment** with both local and cloud model
 
 ### Local Models (Ollama)
 
+> [!WARNING]
+> The included smaller models (`qwen3.5:9b` and `qwen3.5:4b`) are often too weak for proper, reliable ontology extraction and should primarily be used for testing and development. It is highly recommended to add and configure more capable local models when your hardware allows it to ensure high-quality knowledge graph generation.
+
 | Model | Size | Speed | Quality | Best For |
 |-------|------|-------|---------|----------|
-| **qwen3.5:9b** | 9B | Slower | Highest | Complex analysis, detailed reports |
-| **qwen3.5:4b** | 4B | Balanced | High | Default — general purpose |
+| **qwen3.5:9b** | 9B | Slower | Highest | Complex analysis, detailed reports (Testing) |
+| **qwen3.5:4b** | 4B | Balanced | High | Default — general purpose (Testing) |
 
 **To switch local models:**
 1. Open the Web Interface at [localhost:8000](http://localhost:8000)

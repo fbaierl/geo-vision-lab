@@ -182,6 +182,15 @@ class OntologyService:
             properties_raw = node.get("properties", {})
             if isinstance(properties_raw, str):
                 properties_raw = json.loads(properties_raw)
+            
+            # Deserialize individual property values that were serialized as JSON strings
+            if isinstance(properties_raw, dict):
+                for key, value in properties_raw.items():
+                    if isinstance(value, str):
+                        try:
+                            properties_raw[key] = json.loads(value)
+                        except (json.JSONDecodeError, ValueError):
+                            pass  # Keep as string if not valid JSON
 
             created_at_str = node.get("created_at", datetime.utcnow().isoformat())
             updated_at_str = node.get("updated_at", datetime.utcnow().isoformat())
@@ -236,6 +245,15 @@ class OntologyService:
             properties_raw = rel.get("properties", {})
             if isinstance(properties_raw, str):
                 properties_raw = json.loads(properties_raw)
+            
+            # Deserialize individual property values that were serialized as JSON strings
+            if isinstance(properties_raw, dict):
+                for key, value in properties_raw.items():
+                    if isinstance(value, str):
+                        try:
+                            properties_raw[key] = json.loads(value)
+                        except (json.JSONDecodeError, ValueError):
+                            pass  # Keep as string if not valid JSON
 
             created_at_str = rel.get("created_at", datetime.utcnow().isoformat())
             updated_at_str = rel.get("updated_at", datetime.utcnow().isoformat())
@@ -293,6 +311,15 @@ class OntologyService:
             properties_raw = rel.get("properties", {})
             if isinstance(properties_raw, str):
                 properties_raw = json.loads(properties_raw)
+            
+            # Deserialize individual property values that were serialized as JSON strings
+            if isinstance(properties_raw, dict):
+                for key, value in properties_raw.items():
+                    if isinstance(value, str):
+                        try:
+                            properties_raw[key] = json.loads(value)
+                        except (json.JSONDecodeError, ValueError):
+                            pass  # Keep as string if not valid JSON
 
             created_at_str = rel.get("created_at", datetime.utcnow().isoformat())
             updated_at_str = rel.get("updated_at", datetime.utcnow().isoformat())
