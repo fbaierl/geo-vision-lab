@@ -265,7 +265,6 @@ async def process_query_stream(
         logger.info(f"[QUERY-STREAM] >>> Starting astream_events (thread={thread_id})")
         async for event in graph.astream_events(inputs, config=config, version="v2"):
             kind = event.get("event")
-            tags = event.get("tags", [])
             event_name = event.get("name", "unknown")
 
             # Check for errors
