@@ -81,7 +81,7 @@ class GraphStoreService:
 
         label = self._type_to_label(type)
         query = f"""
-        MERGE (e:{label} {{uuid: $uuid}})
+        MERGE (e:Entity:{label} {{uuid: $uuid}})
         ON CREATE SET e += $props
         ON MATCH SET e.updated_at = $now, e.mentions = e.mentions + $mentions
         """
@@ -409,6 +409,15 @@ class GraphStoreService:
         """
         self._run_write(query, {"thread_id": thread_id})
         logger.info("[GRAPH_STORE] Cleared ontology for thread: %s", thread_id)
+
+    def clear_all_ontology(self) -> None:
+        """Delete all entities and relationships from Neo4j."""
+        query = """
+        MATCH (e:Entity)
+        DETACH DELETE e
+        """
+        self._run_write(query)
+        logger.info("[GRAPH_STORE] Cleared all ontology data")
 
     def get_all_entities(
         self, thread_id: str = None, limit: int = 1000
