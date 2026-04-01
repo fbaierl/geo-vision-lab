@@ -6,7 +6,6 @@ The merge logic should detect same-name Location↔Country pairs and merge
 them into a single Country entity with combined properties.
 """
 
-import pytest
 from app.services.ontology.merge import merge_ontologies
 from app.models.ontology import SessionOntology, OntologyEntity, OntologyLink, Mention
 
