@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>📝 This is a demo / learning project</strong>
+  <strong>This is a demo / learning project</strong>
 </p>
 
 <p align="center">
@@ -59,60 +59,60 @@ The platform ships with sample fantasy lore about the **DuckyDucks and FrogyFrog
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': { 'fontSize': '11px', 'lineColor': '#666666'}}}%%
 flowchart TD
-    User["📥 User Query"] --> RAGSubgraph["🔍 RAG SUBGRAPH<br/>Retrieval + Grading + Re-ranking"]
+    User["User Query"] --> RAGSubgraph["RAG SUBGRAPH<br/>Retrieval + Grading + Re-ranking"]
 
-    subgraph RAGSubgraph["📚 RAG SUBGRAPH"]
+    subgraph RAGSubgraph["RAG SUBGRAPH"]
         direction TB
-        VectorSearch["🔎 Vector Search<br/>Archival Lookup<br/>k=20 candidates"]
-        ReRanker["🔄 Re-ranker<br/>BGE Cross-Encoder<br/>Top-K selection"]
-        Grader["📊 Grader<br/>Context Relevance<br/>RELEVANT/IRRELEVANT"]
+        VectorSearch["Vector Search<br/>Archival Lookup<br/>k=20 candidates"]
+        ReRanker["Re-ranker<br/>BGE Cross-Encoder<br/>Top-K selection"]
+        Grader["Grader<br/>Context Relevance<br/>RELEVANT/IRRELEVANT"]
         VectorSearch --> ReRanker
         ReRanker --> Grader
     end
 
-    RAGSubgraph --> Agent["🤖 AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
+    RAGSubgraph --> Agent["AGENT_NODE<br/>Worker LLM<br/>Reasoning + Tool Selection"]
 
     Agent --> ShouldContinue{"Has tool<br/>calls?"}
 
-    ShouldContinue -->|Yes| Tools["🛠️ TOOL_NODE<br/>DuckDuckGo / Wikipedia / Time"]
-    ShouldContinue -->|No| Reviewer["👁️ REVIEWER_NODE<br/>QA Critic LLM"]
+    ShouldContinue -->|Yes| Tools["TOOL_NODE<br/>DuckDuckGo / Wikipedia / Time"]
+    ShouldContinue -->|No| Reviewer["REVIEWER_NODE<br/>QA Critic LLM"]
 
     Tools --> Agent
 
     Reviewer --> IsValid{"Response<br/>VALID?"}
 
     IsValid -->|No, <3 attempts| Agent
-    IsValid -->|No, ≥3 attempts| Final["📤 Final Output + Knowledge Graph"]
+    IsValid -->|No, ≥3 attempts| Final["Final Output + Knowledge Graph"]
     IsValid -->|Yes| OntologySubgraph
 
-    subgraph OntologySubgraph["🕸️ ONTOLOGY_EXTRACTOR SUBGRAPH"]
+    subgraph OntologySubgraph["ONTOLOGY_EXTRACTOR SUBGRAPH"]
         direction TB
-        ExtractOntology["📋 extract_ontology<br/>Extract entities & links<br/>Identify gap references"]
+        ExtractOntology["extract_ontology<br/>Extract entities & links<br/>Identify gap references"]
 
         ExtractOntology --> ProcessEntities["Process Entities<br/>Generate UUIDs"]
 
         ProcessEntities --> IsLocation{"Is<br/>Location?"}
 
-        IsLocation -->|Yes| Geocode["🌍 Geocode Location<br/>Nominatim API<br/>lat, lon, country"]
+        IsLocation -->|Yes| Geocode["Geocode Location<br/>Nominatim API<br/>lat, lon, country"]
         IsLocation -->|No| BuildMap["Build Name to UUID Map"]
 
         Geocode --> BuildMap
 
-        BuildMap --> DetectGaps["🔎 detect_gaps<br/>Check for missing<br/>entity references"]
+        BuildMap --> DetectGaps["detect_gaps<br/>Check for missing<br/>entity references"]
 
         DetectGaps --> HasGaps{"Gap<br/>entities<br/>found?"}
 
-        HasGaps -->|Yes| ExtractGap["🎯 extract_gap_entities<br/>Targeted LLM extraction<br/>for missing entities only"]
-        HasGaps -->|No| MergeFinalize["💾 merge_and_finalize<br/>Create entities with UUIDs<br/>Process all links"]
+        HasGaps -->|Yes| ExtractGap["extract_gap_entities<br/>Targeted LLM extraction<br/>for missing entities only"]
+        HasGaps -->|No| MergeFinalize["merge_and_finalize<br/>Create entities with UUIDs<br/>Process all links"]
 
         ExtractGap --> MergeFinalize
 
         MergeFinalize --> LinksOK{"All links<br/>resolvable?"}
 
-        LinksOK -->|No - Skip| LogHallucinated["⚠️ Log as hallucinated<br/>relationship"]
-        LinksOK -->|Yes| CreateLink["✓ Create link<br/>with UUIDs"]
+        LinksOK -->|No - Skip| LogHallucinated["Log as hallucinated<br/>relationship"]
+        LinksOK -->|Yes| CreateLink["Create link<br/>with UUIDs"]
 
-        LogHallucinated --> Neo4j["📊 Neo4j Graph DB<br/>Native Graph Storage"]
+        LogHallucinated --> Neo4j["Neo4j Graph DB<br/>Native Graph Storage"]
         CreateLink --> Neo4j
     end
 
@@ -348,8 +348,8 @@ GeoVision Lab supports **configurable RAG features** that can be toggled on/off 
 
 | Feature | Description | Recommended |
 |---------|-------------|-------------|
-| **Context Grading** | Evaluates retrieval quality before generation (Corrective RAG pattern) | ✓ Enabled |
-| **BGE Re-ranker** | Improves precision with cross-encoder re-ranking | ✓ Enabled |
+| **Context Grading** | Evaluates retrieval quality before generation (Corrective RAG pattern) | Enabled |
+| **BGE Re-ranker** | Improves precision with cross-encoder re-ranking | Enabled |
 
 ### Configuration via Environment Variables
 
