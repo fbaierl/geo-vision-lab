@@ -32,6 +32,7 @@ class RAGState(TypedDict):
     rag_quality: str  # RELEVANT, PARTIALLY_RELEVANT, IRRELEVANT
     rag_context: str  # Filtered context to inject into agent
     rag_hint: str  # Optional hint for the agent
+    ontology_context: str  # Graph-based context from Neo4j ontology
 
 
 def vector_search_node(state: RAGState) -> Dict[str, Any]:
@@ -143,7 +144,7 @@ def rerank_node(state: RAGState) -> Dict[str, Any]:
         results_text = "\n\n".join([doc.get("page_content", "") for doc in reranked])
 
         logger.info(
-            f"[RAG_SUBGRAPH] Re-ranking complete: {len(retrieved_docs)} → {len(reranked)} results"
+            f"[RAG_SUBGRAPH] Re-ranking complete: {len(retrieved_docs)} -> {len(reranked)} results"
         )
 
         return {
@@ -163,17 +164,107 @@ def rerank_node(state: RAGState) -> Dict[str, Any]:
         }
 
 
+def ontology_context_node(state: RAGState) -> Dict[str, Any]:
+    """
+    Retrieve graph-based context from the Neo4j ontology.
+
+    Extracts entity names from the query and fetches related entities
+    and relationships from the knowledge graph. This augments document
+    retrieval with structured relationship context.
+    """
+    logger.info("[RAG_SUBGRAPH] Starting ontology context retrieval")
+
+    query = state.get("rag_query", "")
+    if not query or len(query.strip()) < 3:
+        return {"ontology_context": ""}
+
+    try:
+        from app.core.di import get_ontology_service
+
+        ontology_service = get_ontology_service()
+
+        # Use the query itself as entity names - the graph store will
+        # match partial names and find related entities
+        entity_names = [query.strip()]
+
+        context = ontology_service.get_context_for_query(
+            entity_names=entity_names,
+            thread_id=None,  # Cross-session context
+        )
+
+        if context:
+            logger.info(
+                f"[RAG_SUBGRAPH] Ontology context retrieved: {len(context)} chars"
+            )
+        else:
+            logger.info("[RAG_SUBGRAPH] No ontology context found for query")
+
+        return {"ontology_context": context or ""}
+
+    except Exception as e:
+        logger.error(f"[RAG_SUBGRAPH] Ontology context retrieval failed: {e}")
+        return {"ontology_context": ""}
+
+
+def merge_context_node(state: RAGState) -> Dict[str, Any]:
+    """
+    Merge document context and ontology context into final rag_context.
+
+    Combines vector search results with graph-based relationship context.
+    """
+    vector_context = state.get(STATE_KEY_VECTOR_SEARCH_RESULTS, "")
+    ontology_context = state.get("ontology_context", "")
+
+    context_parts = []
+
+    if ontology_context:
+        context_parts.append(ontology_context)
+
+    if vector_context and "No archival data found" not in vector_context:
+        context_parts.append(vector_context)
+
+    if not context_parts:
+        return {
+            "rag_quality": "IRRELEVANT",
+            "rag_context": "",
+            "rag_hint": "NOTE: No relevant information found in documents or knowledge graph.",
+        }
+
+    merged_context = "\n\n---\n\n".join(context_parts)
+
+    logger.info(
+        f"[RAG_SUBGRAPH] Context merged: {len(merged_context)} chars "
+        f"(vector: {len(vector_context)}, ontology: {len(ontology_context)})"
+    )
+
+    return {
+        "rag_quality": "RELEVANT",
+        "rag_context": merged_context,
+        "rag_hint": "",
+    }
+
+
 def check_grader_result(state: RAGState) -> Literal["__end__"]:
     """
     Check grader result and prepare final output.
 
     This is the final step - always ends the subgraph.
     """
-    # The grader has already set rag_quality and rag_context
-    # We just need to add a hint for the agent if context was irrelevant
-
     rag_quality = state.get("rag_quality", "IRRELEVANT")
     rag_context = state.get("rag_context", "")
+    ontology_context = state.get("ontology_context", "")
+
+    # If grader marked context as irrelevant but ontology has context,
+    # still provide the ontology context
+    if rag_quality == "IRRELEVANT" and ontology_context:
+        logger.info(
+            "[RAG_SUBGRAPH] Grader marked context irrelevant but ontology context available"
+        )
+        return {
+            "rag_quality": "PARTIALLY_RELEVANT",
+            "rag_context": ontology_context,
+            "rag_hint": "NOTE: Document search found no relevant information, but knowledge graph context is available.",
+        }
 
     # Add hint for agent if context was irrelevant
     if rag_quality == "IRRELEVANT" or not rag_context:
@@ -203,21 +294,32 @@ def prepare_context_no_grader(state: RAGState) -> Dict[str, Any]:
     """
     Prepare context without grading (grader disabled).
 
-    Injects all retrieved context directly.
+    Injects all retrieved context directly, including ontology context.
     """
     rag_context = state.get(STATE_KEY_VECTOR_SEARCH_RESULTS, "")
+    ontology_context = state.get("ontology_context", "")
 
-    if not rag_context or "No archival data found" in rag_context:
+    context_parts = []
+
+    if ontology_context:
+        context_parts.append(ontology_context)
+
+    if rag_context and "No archival data found" not in rag_context:
+        context_parts.append(rag_context)
+
+    if not context_parts:
         return {
             "rag_quality": "IRRELEVANT",
             "rag_context": "",
             "rag_hint": "NOTE: Archival search found no relevant information. Use web search tools for current information.",
         }
 
+    merged_context = "\n\n---\n\n".join(context_parts)
+
     # Inject all context when grader is disabled
     return {
         "rag_quality": "RELEVANT",  # Assume relevant when grader is off
-        "rag_context": rag_context,
+        "rag_context": merged_context,
         "rag_hint": "",
     }
 
@@ -229,8 +331,10 @@ def get_rag_subgraph() -> StateGraph:
     The subgraph consists of:
     1. Vector Search Node - retrieves context from vector store
     2. Re-ranker Node (optional) - re-ranks documents if enabled
-    3. Grader Node (optional) - evaluates context relevance if enabled
-    4. Check Result - prepares final output with optional hint
+    3. Ontology Context Node - retrieves graph context from Neo4j
+    4. Merge Context Node - combines document + graph context
+    5. Grader Node (optional) - evaluates context relevance if enabled
+    6. Check Result - prepares final output with optional hint
 
     Returns:
         Compiled StateGraph ready to invoke
@@ -242,6 +346,8 @@ def get_rag_subgraph() -> StateGraph:
     # Add nodes
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("reranker", rerank_node)
+    workflow.add_node("ontology_context", ontology_context_node)
+    workflow.add_node("merge_context", merge_context_node)
     workflow.add_node("grader", grade_context)
     workflow.add_node("check_result", check_grader_result)
     workflow.add_node("prepare_context_no_grader", prepare_context_no_grader)
@@ -251,9 +357,11 @@ def get_rag_subgraph() -> StateGraph:
 
     # Define edges
     workflow.add_edge("vector_search", "reranker")
+    workflow.add_edge("reranker", "ontology_context")
+    workflow.add_edge("ontology_context", "merge_context")
 
-    # After re-ranking, decide whether to use grader
-    workflow.add_conditional_edges("reranker", should_use_grader)
+    # After merging context, decide whether to use grader
+    workflow.add_conditional_edges("merge_context", should_use_grader)
 
     # Grader flows to check_result
     workflow.add_edge("grader", "check_result")
@@ -303,6 +411,7 @@ def run_rag_subgraph(query: str) -> Dict[str, Any]:
         "rag_quality": "",
         "rag_context": "",
         "rag_hint": "",
+        "ontology_context": "",
     }
 
     try:

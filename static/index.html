@@ -39,6 +39,47 @@
         </div>
         
         <div class="header-right">
+            <div class="top-bar-rag-config" id="top-bar-rag-config">
+                <span class="rag-label">RAG</span>
+                <div class="rag-toggles">
+                    <div class="rag-inline-toggle">
+                        <label for="grader-toggle" class="rag-inline-label">Grader</label>
+                        <label class="toggle-switch toggle-sm">
+                            <input type="checkbox" id="grader-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="rag-info-trigger" data-info="grader">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <div class="rag-info-box">
+                                <strong>Context Grading</strong>
+                                <p>Before the LLM generates an answer, a small model evaluates each retrieved document for relevance to your query. Irrelevant documents are filtered out, reducing noise and hallucination. Significantly improves answer quality when the vector search returns mixed results.</p>
+                            </div>
+                        </span>
+                    </div>
+                    <div class="rag-inline-toggle">
+                        <label for="reranker-toggle" class="rag-inline-label">Rerank</label>
+                        <label class="toggle-switch toggle-sm">
+                            <input type="checkbox" id="reranker-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="rag-info-trigger" data-info="reranker">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <div class="rag-info-box">
+                                <strong>Re-ranking (BGE)</strong>
+                                <p>After initial retrieval, a cross-encoder model (BAAI/bge-reranker-v2-m3) re-scores all candidate documents by jointly encoding the query and each document together. This captures semantic relevance far better than vector similarity alone. The top 3 results are kept for context.</p>
+                            </div>
+                        </span>
+                    </div>
+                </div>
+            </div>
             <div class="status-pill processing" id="pill-processing">
                 <div class="dot"></div>
                 <span>Processing</span>
@@ -238,49 +279,16 @@
                         <span class="service-name">MongoDB</span>
                         <span class="service-port">:8081</span>
                     </a>
-                    <a class="service-link" href="http://localhost:8082" target="_blank">
+                    <a class="service-link" href="http://localhost:7474" target="_blank">
                         <span class="service-icon">⬢</span>
-                        <span class="service-name">pgAdmin</span>
-                        <span class="service-port">:8082</span>
+                        <span class="service-name">Neo4j Browser</span>
+                        <span class="service-port">:7474</span>
                     </a>
                     <a class="service-link" href="https://eu.smith.langchain.com/" target="_blank">
                         <span class="service-icon">◇</span>
                         <span class="service-name">LangSmith (EU)</span>
                         <span class="service-port">Cloud</span>
                     </a>
-                </div>
-                
-                <!-- RAG Configuration Panel -->
-                <div class="rag-config-panel" style="margin-top: 20px; padding: 16px; background: rgba(61, 174, 218, 0.05); border-radius: 8px; border: 1px solid rgba(61, 174, 218, 0.2);">
-                    <h4 style="margin: 0 0 12px 0; color: var(--cyan); font-size: 14px; display: flex; align-items: center; gap: 8px;">
-                        <span>⚙</span> RAG Configuration
-                    </h4>
-                    
-                    <div class="rag-config-item" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <div>
-                            <label for="grader-toggle" style="color: var(--text); font-size: 13px; font-weight: 500;">Context Grading</label>
-                            <p style="margin: 2px 0 0 0; color: var(--muted); font-size: 11px;">Evaluate context relevance before generation</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="grader-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    
-                    <div class="rag-config-item" style="display: flex; align-items: center; justify-content: space-between;">
-                        <div>
-                            <label for="reranker-toggle" style="color: var(--text); font-size: 13px; font-weight: 500;">Re-ranking (BGE)</label>
-                            <p style="margin: 2px 0 0 0; color: var(--muted); font-size: 11px;">Improve precision with cross-encoder</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="reranker-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    
-                    <div id="rag-config-status" style="margin-top: 12px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 11px; color: var(--muted); display: none;">
-                        <span id="rag-status-text"></span>
-                    </div>
                 </div>
             </div>
             <div class="window-resize-handle right"></div>
@@ -388,6 +396,25 @@
                         </svg>
                         JSON Structure
                     </button>
+                    <button class="ontology-tab" data-tab="table">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="3" y1="15" x2="21" y2="15"></line>
+                            <line x1="9" y1="3" x2="9" y2="21"></line>
+                        </svg>
+                        Table
+                    </button>
+                    <button class="ontology-tab" data-tab="card">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                            <line x1="6" y1="8" x2="6" y2="8"></line>
+                            <line x1="10" y1="8" x2="10" y2="8"></line>
+                            <line x1="14" y1="8" x2="14" y2="8"></line>
+                            <line x1="6" y1="12" x2="18" y2="12"></line>
+                        </svg>
+                        Cards
+                    </button>
                 </div>
 
                 <!-- Graph Tab Content -->
@@ -443,6 +470,66 @@
                         </div>
                     </div>
                     <div id="json-tree-container" class="json-tree-container"></div>
+                </div>
+
+                <!-- Table Tab Content -->
+                <div id="table-tab-content" class="ontology-tab-content">
+                    <div class="table-view-container">
+                        <div class="table-section">
+                            <div class="table-section-header">
+                                <span class="table-section-title">Entities</span>
+                                <span class="table-section-count" id="table-entity-count">0</span>
+                            </div>
+                            <div class="table-wrapper" id="entities-table-wrapper">
+                                <table class="data-table" id="entities-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="name">Name</th>
+                                            <th class="sortable" data-sort="type">Type</th>
+                                            <th class="sortable" data-sort="mentions">Mentions</th>
+                                            <th>Created</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="entities-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="table-section">
+                            <div class="table-section-header">
+                                <span class="table-section-title">Relationships</span>
+                                <span class="table-section-count" id="table-link-count">0</span>
+                            </div>
+                            <div class="table-wrapper" id="links-table-wrapper">
+                                <table class="data-table" id="links-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Source</th>
+                                            <th>Target</th>
+                                            <th class="sortable" data-sort="type">Type</th>
+                                            <th class="sortable" data-sort="mentions">Mentions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="links-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Tab Content -->
+                <div id="card-tab-content" class="ontology-tab-content">
+                    <div class="card-view-toolbar">
+                        <button class="card-toolbar-btn active" data-card-filter="all">All</button>
+                        <button class="card-toolbar-btn" data-card-filter="entities">Entities</button>
+                        <button class="card-toolbar-btn" data-card-filter="links">Relationships</button>
+                    </div>
+                    <div class="card-view-container" id="card-view-container">
+                        <div class="card-empty-state" id="card-empty-state" style="display: none;">
+                            <div class="empty-state-icon">◈</div>
+                            <div class="empty-state-text">No items to display</div>
+                            <div class="empty-state-subtext">Switch to another view or wait for data</div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Hidden file input for import -->
@@ -885,7 +972,8 @@
                     const rightColWidth = availableWidth * 0.50;
                     const smallHeight = availableHeight * 0.30;
                     const tallHeight = availableHeight * 0.65;
-                    const mapGraphHeight = availableHeight * 0.40;
+                    const mapsHeight = availableHeight * 0.25;
+                    const graphHeight = availableHeight * 0.70;
                     
                     // Sort windows by priority
                     const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-graph', 'window-history', 'window-services'];
@@ -936,16 +1024,16 @@
                             win.element.style.left = padding + leftColWidth + padding + 'px';
                             win.element.style.top = midY + 'px';
                         } else if (win.id === 'window-maps') {
-                            // Right column - top half
+                            // Right column - top (smaller)
                             win.element.style.width = rightColWidth + 'px';
-                            win.element.style.height = mapGraphHeight + 'px';
+                            win.element.style.height = mapsHeight + 'px';
                             win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                             win.element.style.top = padding + 'px';
-                            rightY = padding + mapGraphHeight + padding;
+                            rightY = padding + mapsHeight + padding;
                         } else if (win.id === 'window-graph') {
-                            // Right column - bottom half
+                            // Right column - bottom (larger)
                             win.element.style.width = rightColWidth + 'px';
-                            win.element.style.height = mapGraphHeight + 'px';
+                            win.element.style.height = graphHeight + 'px';
                             win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                             win.element.style.top = rightY + 'px';
                         }
@@ -2183,6 +2271,7 @@
             constructor() {
                 this.currentTab = 'graph';
                 this.currentOntology = { entities: {}, links: {} };
+                this.cardFilter = 'all';
                 this.init();
             }
 
@@ -2200,6 +2289,23 @@
                 document.getElementById('json-collapse-all')?.addEventListener('click', () => this.collapseAllJson());
                 document.getElementById('json-copy')?.addEventListener('click', () => this.copyJson());
                 document.getElementById('json-download')?.addEventListener('click', () => this.downloadJson());
+
+                // Card filter buttons
+                document.querySelectorAll('.card-toolbar-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const filter = e.target.closest('.card-toolbar-btn')?.dataset.cardFilter;
+                        if (filter) this.setCardFilter(filter);
+                    });
+                });
+
+                // Table sortable headers
+                document.querySelectorAll('.data-table th.sortable').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const sortKey = th.dataset.sort;
+                        const tableId = th.closest('table').id;
+                        this.sortTable(tableId, sortKey);
+                    });
+                });
             }
 
             switchTab(tabId) {
@@ -2215,9 +2321,13 @@
                     content.classList.toggle('active', content.id === `${tabId}-tab-content`);
                 });
 
-                // If switching to JSON tab, render/update the tree
+                // Render content for specific tabs
                 if (tabId === 'json') {
                     this.renderJsonTree(this.currentOntology);
+                } else if (tabId === 'table') {
+                    this.renderTables(this.currentOntology);
+                } else if (tabId === 'card') {
+                    this.renderCards(this.currentOntology);
                 }
             }
 
@@ -2231,11 +2341,331 @@
                 document.getElementById('json-entity-count').textContent = `${entityCount} entit${entityCount === 1 ? 'y' : 'ies'}`;
                 document.getElementById('json-link-count').textContent = `${linkCount} relationship${linkCount === 1 ? 'y' : 'ships'}`;
 
-                // If JSON tab is active, re-render
+                // Re-render based on current tab
                 if (this.currentTab === 'json') {
                     this.renderJsonTree(ontology);
+                } else if (this.currentTab === 'table') {
+                    this.renderTables(ontology);
+                } else if (this.currentTab === 'card') {
+                    this.renderCards(ontology);
                 }
             }
+
+            // ═══════════════════════════════════════════════════════════════
+            // TABLE VIEW
+            // ═══════════════════════════════════════════════════════════════
+
+            renderTables(ontology) {
+                const entities = Object.values(ontology.entities || {});
+                const links = Object.values(ontology.links || {});
+
+                // Update counts
+                document.getElementById('table-entity-count').textContent = entities.length;
+                document.getElementById('table-link-count').textContent = links.length;
+
+                // Render entities table
+                const entitiesBody = document.getElementById('entities-table-body');
+                if (entitiesBody) {
+                    entitiesBody.innerHTML = entities.map(e => {
+                        const mentionCount = e.mentions?.length || 0;
+                        const createdDate = e.created_at ? new Date(e.created_at).toLocaleDateString() : '-';
+                        return `<tr>
+                            <td>${this.escapeHtml(e.name || 'Unknown')}</td>
+                            <td><span class="entity-type ${e.type || 'Thing'}">${e.type || 'Thing'}</span></td>
+                            <td>${mentionCount}</td>
+                            <td>${createdDate}</td>
+                        </tr>`;
+                    }).join('');
+                }
+
+                // Render links table
+                const linksBody = document.getElementById('links-table-body');
+                if (linksBody) {
+                    linksBody.innerHTML = links.map(link => {
+                        const sourceUuid = link.source_uuid || link.source_id || link.source;
+                        const targetUuid = link.target_uuid || link.target_id || link.target;
+                        const sourceEntity = ontology.entities && ontology.entities[sourceUuid];
+                        const targetEntity = ontology.entities && ontology.entities[targetUuid];
+                        const sourceName = sourceEntity ? sourceEntity.name : 'Unknown';
+                        const targetName = targetEntity ? targetEntity.name : 'Unknown';
+                        const mentionCount = link.mentions?.length || 0;
+
+                        return `<tr>
+                            <td>${this.escapeHtml(sourceName)}</td>
+                            <td>${this.escapeHtml(targetName)}</td>
+                            <td>${link.type || 'related'}</td>
+                            <td>${mentionCount}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+
+            sortTable(tableId, sortKey) {
+                const table = document.getElementById(tableId);
+                const tbody = table?.querySelector('tbody');
+                if (!tbody) return;
+
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const th = table.querySelector(`th[data-sort="${sortKey}"]`);
+                const isAsc = !th.classList.contains('sorted-asc');
+                
+                // Clear sort indicators
+                table.querySelectorAll('th.sortable').forEach(h => {
+                    h.classList.remove('sorted-asc', 'sorted-desc');
+                });
+                th.classList.add(isAsc ? 'sorted-asc' : 'sorted-desc');
+
+                rows.sort((a, b) => {
+                    const cells = a.querySelectorAll('td');
+                    let aVal, bVal;
+                    
+                    if (sortKey === 'name') {
+                        aVal = cells[0].textContent.toLowerCase();
+                        bVal = cells[0].textContent.toLowerCase();
+                    } else if (sortKey === 'type') {
+                        aVal = cells[1].textContent.toLowerCase();
+                        bVal = cells[1].textContent.toLowerCase();
+                    } else if (sortKey === 'mentions') {
+                        aVal = parseInt(cells[2].textContent) || 0;
+                        bVal = parseInt(cells[2].textContent) || 0;
+                    } else {
+                        return 0;
+                    }
+
+                    if (aVal < bVal) return isAsc ? -1 : 1;
+                    if (aVal > bVal) return isAsc ? 1 : -1;
+                    return 0;
+                });
+
+                rows.forEach(row => tbody.appendChild(row));
+            }
+
+            // ═══════════════════════════════════════════════════════════════
+            // CARD VIEW
+            // ═══════════════════════════════════════════════════════════════
+
+            setCardFilter(filter) {
+                this.cardFilter = filter;
+                
+                // Update button states
+                document.querySelectorAll('.card-toolbar-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.cardFilter === filter);
+                });
+
+                // Re-render cards
+                this.renderCards(this.currentOntology);
+            }
+
+            renderCards(ontology) {
+                const container = document.getElementById('card-view-container');
+                if (!container) return;
+
+                const entities = Object.values(ontology.entities || {});
+                const links = Object.values(ontology.links || {});
+
+                let itemsHtml = '';
+
+                // Filter and render entities
+                if (this.cardFilter === 'all' || this.cardFilter === 'entities') {
+                    entities.forEach(entity => {
+                        itemsHtml += this.renderEntityCard(entity, ontology);
+                    });
+                }
+
+                // Filter and render links
+                if (this.cardFilter === 'all' || this.cardFilter === 'links') {
+                    links.forEach(link => {
+                        itemsHtml += this.renderLinkCard(link, ontology);
+                    });
+                }
+
+                // Show empty state if no items
+                const emptyState = container.querySelector('.card-empty-state');
+                if (!itemsHtml) {
+                    if (emptyState) emptyState.style.display = 'flex';
+                    container.innerHTML = '';
+                    container.appendChild(emptyState || this.createEmptyState());
+                } else {
+                    if (emptyState) emptyState.style.display = 'none';
+                    container.innerHTML = itemsHtml;
+                }
+            }
+
+            renderEntityCard(entity, ontology) {
+                const props = entity.properties || {};
+                const propsHtml = Object.entries(props).map(([key, value]) => {
+                    const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                    return `<div class="card-property">
+                        <span class="card-property-key">${this.escapeHtml(key)}:</span>
+                        <span class="card-property-value">${this.escapeHtml(displayValue)}</span>
+                    </div>`;
+                }).join('');
+
+                const mentions = entity.mentions || [];
+                const mentionsHtml = mentions.length > 0 ? `
+                    <div class="card-section">
+                        <div class="card-section-title">Mentions (${mentions.length})</div>
+                        ${mentions.map(m => `
+                            <div class="card-mention">
+                                <div class="mention-text">${this.escapeHtml(m.source_text || '')}</div>
+                                <div class="mention-meta">
+                                    <span class="mention-confidence">${(m.confidence * 100).toFixed(0)}%</span>
+                                    <span class="mention-date">${m.extracted_at ? new Date(m.extracted_at).toLocaleString() : ''}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                const metaHtml = `
+                    <div class="card-section card-meta">
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">UUID:</span>
+                            <span class="card-meta-value">${entity.uuid || ''}</span>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">Created:</span>
+                            <span class="card-meta-value">${entity.created_at ? new Date(entity.created_at).toLocaleString() : ''}</span>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">Updated:</span>
+                            <span class="card-meta-value">${entity.updated_at ? new Date(entity.updated_at).toLocaleString() : ''}</span>
+                        </div>
+                        ${entity.created_by ? `
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">By:</span>
+                            <span class="card-meta-value">${this.escapeHtml(entity.created_by)}</span>
+                        </div>` : ''}
+                    </div>
+                `;
+
+                // Find related links
+                const entityUuid = entity.uuid;
+                const relatedLinks = Object.values(ontology.links || {}).filter(
+                    link => (link.source_uuid === entityUuid) || (link.target_uuid === entityUuid)
+                );
+                const connectionsHtml = relatedLinks.length > 0 ? `
+                    <div class="card-section card-connections">
+                        <div class="card-section-title">Connections (${relatedLinks.length})</div>
+                        ${relatedLinks.map(link => {
+                            const isSource = link.source_uuid === entityUuid;
+                            const otherUuid = isSource ? link.target_uuid : link.source_uuid;
+                            const otherEntity = ontology.entities && ontology.entities[otherUuid];
+                            const otherName = otherEntity ? otherEntity.name : 'Unknown';
+                            return `<div class="card-connection-item" data-link-uuid="${link.uuid}" data-target-uuid="${otherUuid}">${isSource ? '→' : '←'} ${this.escapeHtml(otherName)} <span class="connection-type">(${link.type})</span></div>`;
+                        }).join('')}
+                    </div>
+                ` : '';
+
+                return `<div class="entity-card" data-uuid="${entity.uuid}">
+                    <div class="card-header">
+                        <span class="card-title">${this.escapeHtml(entity.name || 'Unknown')}</span>
+                        <span class="card-type-badge">${entity.type || 'Thing'}</span>
+                    </div>
+                    <div class="card-body">
+                        ${metaHtml}
+                        <div class="card-section">
+                            <div class="card-section-title">Properties</div>
+                            <div class="card-properties">
+                                ${propsHtml || '<div class="card-property"><span class="card-property-value" style="color: var(--text-muted)">No properties</span></div>'}
+                            </div>
+                        </div>
+                        ${mentionsHtml}
+                        ${connectionsHtml}
+                    </div>
+                </div>`;
+            }
+
+            renderLinkCard(link, ontology) {
+                const sourceUuid = link.source_uuid || link.source_id || link.source;
+                const targetUuid = link.target_uuid || link.target_id || link.target;
+                const sourceEntity = ontology.entities && ontology.entities[sourceUuid];
+                const targetEntity = ontology.entities && ontology.entities[targetUuid];
+                const sourceName = sourceEntity ? sourceEntity.name : 'Unknown';
+                const targetName = targetEntity ? targetEntity.name : 'Unknown';
+
+                const props = link.properties || {};
+                const propsHtml = Object.entries(props).map(([key, value]) => {
+                    const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                    return `<div class="card-property">
+                        <span class="card-property-key">${this.escapeHtml(key)}:</span>
+                        <span class="card-property-value">${this.escapeHtml(displayValue)}</span>
+                    </div>`;
+                }).join('');
+
+                const mentions = link.mentions || [];
+                const mentionsHtml = mentions.length > 0 ? `
+                    <div class="card-section">
+                        <div class="card-section-title">Mentions (${mentions.length})</div>
+                        ${mentions.map(m => `
+                            <div class="card-mention">
+                                <div class="mention-text">${this.escapeHtml(m.source_text || '')}</div>
+                                <div class="mention-meta">
+                                    <span class="mention-confidence">${(m.confidence * 100).toFixed(0)}%</span>
+                                    <span class="mention-date">${m.extracted_at ? new Date(m.extracted_at).toLocaleString() : ''}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                const metaHtml = `
+                    <div class="card-section card-meta">
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">UUID:</span>
+                            <span class="card-meta-value">${link.uuid || ''}</span>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">Source:</span>
+                            <span class="card-meta-value">${sourceName}</span>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">Target:</span>
+                            <span class="card-meta-value">${targetName}</span>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">Created:</span>
+                            <span class="card-meta-value">${link.created_at ? new Date(link.created_at).toLocaleString() : ''}</span>
+                        </div>
+                        <div class="card-meta-row">
+                            <span class="card-meta-key">Updated:</span>
+                            <span class="card-meta-value">${link.updated_at ? new Date(link.updated_at).toLocaleString() : ''}</span>
+                        </div>
+                    </div>
+                `;
+
+                return `<div class="link-card" data-uuid="${link.uuid}">
+                    <div class="card-header">
+                        <span class="card-title">${this.escapeHtml(sourceName)} → ${this.escapeHtml(targetName)}</span>
+                        <span class="card-type-badge">${link.type || 'related'}</span>
+                    </div>
+                    <div class="card-body">
+                        ${metaHtml}
+                        <div class="card-section">
+                            <div class="card-section-title">Properties</div>
+                            <div class="card-properties">
+                                ${propsHtml || '<div class="card-property"><span class="card-property-value" style="color: var(--text-muted)">No properties</span></div>'}
+                            </div>
+                        </div>
+                        ${mentionsHtml}
+                    </div>
+                </div>`;
+            }
+
+            createEmptyState() {
+                const div = document.createElement('div');
+                div.className = 'card-empty-state';
+                div.innerHTML = `
+                    <div class="empty-state-icon">◈</div>
+                    <div class="empty-state-text">No items to display</div>
+                    <div class="empty-state-subtext">Switch to another view or wait for data</div>
+                `;
+                return div;
+            }
+
+            // ═══════════════════════════════════════════════════════════════
+            // JSON TREE (existing)
+            // ═══════════════════════════════════════════════════════════════
 
             renderJsonTree(ontology) {
                 const container = document.getElementById('json-tree-container');
@@ -2289,7 +2719,6 @@
                     if (parentKey === 'entities' && typeof data === 'object' && data !== null && data.name) {
                         displayKey = `${data.name} (${data.type || 'Entity'})`;
                     } else if (parentKey === 'links' && typeof data === 'object' && data !== null && data.type && fullOntology) {
-                        // Look up entity names from UUIDs
                         const sourceUuid = data.source_uuid || data.source_id || data.source;
                         const targetUuid = data.target_uuid || data.target_id || data.target;
                         const sourceEntity = fullOntology.entities && fullOntology.entities[sourceUuid];
@@ -2307,7 +2736,6 @@
                 html += `<span class="json-tree-bracket">${bracketOpen}</span>`;
 
                 if (itemCount <= 3 && depth < 5) {
-                    // Inline preview for small objects
                     html += `<span class="json-tree-preview">${itemCount} item${itemCount === 1 ? '' : 's'}</span>`;
                 }
 
@@ -2335,6 +2763,12 @@
                     .replace(/\n/g, '\\n')
                     .replace(/\r/g, '\\r')
                     .replace(/\t/g, '\\t');
+            }
+
+            escapeHtml(str) {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
             }
 
             expandAllJson() {
@@ -2509,6 +2943,30 @@
                     if (graphEmptyState) graphEmptyState.style.display = 'none';
                 } else if (graphEmptyState) {
                     graphEmptyState.style.display = 'flex';
+                }
+
+                // Extract map locations and render map
+                const mapContainer = document.getElementById('map-container');
+                const mapEmptyState = document.getElementById('map-empty-state');
+                const locations = Object.values(ontology.entities || {}).filter(
+                    e => e.type === 'Location' && e.properties && e.properties.lat && e.properties.lon
+                ).map(e => ({
+                    name: e.name,
+                    type: e.type,
+                    lat: e.properties.lat,
+                    lon: e.properties.lon,
+                    relevance: e.properties.relevance || 0.5
+                }));
+
+                if (mapContainer && locations.length > 0) {
+                    renderMap(locations, mapContainer);
+                    if (mapEmptyState) mapEmptyState.style.display = 'none';
+                    const winData = windowManager.windows.get('window-maps');
+                    if (winData && winData.minimized) {
+                        windowManager.restoreWindow('window-maps');
+                    }
+                } else if (mapEmptyState) {
+                    mapEmptyState.style.display = 'flex';
                 }
             }
 
@@ -2844,9 +3302,6 @@
         window.ontologyTabManager = new OntologyTabManager();
         window.ontologyImportExport = new OntologyImportExportHandler();
         
-        // Load RAG configuration on page load
-        loadRAGConfig();
-        
         // RAG Configuration functions
         async function loadRAGConfig() {
             try {
@@ -2917,6 +3372,15 @@
                     saveRAGConfig({ reranker_enabled: e.target.checked });
                 });
             }
+        });
+
+        // Close menus when clicking outside
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.menu-item').forEach(menu => {
+                if (!menu.contains(e.target)) {
+                    menu.classList.remove('open');
+                }
+            });
         });
     </script>
 

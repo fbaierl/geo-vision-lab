@@ -20,6 +20,7 @@ graph TB
 
     subgraph Data["Data Layer"]
         MDB[("MongoDB 8.2+<br/>(Vector Search)")]
+        N4J[("Neo4j 5.26<br/>(Ontology Graph)")]
         OL["Ollama<br/>(Qwen 3.5 LLM)"]
     end
 
@@ -36,6 +37,7 @@ graph TB
     UI --> API
     API --> AGENT
     AGENT --> MDB
+    AGENT --> N4J
     AGENT --> OL
     AGENT --> WEB
     AGENT --> WIKI
@@ -286,14 +288,64 @@ Using **Rajdhani** (Google Fonts) for the tactical/cyberpunk aesthetic:
 
 ---
 
+---
+
+### 9. Neo4j for Ontology Graph Storage
+
+**Decision**: Neo4j as the native graph database for ontology storage and retrieval.
+
+#### Why Neo4j?
+
+| Factor | MongoDB (Documents) | Neo4j (Graph) |
+|--------|---------------------|---------------|
+| **Relationship Queries** | Requires manual JOINs or denormalization | Native graph traversal, O(1) edge lookups |
+| **Multi-Hop Traversal** | Complex recursive queries | Simple Cypher variable-length patterns |
+| **Schema Flexibility** | Document-based, good for entities | Node+edge model, natural for relationships |
+| **Query Expressiveness** | Aggregation pipelines | Cypher - declarative graph query language |
+| **RAG Integration** | Vector search only | Graph context retrieval + path finding |
+| **Visualization** | Requires external graph library | Native graph browser at :7474 |
+
+#### Key Decision Factors
+
+1. **Natural Fit for Knowledge Graphs** - Ontology data is inherently graph-structured
+2. **Efficient Traversal** - Multi-hop queries without JOIN overhead
+3. **Cypher Query Language** - Expressive syntax for complex graph patterns
+4. **RAG Augmentation** - Graph context retrieval complements vector search
+5. **Cross-Session Persistence** - Entities persist beyond individual sessions
+6. **Neo4j Browser** - Built-in visualization and query exploration tool
+
+#### Implementation Details
+
+```python
+# GraphStoreService - Neo4j abstraction
+from app.services.graph_store import GraphStoreService
+
+# Entity operations
+graph_store.create_entity(uuid, name, type, thread_id, properties, mentions)
+graph_store.get_neighbors(entity_uuid, hops=2)
+
+# RAG-oriented retrieval
+context = graph_store.get_context_for_query(["Ukraine", "NATO"])
+```
+
+#### Neo4j Data Model
+
+```
+(:Entity {uuid, name, type, thread_id, properties, mentions})
+  -[:RELATIONSHIP_TYPE {uuid, type, properties}]-> (:Entity)
+```
+
+---
+
 ## Summary: Technology Stack
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **LLM Inference** | Ollama + Qwen 3.5 (9B/4B) | Single model for all tasks (reasoning, validation, ontology) |
 | **Embeddings** | all-MiniLM-L6-v2 | Document vectorization |
-| **Vector Database** | MongoDB 8.2+ Vector Search | Semantic search storage + Knowledge graph |
-| **Database GUI** | Mongo Express | Web-based MongoDB browser |
+| **Vector Database** | MongoDB 8.2+ Vector Search | Semantic search storage |
+| **Graph Database** | Neo4j 5.26 | Ontology storage + graph traversal |
+| **Database GUI** | Mongo Express + Neo4j Browser | Web-based database browsers |
 | **Agent Framework** | LangGraph + MemorySaver | Multi-agent coordination + Ontology subgraph |
 | **Backend API** | FastAPI + uvicorn | REST API with streaming |
 | **Frontend UI** | Vanilla JS + Leaflet.js | Tactical terminal with knowledge graph |
@@ -308,6 +360,7 @@ Using **Rajdhani** (Google Fonts) for the tactical/cyberpunk aesthetic:
 ## References
 
 - [MongoDB Vector Search Documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/)
+- [Neo4j Documentation](https://neo4j.com/docs/)
 - [Ollama Documentation](https://ollama.ai/)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [Sentence Transformers](https://www.sbert.net/)

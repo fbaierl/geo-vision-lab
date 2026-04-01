@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>Version:</strong> v0.3.0
+  <strong>Version:</strong> v0.4.0
 </p>
 
 
@@ -31,6 +31,8 @@ GeoVision Lab is a RAG (Retrieval-Augmented Generation) platform for geopolitica
   - **Automatic Geocoding**: Locations are geocoded via Nominatim API with coordinates displayed on map
   - **Interactive Graph**: Curved edges, color-coded nodes by type, hover tooltips with entity properties
   - **Accumulative Graph**: Relationships build up during conversation sessions for context awareness
+  - **Neo4j Graph Database**: Native graph storage with Cypher queries and cross-session persistence
+  - **Ontology-Aware RAG**: Graph context augments document retrieval for richer answers
 - **Browser-Style OS UI** — Web desktop interface with resizable, draggable, overlapping windows that snap into place
   - **Reasoning Chain Window** — Real-time workflow step visualization
   - **Chat Result Window** — AI response display
@@ -110,13 +112,13 @@ flowchart TD
         LinksOK -->|No - Skip| LogHallucinated["⚠️ Log as hallucinated<br/>relationship"]
         LinksOK -->|Yes| CreateLink["✓ Create link<br/>with UUIDs"]
 
-        LogHallucinated --> SessionOntology["📊 Session Ontology<br/>Persisted to MongoDB"]
-        CreateLink --> SessionOntology
+        LogHallucinated --> Neo4j["📊 Neo4j Graph DB<br/>Native Graph Storage"]
+        CreateLink --> Neo4j
     end
 
     style Geocode fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
 
-    SessionOntology --> Final
+    Neo4j --> Final
 
     style User fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
     style Final fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
@@ -125,6 +127,7 @@ flowchart TD
     style Tools fill:#5f4a1e,stroke:#8a6a3a,stroke-width:2px
     style RAGSubgraph fill:#1e5f4a,stroke:#3a8a6a,stroke-width:2px
     style SessionOntology fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
+    style Neo4j fill:#2d5016,stroke:#4a8a2a,stroke-width:2px
     style IsValid fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
     style HasGaps fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
     style ShouldContinue fill:#4a2d1e,stroke:#6a4a3a,stroke-width:2px
@@ -154,7 +157,7 @@ flowchart TD
    - **extract_gap_entities** (if gaps): Targeted LLM extraction for missing entities only
    - **merge_and_finalize**: Create entities with UUIDs, process all links, skip unresolvable
 
-6. **Final Output** - Response + accumulated knowledge graph persisted to MongoDB
+6. **Final Output** - Response + accumulated knowledge graph persisted to Neo4j
 
 **Entity Types Extracted:**
 - Location, Person, Organization, Event, Asset, Document, Concept
@@ -203,7 +206,8 @@ graph TB
     end
 
     subgraph Data["Data Layer"]
-        MDB[("MongoDB 8.2+<br/>(Vector Search + Ontology)")]
+        MDB[("MongoDB 8.2+<br/>(Vector Search)")]
+        N4J[("Neo4j 5.26<br/>(Ontology Graph)")]
         OL["Ollama<br/>(qwen3.5 LLM)"]
     end
 
@@ -216,11 +220,18 @@ graph TB
     UI --> API
     API --> AGENT
     AGENT --> MDB
+    AGENT --> N4J
     AGENT --> OL
     AGENT --> WEB
     AGENT --> WIKI
     AGENT --> NOM
 ```
+
+### Data Storage Strategy: Polyglot Persistence
+
+The platform purposefully duplicates session ontology data across two databases to optimize for different read/write patterns:
+- **MongoDB (UI State & Snapshots)**: Acts as the primary document store. The entire session context (chat messages and the raw JSON ontology tree) is continually saved here. This allows the backend to restore a session's UI state instantly with an $O(1)$ query, without needing to reconstruct the graph structure from scratch.
+- **Neo4j (AI Querying & Traversal)**: The ontology is synchronously mirrored to Neo4j. This graph database allows the AI agent to execute complex, multi-hop Cypher queries (e.g., finding all indirectly affiliated organizations of a person) in milliseconds during the reasoning pipeline.
 
 For detailed technology decisions, see [Technology Choices](docs/technology.md).
 
@@ -274,6 +285,7 @@ docker compose up --build
 
 This orchestrates:
 - MongoDB with vector search index
+- Neo4j graph database for ontology storage
 - Ollama pulling qwen3.5:9b and qwen3.5:4b models
 - Document ingestion and chunking
 - FastAPI backend with streaming
@@ -285,6 +297,7 @@ This orchestrates:
 |---------|-----|-------------|
 | Web Interface | [localhost:8000](http://localhost:8000) | — |
 | MongoDB Browser | [localhost:8081](http://localhost:8081) | `admin` / `geovision` |
+| Neo4j Browser | [localhost:7474](http://localhost:7474) | `neo4j` / `geovision` |
 | Container Logs | [localhost:9999](http://localhost:9999) | — |
 | Grafana Dashboards | [localhost:3000](http://localhost:3000) | `admin` / `geovision` |
 
@@ -298,10 +311,13 @@ GeoVision Lab supports **hybrid LLM deployment** with both local and cloud model
 
 ### Local Models (Ollama)
 
+> [!WARNING]
+> The included smaller models (`qwen3.5:9b` and `qwen3.5:4b`) are often too weak for proper, reliable ontology extraction and should primarily be used for testing and development. It is highly recommended to add and configure more capable local models when your hardware allows it to ensure high-quality knowledge graph generation.
+
 | Model | Size | Speed | Quality | Best For |
 |-------|------|-------|---------|----------|
-| **qwen3.5:9b** | 9B | Slower | Highest | Complex analysis, detailed reports |
-| **qwen3.5:4b** | 4B | Balanced | High | Default — general purpose |
+| **qwen3.5:9b** | 9B | Slower | Highest | Complex analysis, detailed reports (Testing) |
+| **qwen3.5:4b** | 4B | Balanced | High | Default — general purpose (Testing) |
 
 **To switch local models:**
 1. Open the Web Interface at [localhost:8000](http://localhost:8000)
@@ -464,6 +480,7 @@ geo-vision-lab/
 | **LLM Inference (Local)** | Ollama + qwen3.5 (9b/4b) - switchable models |
 | **LLM Inference (Cloud)** | Groq + Llama 4 Scout (17B) - optional fallback |
 | **Ontology Extraction** | LLM structured output + Nominatim geocoding |
+| **Graph Database** | Neo4j 5.26 (ontology storage + traversal) |
 | **Embeddings** | all-MiniLM-L6-v2 (384 dims) |
 | **Vector Database** | MongoDB 8.2+ Vector Search |
 | **Agent Framework** | LangGraph + MemorySaver (with ontology subgraph) |

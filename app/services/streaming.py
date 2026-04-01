@@ -462,6 +462,8 @@ async def process_query_stream(
             if ontology_state:
                 if hasattr(ontology_state, "model_dump"):
                     serializable_ontology = ontology_state.model_dump(mode="json")
+                elif isinstance(ontology_state, dict):
+                    serializable_ontology = ontology_state
 
             import httpx
 

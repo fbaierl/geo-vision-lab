@@ -31,6 +31,7 @@ from app.core.constants import (
 from app.agents.ontology_subgraph import ontology_subgraph
 from app.models.ontology import SessionOntology
 from app.services.ontology.merge import merge_ontologies
+from app.core.di import get_ontology_service
 
 system_msg = """You are an advanced Geopolitical Intelligence Agent for the GeoVision Lab.
 Your objective is to provide concise, accurate, and tactical analysis of conflicts and geopolitical shifts.
@@ -210,15 +211,18 @@ def check_validation(state: AgentState) -> Literal[NODE_AGENT, NODE_ONTOLOGY_EXT
     return NODE_AGENT
 
 
-def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
+def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Run the ontology processing sub-graph.
 
-    This wraps the ontology_subgraph and maps state between main graph and sub-graph.
+    Loads existing ontology from Neo4j, merges new extraction, saves back.
     """
     logger.info("=" * 80)
     logger.info("[ONTOLOGY_SUBGRAPH] Starting ontology processing sub-graph")
     logger.info("=" * 80)
+
+    thread_id = config.get("configurable", {}).get("thread_id", "default")
+    logger.info(f"[ONTOLOGY_SUBGRAPH] Thread ID: {thread_id}")
 
     # Get the last assistant message (the final response)
     last_message = state[STATE_KEY_MESSAGES][-1]
@@ -266,11 +270,26 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
         return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
 
     try:
+        # Load existing ontology from Neo4j (cross-session persistence)
+        logger.info(
+            f"[ONTOLOGY_SUBGRAPH] Loading existing ontology from Neo4j (thread={thread_id})"
+        )
+        try:
+            ontology_service = get_ontology_service()
+            neo4j_ontology = ontology_service.load_ontology(thread_id)
+            logger.info(
+                f"[ONTOLOGY_SUBGRAPH] Neo4j ontology loaded: {len(neo4j_ontology.entities)} entities, "
+                f"{len(neo4j_ontology.links)} links"
+            )
+        except Exception as load_err:
+            logger.warning(f"[ONTOLOGY_SUBGRAPH] Failed to load from Neo4j: {load_err}")
+            neo4j_ontology = SessionOntology()
+
         # Prepare sub-graph input with full conversation context
         subgraph_input = {
             "user_query": full_context,
             "assistant_response": assistant_response,
-            "query_id": "default",
+            "query_id": thread_id,
         }
 
         logger.debug(
@@ -289,16 +308,30 @@ def run_ontology_subgraph(state: AgentState) -> Dict[str, Any]:
         else:
             logger.warning("[ONTOLOGY_SUBGRAPH] Sub-graph returned None or empty delta")
 
-        # Merge with existing session ontology
+        # Merge: Neo4j ontology + in-memory state + new delta
         current_ontology = state.get(STATE_KEY_ONTOLOGY)
         if not current_ontology:
             current_ontology = SessionOntology()
         elif isinstance(current_ontology, dict):
             current_ontology = SessionOntology.model_validate(current_ontology)
 
+        # First merge Neo4j state with in-memory state
+        current_ontology = merge_ontologies(neo4j_ontology, current_ontology)
+
+        # Then merge the new delta
         if delta:
-            # Use the new merge function
             current_ontology = merge_ontologies(current_ontology, delta)
+
+        # Save merged ontology back to Neo4j
+        try:
+            logger.info(
+                f"[ONTOLOGY_SUBGRAPH] Saving merged ontology to Neo4j: "
+                f"{len(current_ontology.entities)} entities, {len(current_ontology.links)} links"
+            )
+            ontology_service.save_ontology(thread_id, current_ontology)
+            logger.info("[ONTOLOGY_SUBGRAPH] Neo4j save complete")
+        except Exception as save_err:
+            logger.error(f"[ONTOLOGY_SUBGRAPH] Failed to save to Neo4j: {save_err}")
 
         entity_count = len(current_ontology.entities)
         link_count = len(current_ontology.links)

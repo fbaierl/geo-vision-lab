@@ -11,6 +11,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.core.di_database import get_database
+from app.core.di_graph import get_graph_store
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -169,10 +170,22 @@ async def delete_all_sessions():
     Delete all sessions (bulk operation).
 
     Returns the count of deleted sessions.
+    Also clears all Neo4j ontology data.
     """
     db = get_database()
 
     result = db.sessions.delete_many({})
+
+    # Clear all Neo4j ontology data
+    try:
+        graph_store = get_graph_store()
+        graph_store.clear_all_ontology()
+    except Exception as e:
+        import logging
+
+        logging.getLogger("agent_flow").warning(
+            f"[SESSION_DELETE] Failed to clear Neo4j ontology: {e}"
+        )
 
     return {"status": "success", "deleted": True, "deleted_count": result.deleted_count}
 
@@ -181,6 +194,7 @@ async def delete_all_sessions():
 async def delete_session(thread_id: str):
     """
     Delete a session (instant, no confirmation).
+    Also clears all Neo4j ontology data for this thread.
     """
     db = get_database()
 
@@ -188,6 +202,18 @@ async def delete_session(thread_id: str):
 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail=f"Session {thread_id} not found")
+
+    # Clear Neo4j ontology data for this thread
+    try:
+        graph_store = get_graph_store()
+        graph_store.clear_thread_ontology(thread_id)
+    except Exception as e:
+        # Log but don't fail the request if Neo4j cleanup fails
+        import logging
+
+        logging.getLogger("agent_flow").warning(
+            f"[SESSION_DELETE] Failed to clear Neo4j ontology for thread {thread_id}: {e}"
+        )
 
     return {"status": "success", "deleted": True}
 

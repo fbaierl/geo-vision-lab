@@ -23,6 +23,11 @@ class Settings(BaseSettings):
             return self.MONGODB_URI
         return f"mongodb://{self.MONGODB_SERVER}:{self.MONGODB_PORT}/{self.MONGODB_DB}"
 
+    # --- Graph Database (Neo4j) ---
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "geovision"
+
     # --- LLM & Embedding ---
     # Support both OLLAMA_HOST (docker-compose) and OLLAMA_BASE_URL (direct)
     OLLAMA_HOST: Optional[str] = None  # From docker-compose
@@ -66,8 +71,8 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSIONS: int = 384  # all-MiniLM-L6-v2 produces 384-dim vectors
 
     # --- RAG Features (Runtime Toggles) ---
-    RAG_GRADER_ENABLED: bool = True  # Enable/disable context grading
-    RAG_RERANKER_ENABLED: bool = True  # Enable/disable BGE re-ranker
+    RAG_GRADER_ENABLED: bool = False  # Enable/disable context grading
+    RAG_RERANKER_ENABLED: bool = False  # Enable/disable BGE re-ranker
     RAG_RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RAG_RERANKER_TOP_K: int = 3  # Final results after re-ranking
     RAG_RERANKER_CANDIDATES_K: int = 20  # Candidates to retrieve for re-ranking

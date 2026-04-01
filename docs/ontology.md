@@ -9,7 +9,7 @@
 
 ## Overview
 
-The GeoVision Lab Ontology System automatically extracts and maintains a structured knowledge graph from geopolitical intelligence conversations. It identifies entities (people, locations, organizations, events, etc.) and their relationships, building a cumulative intelligence database across the session.
+The GeoVision Lab Ontology System automatically extracts and maintains a structured knowledge graph from geopolitical intelligence conversations. It identifies entities (people, locations, organizations, events, etc.) and their relationships, building a cumulative intelligence database across sessions.
 
 ### Key Features
 
@@ -19,7 +19,9 @@ The GeoVision Lab Ontology System automatically extracts and maintains a structu
 - **Location Geocoding** - Automatically geocodes location entities via Nominatim API
 - **Two-Pass Gap Resolution** - Detects and recovers missing entity references through targeted re-extraction
 - **Provenance Tracking** - Every entity and link preserves the source text (mention) for auditability
-- **Session Accumulation** - Knowledge graph grows throughout the conversation, merging duplicates
+- **Graph Database Storage** - Neo4j-backed persistence with native graph traversal and Cypher queries
+- **Cross-Session Knowledge** - Entities persist across sessions with thread-scoped queries
+- **RAG Integration** - Ontology-aware retrieval augments document-based RAG with graph context
 
 ---
 
@@ -47,11 +49,11 @@ flowchart TB
     end
 
     subgraph Store["Storage Layer"]
-        Merge --> SessionOntology[("Session Ontology<br/>MongoDB Storage")]
+        Merge --> Neo4j[("Neo4j Graph DB<br/>Native Graph Storage")]
     end
 
     RESP --> Extract
-    SessionOntology --> UI["Knowledge Graph UI"]
+    Neo4j --> UI["Knowledge Graph UI"]
     
     style OntologySubgraph fill:#1a1a2e,stroke:#5a3a8a,stroke-width:2px,stroke-dasharray: 5 5
 ```
@@ -500,76 +502,91 @@ docker compose logs -f geovision-api | grep ONTOLOGY
 
 ---
 
-## Future Enhancements
+## Storage Architecture
 
-### 1. Persistent Ontology Storage
+### Neo4j Graph Database
 
-Currently the ontology is session-scoped. Future enhancement:
+The ontology is stored in Neo4j, a native graph database, providing:
 
-```python
-# Persist to MongoDB after each session
-async def persist_ontology_to_mongodb(ontology: SessionOntology, thread_id: str):
-    await db.ontologies.update_one(
-        {"thread_id": thread_id},
-        {"$set": {"entities": ontology.entities, "links": ontology.links}},
-        upsert=True
-    )
+- **Native graph storage** - Entities as nodes, relationships as edges
+- **Efficient traversal** - Multi-hop queries without JOIN overhead
+- **Cypher query language** - Expressive graph query syntax
+- **Cross-session persistence** - Entities persist beyond individual sessions
+- **Thread scoping** - `thread_id` property on nodes/relationships for session isolation
+
+### Data Model in Neo4j
+
+```
+(:Entity {uuid, name, type, thread_id, properties, mentions, ...})
+  -[:RELATIONSHIP_TYPE {uuid, type, properties, mentions}]-> (:Entity)
 ```
 
-### 2. Cross-Session Entity Resolution
+Entity types are used as Neo4j labels (e.g., `(:Person)`, `(:Location)`, `(:Organization)`).
 
-Improve entity deduplication across sessions:
+### GraphStoreService
+
+The `GraphStoreService` (`app/services/graph_store.py`) provides the Neo4j abstraction layer:
 
 ```python
-# Use fuzzy matching + embeddings for entity resolution
-def resolve_entity(new_entity: OntologyEntity, existing_entities: Dict) -> Optional[str]:
-    # Compare name similarity, type, and context
-    # Return existing ID if match found, else None
+# Entity operations
+graph_store.create_entity(uuid, name, type, thread_id, properties, mentions)
+graph_store.get_entity_by_uuid(uuid)
+graph_store.get_entities_by_name(name, thread_id)
+
+# Link operations
+graph_store.create_link(uuid, source_uuid, target_uuid, type, thread_id)
+graph_store.get_links_for_entity(entity_uuid, thread_id)
+
+# Graph traversal
+graph_store.get_neighbors(entity_uuid, hops=2, thread_id)
+graph_store.get_subgraph(entity_uuid, hops=3, thread_id)
+
+# RAG-oriented retrieval
+graph_store.get_context_for_query(entity_names, thread_id)
+graph_store.get_related_entities(entity_names, thread_id, hops=2)
 ```
 
-### 3. Ontology Query API
+### OntologyService
 
-Enable querying the knowledge graph:
+The `OntologyService` (`app/services/ontology/service.py`) wraps `GraphStoreService` with domain-specific operations:
 
 ```python
-@app.get("/api/ontology/entities")
-async def get_entities(type: Optional[str] = None):
-    """Retrieve all entities, optionally filtered by type."""
+service = OntologyService(graph_store)
 
-@app.get("/api/ontology/entity/{entity_id}")
-async def get_entity(entity_id: str):
-    """Get a specific entity with all relationships."""
+# Load/save SessionOntology
+ontology = service.load_ontology(thread_id)
+service.save_ontology(thread_id, ontology)
 
-@app.get("/api/ontology/entity/{entity_id}/relationships")
-async def get_entity_relationships(entity_id: str):
-    """Get all relationships for an entity."""
+# Entity lookups
+entity = service.get_entity_by_uuid(thread_id, uuid)
+entities = service.get_entity_by_name(thread_id, name)
+
+# Graph traversal
+neighbors = service.get_neighbors(thread_id, uuid, hops=2)
+subgraph = service.get_entity_graph(thread_id, uuid, hops=3)
+
+# RAG integration
+context = service.get_context_for_query(["Ukraine", "NATO"], thread_id)
 ```
 
-### 4. Hierarchical Entity Types
+---
 
-Support sub-typing for better categorization:
+## Integration with RAG
 
-```python
-class LocationEntity(OntologyEntity):
-    subtype: Literal["Country", "City", "Region", "Landmark"]
+The ontology now augments the RAG pipeline by providing graph-based context:
 
-class PersonEntity(OntologyEntity):
-    subtype: Literal["Politician", "Military_Leader", "Diplomat"]
-```
-
-### 5. Entity Deduplication
-
-Detect and merge near-duplicate entities (e.g., "Empire of Japan" vs "Imperial Japan"):
+1. **Entity extraction from query** - Named entities are identified in the user query
+2. **Graph context retrieval** - Related entities and relationships are fetched from Neo4j
+3. **Context injection** - Graph context is formatted and injected alongside document chunks
+4. **Enhanced answers** - The agent has access to both document knowledge and relationship context
 
 ```python
-# Fuzzy matching on entity names
-from difflib import SequenceMatcher
-
-def are_duplicates(name1: str, name2: str, type1: str, type2: str) -> bool:
-    if type1 != type2:
-        return False
-    similarity = SequenceMatcher(None, name1.lower(), name2.lower()).ratio()
-    return similarity > 0.85
+# In RAG subgraph
+ontology_context = ontology_service.get_context_for_query(
+    entity_names=["Ukraine", "Russia"],
+    thread_id=thread_id
+)
+# Result: "KNOWN ONTOLOGY CONTEXT:\n- NATO (Organization) [members: 32]\n- Ukraine --[CONFLICT_WITH]--> Russia"
 ```
 
 ---

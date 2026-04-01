@@ -48,9 +48,11 @@ from app.core.di_services import (  # noqa: F401
     ensure_vector_index,
 )
 from app.services.ontology.service import OntologyService  # noqa: F401
+from app.services.graph_store import GraphStoreService  # noqa: F401
 
 # Import ensure_vector_index from database module for internal use
 from app.core.di_database import ensure_vector_index as di_ensure_vector_index  # noqa: F401
+from app.core.di_graph import get_neo4j_driver, get_graph_store, close_neo4j_driver  # noqa: F401
 
 
 def get_ontology_service() -> OntologyService:
@@ -62,8 +64,8 @@ def get_ontology_service() -> OntologyService:
     """
 
     def factory():
-        db = get_database()
-        return OntologyService(db)
+        graph_store = get_graph_store()
+        return OntologyService(graph_store)
 
     return container._get_or_create(get_ontology_service, factory)
 
