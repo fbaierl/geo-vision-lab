@@ -26,6 +26,26 @@ from app.core.constants import (
 
 logger = logging.getLogger("geovision_app")
 
+_SUPPRESSED_NODES = {"grader", "reviewer", "ontology_extractor"}
+
+
+def _is_suppressed_event(event: dict) -> bool:
+    """Check if an event should be suppressed from the user-facing stream.
+
+    Checks both tags and metadata (langgraph_node) to handle cases where
+    wrapped LLMs (e.g., with_structured_output) don't propagate tags correctly.
+    """
+    tags = event.get("tags", [])
+    if any(t in tags for t in _SUPPRESSED_NODES):
+        return True
+
+    metadata = event.get("metadata", {})
+    langgraph_node = metadata.get("langgraph_node", "")
+    if langgraph_node in _SUPPRESSED_NODES:
+        return True
+
+    return False
+
 
 def _get_active_model_name() -> str:
     """Get the currently active model name for display."""
@@ -245,7 +265,6 @@ async def process_query_stream(
         logger.info(f"[QUERY-STREAM] >>> Starting astream_events (thread={thread_id})")
         async for event in graph.astream_events(inputs, config=config, version="v2"):
             kind = event.get("event")
-            tags = event.get("tags", [])
             event_name = event.get("name", "unknown")
 
             # Check for errors
@@ -267,7 +286,7 @@ async def process_query_stream(
                     yield {"type": "status", "phase": "rag_grading", "tool": "Grader"}
 
             elif kind == "on_chat_model_start":
-                if any(t in tags for t in ["grader", "reviewer", "ontology_extractor"]):
+                if _is_suppressed_event(event):
                     continue
 
                 active_model = _get_active_model_name()
@@ -384,7 +403,7 @@ async def process_query_stream(
                         }
 
             elif kind == "on_chat_model_end":
-                if any(t in tags for t in ["grader", "reviewer", "ontology_extractor"]):
+                if _is_suppressed_event(event):
                     continue
                 output = event.get("data", {}).get("output")
                 tool_calls = getattr(output, "tool_calls", [])
@@ -398,7 +417,7 @@ async def process_query_stream(
                     }
 
             elif kind == "on_chat_model_stream":
-                if any(t in tags for t in ["grader", "reviewer", "ontology_extractor"]):
+                if _is_suppressed_event(event):
                     continue
                 if "grader" in event_name.lower():
                     continue
