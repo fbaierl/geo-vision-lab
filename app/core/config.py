@@ -49,8 +49,12 @@ class Settings(BaseSettings):
     # --- Online LLM (Groq) ---
     GROQ_API_KEY: Optional[str] = None
     USE_ONLINE_LLM: bool = False
-    ONLINE_LLM_MODEL_NAME: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    AVAILABLE_ONLINE_MODELS: list[str] = ["meta-llama/llama-4-scout-17b-16e-instruct"]
+    ONLINE_LLM_MODEL_NAME: str = "openai/gpt-oss-120b"
+    AVAILABLE_ONLINE_MODELS: list[str] = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "meta-llama/llama-4-scout-17b-16e-instruct"
+    ]
 
     # --- LangSmith Tracing (Cloud) ---
     # Get free API key at: https://smith.langchain.com

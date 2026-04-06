@@ -856,6 +856,34 @@ html, body {
     cursor: not-allowed;
 }
 
+.model-group-header {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 10px 4px;
+    margin-top: 6px;
+}
+
+.model-group-header:first-child {
+    margin-top: 0;
+}
+
+.model-warning {
+    font-size: 0.7rem;
+    color: var(--amber);
+    padding: 8px 10px;
+    background: rgba(255, 171, 0, 0.1);
+    border-radius: var(--radius-control);
+    margin: 4px;
+    border: 1px solid rgba(255, 171, 0, 0.2);
+}
+
+.model-warning span {
+    display: block;
+}
+
 .model-llm-toggle {
     padding: 10px;
     border-bottom: 1px solid var(--border);
