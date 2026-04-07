@@ -16,7 +16,6 @@ services:
     entrypoint: >
       sh -c "ollama serve &
              sleep 5 &&
-             ollama pull llama3.2 &&
              ollama pull qwen3.5:9b &&
              ollama pull qwen3.5:4b &&
              wait"
@@ -115,6 +114,7 @@ services:
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
       - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://eu.api.smith.langchain.com}
       - LANGSMITH_PROJECT=geo-vision-lab
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     depends_on:
       mongodb:
         condition: service_healthy

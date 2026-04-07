@@ -265,12 +265,12 @@ class GraphStoreService:
             if thread_id
             else ""
         )
-        params = {"entity_uuid": entity_uuid, "hops": hops}
+        params = {"entity_uuid": entity_uuid}
         if thread_id:
             params["thread_id"] = thread_id
         query = f"""
         MATCH (e:Entity {{uuid: $entity_uuid}})
-        MATCH p = (e)-[*1..$hops]-(neighbor:Entity)
+        MATCH p = (e)-[*1..{int(hops)}]-(neighbor:Entity)
         WHERE neighbor.uuid <> $entity_uuid
         {thread_filter}
         RETURN DISTINCT neighbor
@@ -282,7 +282,7 @@ class GraphStoreService:
         self, entity_uuid: str, hops: int = 2, thread_id: str = None
     ) -> Dict[str, Any]:
         """Get full subgraph around an entity."""
-        params = {"entity_uuid": entity_uuid, "hops": hops}
+        params = {"entity_uuid": entity_uuid}
         thread_filter = ""
         if thread_id:
             params["thread_id"] = thread_id
@@ -292,7 +292,7 @@ class GraphStoreService:
 
         query = f"""
         MATCH (center:Entity {{uuid: $entity_uuid}})
-        MATCH p = (center)-[*0..$hops]-(other:Entity)
+        MATCH p = (center)-[*0..{int(hops)}]-(other:Entity)
         WHERE true {thread_filter}
         WITH collect(DISTINCT center) + collect(DISTINCT other) AS all_nodes
         UNWIND all_nodes AS node
@@ -352,14 +352,14 @@ class GraphStoreService:
         self, entity_names: List[str], thread_id: str = None, hops: int = 2
     ) -> List[Dict[str, Any]]:
         """Get entities related to a list of named entities."""
-        params = {"names": [n.lower() for n in entity_names], "hops": hops}
+        params = {"names": [n.lower() for n in entity_names]}
         thread_filter = "AND n.thread_id = $thread_id" if thread_id else ""
         if thread_id:
             params["thread_id"] = thread_id
         query = f"""
         MATCH (n:Entity)
         WHERE toLower(n.name) IN $names {thread_filter}
-        MATCH p = (n)-[*1..$hops]-(related:Entity)
+        MATCH p = (n)-[*1..{int(hops)}]-(related:Entity)
         WHERE NOT toLower(related.name) IN $names
         RETURN DISTINCT related
         LIMIT 50
