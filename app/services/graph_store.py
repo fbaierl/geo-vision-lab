@@ -62,22 +62,6 @@ class GraphStoreService:
         """Create or merge an entity node."""
         now = datetime.utcnow().isoformat()
 
-        # Sanitize properties: serialize nested dicts/lists to JSON strings
-        sanitized_props = {}
-        for key, value in (properties or {}).items():
-            if isinstance(value, (dict, list)):
-                sanitized_props[key] = json.dumps(value)
-                logger.info(f"[GRAPH_STORE] Serialized property '{key}' to JSON: {value!r}")
-            else:
-                sanitized_props[key] = value
-        
-        # Debug: log all property types before sending to Neo4j
-        for key, value in sanitized_props.items():
-            value_type = value.__class__.__name__
-            logger.info(f"[GRAPH_STORE] Property '{key}': type={value_type}, value={value!r}")
-            if isinstance(value, dict):
-                logger.error(f"[GRAPH_STORE] WARNING: Property '{key}' is still a dict: {value!r}")
-
         props = {
             "uuid": uuid,
             "name": name,
@@ -86,23 +70,23 @@ class GraphStoreService:
             "created_at": now,
             "updated_at": now,
             "created_by": created_by,
-            **sanitized_props,
         }
+        # Serialize all custom properties as a single JSON string
+        props["properties"] = json.dumps(properties or {})
         # Neo4j doesn't support nested maps, so serialize mentions to JSON string
-        mentions_json = json.dumps(
+        props["mentions"] = json.dumps(
             [
                 m.model_dump(mode="json") if hasattr(m, "model_dump") else m
                 for m in (mentions or [])
             ]
         )
-        props["mentions"] = mentions_json
 
         label = self._type_to_label(type)
-        # On match, replace mentions entirely (ontology is saved in full each time)
+        # On match, replace mentions and properties entirely (ontology is saved in full each time)
         query = f"""
         MERGE (e:Entity:{label} {{uuid: $uuid}})
         ON CREATE SET e += $props
-        ON MATCH SET e.updated_at = $now, e.mentions = $mentions
+        ON MATCH SET e.updated_at = $now, e.mentions = $mentions, e.properties = $props.properties
         """
 
         # Log the full props dict for debugging
@@ -114,7 +98,7 @@ class GraphStoreService:
                 "uuid": uuid,
                 "props": props,
                 "now": now,
-                "mentions": mentions_json,
+                "mentions": props["mentions"],
             },
         )
         logger.info(f"[GRAPH_STORE] Created/merged entity: {name} ({uuid}) with props keys: {list(props.keys())}")
@@ -179,22 +163,9 @@ class GraphStoreService:
         """Create a relationship between two entities."""
         now = datetime.utcnow().isoformat()
         rel_type = self._type_to_rel_type(type)
-        
-        # Sanitize properties: serialize nested dicts/lists to JSON strings
-        sanitized_props = {}
-        for key, value in (properties or {}).items():
-            if isinstance(value, (dict, list)):
-                sanitized_props[key] = json.dumps(value)
-                logger.info(f"[GRAPH_STORE] Serialized link property '{key}' to JSON: {value!r}")
-            else:
-                sanitized_props[key] = value
-        
-        # Debug: log any dict values that might have slipped through
-        for key, value in sanitized_props.items():
-            if isinstance(value, dict):
-                logger.error(f"[GRAPH_STORE] WARNING: Link property '{key}' is still a dict: {value!r}")
 
-        # Neo4j doesn't support nested maps, so serialize mentions to JSON string
+        # Serialize properties and mentions as JSON strings
+        props_json = json.dumps(properties or {})
         mentions_json = json.dumps(
             [
                 m.model_dump(mode="json") if hasattr(m, "model_dump") else m
@@ -209,7 +180,7 @@ class GraphStoreService:
         ON CREATE SET r.type = $type, r.thread_id = $thread_id,
                       r.created_at = $now, r.updated_at = $now,
                       r.properties = $properties, r.mentions = $mentions
-        ON MATCH SET r.updated_at = $now, r.mentions = $mentions
+        ON MATCH SET r.updated_at = $now, r.properties = $properties, r.mentions = $mentions
         """
         self._run_write(
             query,
@@ -219,7 +190,7 @@ class GraphStoreService:
                 "target_uuid": target_uuid,
                 "type": type,
                 "thread_id": thread_id,
-                "properties": json.dumps(sanitized_props),
+                "properties": props_json,
                 "mentions": mentions_json,
                 "now": now,
             },
@@ -493,7 +464,6 @@ class GraphStoreService:
         RETURN r.uuid AS uuid, r.type AS type, r.thread_id AS thread_id,
                r.properties AS properties, r.mentions AS mentions,
                r.created_at AS created_at, r.updated_at AS updated_at,
-               a.name AS source_name, b.name AS target_name,
                a.uuid AS source_uuid, b.uuid AS target_uuid
         ORDER BY r.created_at DESC
         LIMIT $limit

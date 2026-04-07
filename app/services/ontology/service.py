@@ -196,7 +196,7 @@ class OntologyService:
             properties_raw = node.get("properties", {})
             if isinstance(properties_raw, str):
                 properties_raw = json.loads(properties_raw)
-            
+
             # Deserialize individual property values that were serialized as JSON strings
             if isinstance(properties_raw, dict):
                 for key, value in properties_raw.items():
@@ -235,7 +235,6 @@ class OntologyService:
     def _dict_to_link(self, data: dict) -> Optional[OntologyLink]:
         """Convert Neo4j result dict to OntologyLink."""
         try:
-            # Handle flat format from get_all_links query
             rel = data
             source_uuid = data.get("source_uuid", "")
             target_uuid = data.get("target_uuid", "")
