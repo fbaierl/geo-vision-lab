@@ -74,7 +74,6 @@ class TestSessionsAPI:
         assert data["thread_id"] == thread_id
         assert data["title"] == "Test Session"
         assert "messages" in data
-        assert "ontology" in data
 
     def test_get_session_not_found(self, client_with_mongo_mock, override_mongo):
         """Test getting a non-existent session returns empty structure."""
@@ -85,7 +84,6 @@ class TestSessionsAPI:
         data = response.json()
         assert data["thread_id"] == fake_id
         assert data["messages"] == []
-        assert data["ontology"] == {"entities": {}, "links": {}}
 
     def test_update_session_title(self, client_with_mongo_mock, override_mongo):
         """Test updating session title."""
@@ -107,33 +105,6 @@ class TestSessionsAPI:
         data = get_response.json()
         assert data["title"] == "New Title"
 
-    def test_update_session_ontology(self, client_with_mongo_mock, override_mongo):
-        """Test updating session ontology."""
-        # Create a session
-        create_response = client_with_mongo_mock.post(
-            "/api/sessions", json={"title": "Test"}
-        )
-        thread_id = create_response.json()["thread_id"]
-
-        # Update ontology
-        ontology = {
-            "entities": {
-                "ent-1": {"uuid": "ent-1", "name": "Germany", "type": "Location"}
-            },
-            "links": {},
-        }
-        update_response = client_with_mongo_mock.put(
-            f"/api/sessions/{thread_id}", json={"ontology": ontology}
-        )
-
-        assert update_response.status_code == 200
-
-        # Verify update
-        get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
-        data = get_response.json()
-        assert len(data["ontology"]["entities"]) == 1
-        assert data["ontology"]["entities"]["ent-1"]["name"] == "Germany"
-
     def test_save_session_auto_save(self, client_with_mongo_mock, override_mongo):
         """Test auto-save endpoint (called after each query)."""
         thread_id = str(uuid4())
@@ -143,20 +114,6 @@ class TestSessionsAPI:
                 {"role": "user", "content": "What is the capital of France?"},
                 {"role": "assistant", "content": "The capital of France is Paris."},
             ],
-            "ontology": {
-                "entities": {
-                    "ent-1": {"uuid": "ent-1", "name": "France", "type": "Location"},
-                    "ent-2": {"uuid": "ent-2", "name": "Paris", "type": "Location"},
-                },
-                "links": {
-                    "link-1": {
-                        "uuid": "link-1",
-                        "source_uuid": "ent-2",
-                        "target_uuid": "ent-1",
-                        "type": "CAPITAL_OF",
-                    }
-                },
-            },
         }
 
         response = client_with_mongo_mock.post(
@@ -167,14 +124,11 @@ class TestSessionsAPI:
         data = response.json()
         assert data["status"] == "success"
         assert data["message_count"] == 2
-        assert data["entity_count"] == 2
-        assert data["link_count"] == 1
 
         # Verify session was created
         get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         session_data = get_response.json()
         assert len(session_data["messages"]) == 2
-        assert len(session_data["ontology"]["entities"]) == 2
 
     def test_save_session_updates_title(self, client_with_mongo_mock, override_mongo):
         """Test that auto-save extracts title from first user message."""
@@ -187,7 +141,6 @@ class TestSessionsAPI:
                     "content": "Tell me about the history of ancient Rome and its emperors",
                 }
             ],
-            "ontology": {"entities": {}, "links": {}},
         }
 
         client_with_mongo_mock.post(f"/api/sessions/{thread_id}/save", json=save_data)
@@ -208,7 +161,6 @@ class TestSessionsAPI:
         # Auto-save with new data
         save_data = {
             "messages": [{"role": "user", "content": "Test message"}],
-            "ontology": {"entities": {"e1": {"name": "Test"}}, "links": {}},
         }
         client_with_mongo_mock.post(f"/api/sessions/{thread_id}/save", json=save_data)
 
@@ -216,7 +168,6 @@ class TestSessionsAPI:
         get_response = client_with_mongo_mock.get(f"/api/sessions/{thread_id}")
         data = get_response.json()
         assert len(data["messages"]) == 1
-        assert len(data["ontology"]["entities"]) == 1
 
     def test_delete_session(self, client_with_mongo_mock, override_mongo):
         """Test deleting a session."""
@@ -249,7 +200,7 @@ class TestSessionsAPI:
         """Test auto-save with empty messages."""
         thread_id = str(uuid4())
 
-        save_data = {"messages": [], "ontology": {"entities": {}, "links": {}}}
+        save_data = {"messages": []}
 
         response = client_with_mongo_mock.post(
             f"/api/sessions/{thread_id}/save", json=save_data
@@ -276,7 +227,6 @@ class TestSessionsAPI:
             f"/api/sessions/{thread1}/save",
             json={
                 "messages": [{"role": "user", "content": "Update"}],
-                "ontology": {"entities": {}, "links": {}},
             },
         )
 

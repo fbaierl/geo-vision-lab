@@ -69,28 +69,6 @@ class SessionOntology(BaseModel):
     entities: Dict[str, OntologyEntity] = Field(default_factory=dict)
     links: Dict[str, OntologyLink] = Field(default_factory=dict)
 
-    def to_array_format(self) -> dict:
-        """Convert to array format for MongoDB storage."""
-        return {
-            "entities": [e.model_dump() for e in self.entities.values()],
-            "links": [link.model_dump() for link in self.links.values()],
-        }
-
-    @classmethod
-    def from_array_format(cls, data: dict) -> "SessionOntology":
-        """Load from array format (MongoDB storage)."""
-        entities = {}
-        for e in data.get("entities", []):
-            entity = OntologyEntity.model_validate(e)
-            entities[str(entity.uuid)] = entity
-
-        links = {}
-        for link_data in data.get("links", []):
-            link = OntologyLink.model_validate(link_data)
-            links[str(link.uuid)] = link
-
-        return cls(entities=entities, links=links)
-
     def to_export_format(self, metadata: dict = None) -> dict:
         """Convert to export format with metadata."""
         return {

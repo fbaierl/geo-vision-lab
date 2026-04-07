@@ -457,7 +457,6 @@ async def process_query_stream(
 
             final_state = await graph.aget_state(config)
             messages = final_state.values.get("messages", [])
-            ontology_state = final_state.values.get("ontology", {})
 
             serializable_messages = []
             for msg in messages:
@@ -477,20 +476,12 @@ async def process_query_stream(
                     msg_dict["role"] = "tool"
                 serializable_messages.append(msg_dict)
 
-            serializable_ontology = {"entities": {}, "links": {}}
-            if ontology_state:
-                if hasattr(ontology_state, "model_dump"):
-                    serializable_ontology = ontology_state.model_dump(mode="json")
-                elif isinstance(ontology_state, dict):
-                    serializable_ontology = ontology_state
-
             import httpx
 
             async with httpx.AsyncClient() as client:
                 save_url = f"http://localhost:8000/api/sessions/{thread_id}/save"
                 save_data = {
                     "messages": serializable_messages,
-                    "ontology": serializable_ontology,
                 }
                 await client.post(save_url, json=save_data, timeout=10.0)
         except Exception as save_error:

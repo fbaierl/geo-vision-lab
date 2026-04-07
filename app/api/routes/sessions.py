@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from app.core.di_database import get_database
 from app.core.di_graph import get_graph_store
+from app.core.di import get_ontology_service
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -22,13 +23,11 @@ class SessionCreate(BaseModel):
 
 class SessionUpdate(BaseModel):
     title: Optional[str] = None
-    ontology: Optional[Dict[str, Any]] = None
     messages: Optional[List[Dict[str, Any]]] = None
 
 
 class SessionSave(BaseModel):
     messages: List[Dict[str, Any]] = Field(default_factory=list)
-    ontology: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SessionListResponse(BaseModel):
@@ -96,7 +95,6 @@ async def create_session(data: SessionCreate):
         "created_at": now,
         "updated_at": now,
         "messages": [],
-        "ontology": {"entities": {}, "links": {}},
     }
 
     db.sessions.insert_one(session_doc)
@@ -124,28 +122,52 @@ async def get_session(thread_id: str):
             "ontology": {"entities": {}, "links": {}},
         }
 
+    # Load ontology from Neo4j (abstracted from frontend)
+    try:
+        ontology_service = get_ontology_service()
+        ontology = ontology_service.load_ontology(thread_id)
+        ontology_data = {
+            "entities": {
+                str(entity.uuid): entity.model_dump()
+                for entity in ontology.entities.values()
+            },
+            "links": {
+                str(link.uuid): link.model_dump()
+                for link in ontology.links.values()
+            },
+        }
+        import logging
+        logging.getLogger("agent_flow").info(
+            f"[SESSION_GET] Loaded ontology from Neo4j: {len(ontology_data['entities'])} entities, "
+            f"{len(ontology_data['links'])} links for thread {thread_id}"
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger("agent_flow").warning(
+            f"[SESSION_GET] Failed to load ontology from Neo4j: {e}"
+        )
+        ontology_data = {"entities": {}, "links": {}}
+
     return {
         "thread_id": session.get("thread_id", thread_id),
         "title": session.get("title", "Untitled"),
         "created_at": session.get("created_at"),
         "updated_at": session.get("updated_at"),
         "messages": session.get("messages", []),
-        "ontology": session.get("ontology", {"entities": {}, "links": {}}),
+        "ontology": ontology_data,
     }
 
 
 @router.put("/{thread_id}")
 async def update_session(thread_id: str, data: SessionUpdate):
     """
-    Update session title, ontology, or messages.
+    Update session title or messages.
     """
     db = get_database()
 
     update_fields = {}
     if data.title is not None:
         update_fields["title"] = data.title
-    if data.ontology is not None:
-        update_fields["ontology"] = data.ontology
     if data.messages is not None:
         update_fields["messages"] = data.messages
 
@@ -223,7 +245,7 @@ async def save_session(thread_id: str, data: SessionSave):
     """
     Auto-save session after each query.
 
-    Upserts session with current messages and ontology.
+    Upserts session with current messages.
     """
     db = get_database()
 
@@ -247,7 +269,6 @@ async def save_session(thread_id: str, data: SessionSave):
         "created_at": now,
         "updated_at": now,
         "messages": data.messages,
-        "ontology": data.ontology,
     }
 
     # Try to find existing session first
@@ -260,9 +281,8 @@ async def save_session(thread_id: str, data: SessionSave):
             {
                 "$set": {
                     "messages": data.messages,
-                    "ontology": data.ontology,
                     "updated_at": now,
-                    "title": title,  # Keep title updated from latest query
+                    "title": title,
                 }
             },
         )
@@ -274,6 +294,4 @@ async def save_session(thread_id: str, data: SessionSave):
         "status": "success",
         "thread_id": thread_id,
         "message_count": len(data.messages),
-        "entity_count": len(data.ontology.get("entities", {})),
-        "link_count": len(data.ontology.get("links", {})),
     }

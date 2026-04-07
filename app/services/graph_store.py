@@ -88,6 +88,7 @@ class GraphStoreService:
             "created_by": created_by,
             **sanitized_props,
         }
+        # Neo4j doesn't support nested maps, so serialize mentions to JSON string
         mentions_json = json.dumps(
             [
                 m.model_dump(mode="json") if hasattr(m, "model_dump") else m
@@ -97,15 +98,16 @@ class GraphStoreService:
         props["mentions"] = mentions_json
 
         label = self._type_to_label(type)
+        # On match, replace mentions entirely (ontology is saved in full each time)
         query = f"""
         MERGE (e:Entity:{label} {{uuid: $uuid}})
         ON CREATE SET e += $props
-        ON MATCH SET e.updated_at = $now, e.mentions = e.mentions + $mentions
+        ON MATCH SET e.updated_at = $now, e.mentions = $mentions
         """
-        
+
         # Log the full props dict for debugging
         logger.info(f"[GRAPH_STORE] Full props dict: {props!r}")
-        
+
         self._run_write(
             query,
             {
@@ -191,7 +193,8 @@ class GraphStoreService:
         for key, value in sanitized_props.items():
             if isinstance(value, dict):
                 logger.error(f"[GRAPH_STORE] WARNING: Link property '{key}' is still a dict: {value!r}")
-        
+
+        # Neo4j doesn't support nested maps, so serialize mentions to JSON string
         mentions_json = json.dumps(
             [
                 m.model_dump(mode="json") if hasattr(m, "model_dump") else m
@@ -206,6 +209,7 @@ class GraphStoreService:
         ON CREATE SET r.type = $type, r.thread_id = $thread_id,
                       r.created_at = $now, r.updated_at = $now,
                       r.properties = $properties, r.mentions = $mentions
+        ON MATCH SET r.updated_at = $now, r.mentions = $mentions
         """
         self._run_write(
             query,
@@ -486,7 +490,11 @@ class GraphStoreService:
         query = f"""
         MATCH (a:Entity)-[r]->(b:Entity)
         {thread_filter}
-        RETURN r, a.name AS source_name, b.name AS target_name
+        RETURN r.uuid AS uuid, r.type AS type, r.thread_id AS thread_id,
+               r.properties AS properties, r.mentions AS mentions,
+               r.created_at AS created_at, r.updated_at AS updated_at,
+               a.name AS source_name, b.name AS target_name,
+               a.uuid AS source_uuid, b.uuid AS target_uuid
         ORDER BY r.created_at DESC
         LIMIT $limit
         """

@@ -165,19 +165,33 @@ class OntologyService:
             mentions_raw = node.get("mentions", [])
             mentions = []
             if isinstance(mentions_raw, str):
-                mentions_raw = json.loads(mentions_raw)
-            for m in mentions_raw:
-                if isinstance(m, dict):
-                    mentions.append(
-                        Mention(
-                            source_text=m.get("source_text", ""),
-                            extracted_at=datetime.fromisoformat(
-                                m.get("extracted_at", datetime.utcnow().isoformat())
-                            ),
-                            confidence=m.get("confidence", 1.0),
-                            thread_id=m.get("thread_id"),
+                mentions_parsed = json.loads(mentions_raw)
+                if isinstance(mentions_parsed, list):
+                    for m in mentions_parsed:
+                        if isinstance(m, dict):
+                            mentions.append(
+                                Mention(
+                                    source_text=m.get("source_text", ""),
+                                    extracted_at=datetime.fromisoformat(
+                                        m.get("extracted_at", datetime.utcnow().isoformat())
+                                    ),
+                                    confidence=m.get("confidence", 1.0),
+                                    thread_id=m.get("thread_id"),
+                                )
+                            )
+            elif isinstance(mentions_raw, list):
+                for m in mentions_raw:
+                    if isinstance(m, dict):
+                        mentions.append(
+                            Mention(
+                                source_text=m.get("source_text", ""),
+                                extracted_at=datetime.fromisoformat(
+                                    m.get("extracted_at", datetime.utcnow().isoformat())
+                                ),
+                                confidence=m.get("confidence", 1.0),
+                                thread_id=m.get("thread_id"),
+                            )
                         )
-                    )
 
             properties_raw = node.get("properties", {})
             if isinstance(properties_raw, str):
@@ -221,26 +235,41 @@ class OntologyService:
     def _dict_to_link(self, data: dict) -> Optional[OntologyLink]:
         """Convert Neo4j result dict to OntologyLink."""
         try:
-            rel = data.get("r", data)
-            if not rel:
-                return None
+            # Handle flat format from get_all_links query
+            rel = data
+            source_uuid = data.get("source_uuid", "")
+            target_uuid = data.get("target_uuid", "")
 
             mentions_raw = rel.get("mentions", [])
             mentions = []
             if isinstance(mentions_raw, str):
-                mentions_raw = json.loads(mentions_raw)
-            for m in mentions_raw:
-                if isinstance(m, dict):
-                    mentions.append(
-                        Mention(
-                            source_text=m.get("source_text", ""),
-                            extracted_at=datetime.fromisoformat(
-                                m.get("extracted_at", datetime.utcnow().isoformat())
-                            ),
-                            confidence=m.get("confidence", 1.0),
-                            thread_id=m.get("thread_id"),
+                mentions_parsed = json.loads(mentions_raw)
+                if isinstance(mentions_parsed, list):
+                    for m in mentions_parsed:
+                        if isinstance(m, dict):
+                            mentions.append(
+                                Mention(
+                                    source_text=m.get("source_text", ""),
+                                    extracted_at=datetime.fromisoformat(
+                                        m.get("extracted_at", datetime.utcnow().isoformat())
+                                    ),
+                                    confidence=m.get("confidence", 1.0),
+                                    thread_id=m.get("thread_id"),
+                                )
+                            )
+            elif isinstance(mentions_raw, list):
+                for m in mentions_raw:
+                    if isinstance(m, dict):
+                        mentions.append(
+                            Mention(
+                                source_text=m.get("source_text", ""),
+                                extracted_at=datetime.fromisoformat(
+                                    m.get("extracted_at", datetime.utcnow().isoformat())
+                                ),
+                                confidence=m.get("confidence", 1.0),
+                                thread_id=m.get("thread_id"),
+                            )
                         )
-                    )
 
             properties_raw = rel.get("properties", {})
             if isinstance(properties_raw, str):
@@ -270,8 +299,8 @@ class OntologyService:
 
             return OntologyLink(
                 uuid=UUID(rel.get("uuid")),
-                source_uuid=UUID(rel.get("source_uuid", rel.get("source_name", ""))),
-                target_uuid=UUID(rel.get("target_uuid", rel.get("target_name", ""))),
+                source_uuid=UUID(source_uuid),
+                target_uuid=UUID(target_uuid),
                 type=rel.get("type", ""),
                 properties=properties_raw,
                 mentions=mentions,
