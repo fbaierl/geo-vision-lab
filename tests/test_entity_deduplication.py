@@ -490,7 +490,15 @@ def test_entity_count_after_merge():
         "links": [],
     }
 
-    ontology = SessionOntology.from_array_format(data)
+    # Build SessionOntology directly from data arrays
+    ontology = SessionOntology()
+    for e_data in data["entities"]:
+        entity = OntologyEntity.model_validate(e_data)
+        ontology.entities[str(entity.uuid)] = entity
+    for l_data in data.get("links", []):
+        link = OntologyLink.model_validate(l_data)
+        ontology.links[str(link.uuid)] = link
+
     empty = SessionOntology()
     merged = merge_ontologies(empty, ontology)
 
