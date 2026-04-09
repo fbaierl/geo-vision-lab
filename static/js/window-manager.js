@@ -324,7 +324,8 @@ export class WindowManager {
             'window-reasoning': { widthRatio: 0.25, heightRatio: 0.85, name: 'reasoning' },
             'window-history': { widthRatio: 0.20, heightRatio: 0.35, name: 'history' },
             'window-services': { widthRatio: 0.20, heightRatio: 0.35, name: 'services' },
-            'window-maps': { widthRatio: 0.55, heightRatio: 0.45, name: 'maps' },
+            'window-maps': { widthRatio: 0.50, heightRatio: 0.40, name: 'maps' },
+            'window-panopticon': { widthRatio: 0.50, heightRatio: 0.40, name: 'panopticon' },
             'window-graph': { widthRatio: 0.55, heightRatio: 0.45, name: 'graph' }
         };
 
@@ -368,10 +369,11 @@ export class WindowManager {
             const rightColWidth = availableWidth * 0.50;
             const smallHeight = availableHeight * 0.30;
             const tallHeight = availableHeight * 0.65;
-            const mapsHeight = availableHeight * 0.25;
-            const graphHeight = availableHeight * 0.70;
+            const mapsHeight = availableHeight * 0.22;
+            const panopticonHeight = availableHeight * 0.22;
+            const graphHeight = availableHeight * 0.46;
 
-            const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-graph', 'window-history', 'window-services'];
+            const priorityOrder = ['window-chat', 'window-reasoning', 'window-maps', 'window-panopticon', 'window-graph', 'window-history', 'window-services'];
             visibleWindows.sort((a, b) => {
                 const aIdx = priorityOrder.indexOf(a.id);
                 const bIdx = priorityOrder.indexOf(b.id);
@@ -418,6 +420,12 @@ export class WindowManager {
                     win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
                     win.element.style.top = padding + 'px';
                     rightY = padding + mapsHeight + padding;
+                } else if (win.id === 'window-panopticon') {
+                    win.element.style.width = rightColWidth + 'px';
+                    win.element.style.height = panopticonHeight + 'px';
+                    win.element.style.left = padding + leftColWidth + padding + midColWidth + padding + 'px';
+                    win.element.style.top = rightY + 'px';
+                    rightY += panopticonHeight + padding;
                 } else if (win.id === 'window-graph') {
                     win.element.style.width = rightColWidth + 'px';
                     win.element.style.height = graphHeight + 'px';

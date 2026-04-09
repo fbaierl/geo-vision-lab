@@ -8,6 +8,7 @@ import { OntologyImportExportHandler } from './import-export.js';
 import { SessionManager } from './sessions.js';
 import { initModelStatusMonitoring } from './model-status.js';
 import { initRAGConfig } from './rag-config.js';
+import { initPanopticon, cleanupPanopticon } from './panopticon.js';
 // Import chat module (initializes models, GPU status, and event listeners)
 import './chat.js';
 
@@ -36,6 +37,39 @@ initModelStatusMonitoring(chatInput, sendBtn);
 
 // Initialize RAG config
 initRAGConfig();
+
+// Initialize Panopticon globe when restored from minimized state
+let panopticonInitialized = false;
+
+function initializePanopticon() {
+    if (panopticonInitialized) return;
+    panopticonInitialized = true;
+
+    const globeContainer = document.getElementById('globe-container');
+    if (!globeContainer) {
+        console.warn('Panopticon: globe-container not found');
+        return;
+    }
+
+    initPanopticon(globeContainer);
+}
+
+// Hook restoreWindow — panopticon is minimized by default,
+// so init only fires when the user explicitly opens it
+const wm = windowManager;
+const origRestore = wm.restoreWindow.bind(wm);
+wm.restoreWindow = function(id) {
+    const result = origRestore(id);
+    if (id === 'window-panopticon') {
+        setTimeout(initializePanopticon, 150);
+    }
+    return result;
+};
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    cleanupPanopticon();
+});
 
 // Close menus when clicking outside
 document.addEventListener('click', function(e) {

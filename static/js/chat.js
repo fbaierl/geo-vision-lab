@@ -280,6 +280,7 @@ function handleOntologyUpdated(ontology) {
         }
     }
 
+    // Render Leaflet map
     const mapContainer = document.getElementById('map-container');
     const mapEmptyState = document.getElementById('map-empty-state');
     const locations = Object.values(ontology.entities || {}).filter(

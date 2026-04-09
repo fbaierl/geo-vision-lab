@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import chat, health, models, ontology, sessions, rag_config
 from app.api.routes import settings as settings_router
+from app.api.routes import panopticon
 
 
 class PollingFilter(logging.Filter):
@@ -69,6 +70,7 @@ app.include_router(settings_router.router, tags=["settings"])
 app.include_router(ontology.router, tags=["ontology"])
 app.include_router(sessions.router, tags=["sessions"])
 app.include_router(rag_config.router, tags=["rag"])
+app.include_router(panopticon.router, tags=["panopticon"])
 
 # Ensure static directories exist
 os.makedirs("static", exist_ok=True)

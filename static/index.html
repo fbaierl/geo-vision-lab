@@ -10,6 +10,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://unpkg.com/globe.gl@2/dist/globe.gl.min.js"></script>
+    <link rel="stylesheet" href="/ui/panopticon.css">
     <link rel="stylesheet" href="/ui/style.css">
 </head>
 <body>
@@ -359,6 +361,41 @@
             <div class="window-resize-handle corner"></div>
         </div>
 
+        <!-- PANOPTICON WINDOW (minimized by default) -->
+        <div class="window panopticon-window minimized" id="window-panopticon" data-window="panopticon">
+            <div class="window-header">
+                <div class="window-title">
+                    <span>▸</span>
+                    <span>Panopticon</span>
+                </div>
+                <div class="window-controls">
+                    <button class="window-btn minimize" title="Minimize">−</button>
+                    <button class="window-btn maximize" title="Maximize">□</button>
+                    <button class="window-btn close" title="Close">×</button>
+                </div>
+            </div>
+            <div class="window-content">
+                <div class="panopticon-wrapper">
+                    <div id="globe-container"></div>
+                    <div class="panopticon-status-bar">
+                        <div class="status-left">
+                            <div class="live-indicator">
+                                <div class="live-dot"></div>
+                                <span class="live-text">LIVE</span>
+                            </div>
+                            <span id="panopticon-aircraft-count" class="aircraft-count">0 aircraft</span>
+                        </div>
+                        <div class="status-right">
+                            <span id="panopticon-timestamp" class="timestamp">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="window-resize-handle right"></div>
+            <div class="window-resize-handle bottom"></div>
+            <div class="window-resize-handle corner"></div>
+        </div>
+
         <!-- ONTOLOGY WINDOW -->
         <div class="window graph-window" id="window-graph" data-window="graph">
             <div class="window-header">
@@ -556,6 +593,10 @@
         <div class="shelf-item" data-target="window-maps" title="Toggle Maps Window">
             <span class="shelf-icon">◈</span>
             <span class="shelf-label">Maps</span>
+        </div>
+        <div class="shelf-item minimized" data-target="window-panopticon" title="Toggle Panopticon Window">
+            <span class="shelf-icon">◉</span>
+            <span class="shelf-label">Panopticon</span>
         </div>
         <div class="shelf-item" data-target="window-graph" title="Toggle Ontology Window">
             <span class="shelf-icon">⬡</span>

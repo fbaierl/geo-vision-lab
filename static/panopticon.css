@@ -1,0 +1,265 @@
+/**
+ * Panopticon 3D Globe — Dark high-contrast situational awareness styling
+ * Scoped under #window-panopticon to prevent CSS conflicts
+ */
+
+/* ═══ PANOPTICON WINDOW ═══ */
+#window-panopticon {
+    --panopticon-bg: #0d0f14;
+    --panopticon-panel: #15171e;
+    --panopticon-border: #2a2d37;
+    --panopticon-cyan: #3daee9;
+    --panopticon-amber: #ffab00;
+    --panopticon-text: #e0e0e0;
+    --panopticon-text-muted: #888;
+    --panopticon-hover: #1e2128;
+}
+
+#window-panopticon {
+    width: 800px;
+    height: 600px;
+}
+
+/* ═══ GLOBE CONTAINER ═══ */
+#window-panopticon .window-content {
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.panopticon-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--panopticon-bg);
+    overflow: hidden;
+}
+
+.panopticon-wrapper > #globe-container {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    position: relative;
+    background: var(--panopticon-bg);
+}
+
+#globe-container canvas {
+    display: block;
+}
+
+/* ═══ LOADING STATE ═══ */
+.panopticon-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 100;
+    background: var(--panopticon-bg);
+}
+
+.panopticon-loading .spinner {
+    width: 64px;
+    height: 64px;
+    border: 4px solid var(--panopticon-border);
+    border-top-color: var(--panopticon-cyan);
+    border-radius: 50%;
+    animation: panopticon-spin 1s linear infinite;
+    box-shadow: 0 0 20px rgba(61, 174, 233, 0.3);
+}
+
+@keyframes panopticon-spin {
+    to { transform: rotate(360deg); }
+}
+
+.panopticon-loading .loading-text {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    color: var(--panopticon-text-muted);
+}
+
+/* ═══ EMPTY STATE ═══ */
+.panopticon-empty-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    z-index: 10;
+}
+
+.panopticon-empty-state .empty-icon {
+    font-size: 3rem;
+    color: var(--panopticon-cyan);
+    opacity: 0.5;
+}
+
+.panopticon-empty-state .empty-text {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.9rem;
+    color: var(--panopticon-text);
+}
+
+.panopticon-empty-state .empty-subtext {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--panopticon-text-muted);
+}
+
+/* ═══ ERROR STATE ═══ */
+.panopticon-error-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    z-index: 10;
+    padding: 20px;
+    background: rgba(229, 57, 53, 0.1);
+    border: 1px solid var(--red, #e53935);
+    border-radius: 8px;
+}
+
+.panopticon-error-state .error-icon {
+    font-size: 2rem;
+    color: var(--red, #e53935);
+}
+
+.panopticon-error-state .error-text {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* ═══ HOVER TOOLTIP ═══ */
+.panopticon-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--panopticon-panel);
+    border: 1px solid var(--panopticon-cyan);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--panopticon-text);
+    box-shadow: 0 0 20px rgba(61, 174, 233, 0.3);
+    z-index: 100;
+    max-width: 250px;
+    backdrop-filter: blur(8px);
+}
+
+.panopticon-tooltip .tooltip-callsign {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--panopticon-cyan);
+    margin-bottom: 6px;
+}
+
+.panopticon-tooltip .tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.panopticon-tooltip .tooltip-label {
+    color: var(--panopticon-text-muted);
+}
+
+.panopticon-tooltip .tooltip-value {
+    color: var(--panopticon-text);
+    font-weight: 600;
+}
+
+/* ═══ STATUS BAR ═══ */
+.panopticon-status-bar {
+    height: 32px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    background: var(--panopticon-panel);
+    border-top: 1px solid var(--panopticon-border);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.7rem;
+    color: var(--panopticon-text-muted);
+    flex-shrink: 0;
+}
+
+.panopticon-status-bar .status-left,
+.panopticon-status-bar .status-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.panopticon-status-bar .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.panopticon-status-bar .live-dot {
+    width: 8px;
+    height: 8px;
+    background: #7cb342;
+    border-radius: 50%;
+    animation: panopticon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes panopticon-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px #7cb342; }
+    50% { opacity: 0.5; box-shadow: 0 0 8px #7cb342; }
+}
+
+.panopticon-status-bar .live-text {
+    color: #7cb342;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.panopticon-status-bar .aircraft-count {
+    color: var(--panopticon-cyan);
+    font-weight: 600;
+}
+
+.panopticon-status-bar .timestamp {
+    color: var(--panopticon-text-muted);
+}
+
+/* ═══ GLOBE.GL OVERRIDES ═══ */
+#globe-container .globe-tooltip {
+    background: var(--panopticon-panel) !important;
+    border: 1px solid var(--panopticon-cyan) !important;
+    border-radius: 6px !important;
+    padding: 10px 14px !important;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+    font-size: 0.75rem !important;
+    color: var(--panopticon-text) !important;
+    box-shadow: 0 0 20px rgba(61, 174, 233, 0.3) !important;
+}
+
+/* Ensure globe controls are visible on dark background */
+#globe-container .scene-container .controls {
+    filter: brightness(1.2);
+}

@@ -1865,6 +1865,14 @@ html, body {
     color: var(--accent-bright);
 }
 
+/* ═══ PANOPTICON WINDOW ═══ */
+.window.panopticon-window {
+    width: 800px;
+    height: 600px;
+    right: 10px;
+    bottom: 10px;
+}
+
 /* ═══ TYPING INDICATOR ═══ */
 #typing-indicator {
     display: none;
