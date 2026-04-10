@@ -4,6 +4,8 @@ import wikipedia
 import logging
 import concurrent.futures
 
+from .news_archive_search import news_archive_search as _news_archive_search
+
 logger = logging.getLogger("agent_flow")
 
 
@@ -119,4 +121,4 @@ def duckduckgo_search(query: str) -> str:
         return f"Failed to retrieve duckduckgo web information on '{query}'. Error: {e}"
 
 
-tools = [web_search, duckduckgo_search]
+tools = [web_search, duckduckgo_search, _news_archive_search]

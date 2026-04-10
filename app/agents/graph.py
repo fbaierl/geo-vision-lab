@@ -40,6 +40,7 @@ You have access to intel feeds:
 1. `vector_search`: For retrieving information from ANY locally uploaded documents, reports, custom data, or historical intelligence. (Automatically executed before you begin reasoning)
 2. `web_search`: For Wikipedia summaries of background information on active geopolitics.
 3. `duckduckgo_search`: For live web search results regarding current events and general queries.
+4. `news_archive_search`: For historical news archive queries via GDELT 2.0 (global coverage since 1979, includes geolocation coordinates and event categorization).
 
 The archival intelligence from vector search is automatically injected into your context when relevant. Review it first, then use additional tools if you need live or updated information.
 

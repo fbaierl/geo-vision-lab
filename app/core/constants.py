@@ -58,6 +58,7 @@ PHASE_REVISING = "revising"
 TOOL_VECTOR_SEARCH = "vector_search"
 TOOL_WEB_SEARCH = "web_search"
 TOOL_DUCKDUCKGO_SEARCH = "duckduckgo_search"
+TOOL_NEWS_ARCHIVE_SEARCH = "news_archive_search"
 TOOL_REASONING = "reasoning"
 TOOL_QA_REVIEWER = "QA Reviewer"
 
