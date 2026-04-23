@@ -2,8 +2,6 @@ from unittest.mock import patch, MagicMock
 from app.agents.tools import wikipedia_search, duckduckgo_search
 from app.agents.tools.news_archive_search import (
     news_archive_search,
-    _fetch_gdelt,
-    _fetch_newsapi,
 )
 import wikipedia
 
