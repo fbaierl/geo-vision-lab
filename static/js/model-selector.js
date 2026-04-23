@@ -10,7 +10,12 @@ const currentModelDisplay = document.getElementById('current-model');
 // Model selector toggle
 modelToggle.addEventListener('click', (e) => {
     e.stopPropagation();
+    const isOpening = !modelMenu.classList.contains('show');
     modelMenu.classList.toggle('show');
+    // Refresh model list when opening dropdown to get fresh download status
+    if (isOpening) {
+        loadCurrentModel();
+    }
 });
 
 document.addEventListener('click', (e) => {
@@ -142,6 +147,15 @@ function createModelOption(model, isOnlineEnabled) {
     if (model.type === 'online' && !isOnlineEnabled) {
         opt.classList.add('disabled');
         opt.title = 'Enable "Use Online LLM" toggle to select online models';
+    } else if (model.type === 'local' && model.ready === false && !model.current) {
+        // Don't disable the currently active model even if not ready
+        opt.classList.add('disabled');
+        opt.title = 'Model is still downloading — please wait…';
+        // Add downloading indicator
+        const downloadingBadge = document.createElement('span');
+        downloadingBadge.className = 'model-downloading-badge';
+        downloadingBadge.textContent = 'Downloading…';
+        nameContainer.appendChild(downloadingBadge);
     } else {
         opt.addEventListener('click', async function() {
             const selected = this.getAttribute('data-value');
@@ -163,6 +177,8 @@ function createModelOption(model, isOnlineEnabled) {
                     console.error('Failed to switch model:', responseData.message);
                     if (responseData.error === 'groq_api_key_missing') {
                         showErrorModal();
+                    } else if (responseData.error === 'model_not_ready') {
+                        alert(responseData.message || 'Model is still downloading. Please wait.');
                     }
                     loadCurrentModel();
                 }

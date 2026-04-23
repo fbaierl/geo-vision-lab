@@ -18,6 +18,7 @@ services:
              sleep 5 &&
              ollama pull qwen3.5:9b &&
              ollama pull qwen3.5:4b &&
+             ollama pull gemma4:e2b &&
              wait"
     healthcheck:
       test: [ "CMD", "ollama", "list" ]

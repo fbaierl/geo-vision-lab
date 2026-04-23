@@ -845,6 +845,22 @@ html, body {
     border: 1px solid rgba(255, 171, 0, 0.3);
 }
 
+.model-downloading-badge {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    background: rgba(255, 87, 87, 0.15);
+    color: #ff5757;
+    border: 1px solid rgba(255, 87, 87, 0.3);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .model-option-provider {
     font-size: 0.7rem;
     color: var(--text-muted);
