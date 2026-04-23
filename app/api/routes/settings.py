@@ -10,11 +10,24 @@ Provides endpoints for managing runtime configuration including:
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+import httpx
 
 from app.core.config import settings
 
 router = APIRouter()
+
+
+async def get_pulled_ollama_models() -> List[str]:
+    """Get list of models that are already pulled in Ollama."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{settings.OLLAMA_URL}/api/tags")
+            r.raise_for_status()
+            tags_data = r.json()
+            return [m.get("name", "") for m in tags_data.get("models", [])]
+    except Exception:
+        return []
 
 
 class SettingsResponse(BaseModel):
@@ -65,8 +78,12 @@ async def get_settings():
     # Build combined model list with type indicators
     all_models = []
 
+    # Get pulled models from Ollama
+    pulled_models = await get_pulled_ollama_models()
+
     # Add local models
     for model in settings.AVAILABLE_REASONING_MODELS:
+        is_ready = any(model in m for m in pulled_models)
         all_models.append(
             {
                 "id": model,
@@ -75,6 +92,7 @@ async def get_settings():
                 "provider": "Ollama",
                 "current": model == settings.REASONING_LLM_MODEL_NAME
                 and not settings.USE_ONLINE_LLM,
+                "ready": is_ready,
             }
         )
 
@@ -153,6 +171,18 @@ async def update_settings(request: SettingsUpdateRequest):
     if request.model is not None:
         # Try local models first
         if request.model in settings.AVAILABLE_REASONING_MODELS:
+            # Check if model is pulled in Ollama
+            pulled_models = await get_pulled_ollama_models()
+            is_ready = any(request.model in m for m in pulled_models)
+            if not is_ready:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "error": "model_not_ready",
+                        "message": f"Model '{request.model}' is still downloading. Please wait for it to finish.",
+                    },
+                )
             settings.set_reasoning_model(request.model)
             settings.set_online_llm_enabled(False)
         # Then try online models

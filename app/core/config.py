@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # --- LLM Models ---
     REASONING_LLM_MODEL_NAME: str = (
-        "qwen3.5:4b"  # Default: qwen3.5:4b, switchable to qwen3.5:9b
+        "qwen3.5:4b"  # Default: qwen3.5:4b, switchable to qwen3.5:9b, gemma4:e2b
     )
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"  # EU endpoint
 
     # --- Available Reasoning Models ---
-    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b"]
+    AVAILABLE_REASONING_MODELS: list[str] = ["qwen3.5:9b", "qwen3.5:4b", "gemma4:e2b"]
 
     # --- RAG Settings ---
     CHUNK_SIZE: int = 1000
