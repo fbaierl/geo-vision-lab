@@ -65,16 +65,8 @@ class SettingsUpdateRequest(BaseModel):
     online_model: Optional[str] = None
 
 
-@router.get("/settings")
-async def get_settings():
-    """Get all runtime settings.
-
-    Returns current configuration for:
-    - Local LLM (Ollama) models
-    - Online LLM (Groq) models
-    - API key status
-    - Current selections
-    """
+async def build_settings_response():
+    """Build the settings response with current configuration."""
     # Build combined model list with type indicators
     all_models = []
 
@@ -129,6 +121,19 @@ async def get_settings():
         active_model_name=active_model_name,
         active_model_type=active_model_type,
     )
+
+
+@router.get("/settings")
+async def get_settings():
+    """Get all runtime settings.
+
+    Returns current configuration for:
+    - Local LLM (Ollama) models
+    - Online LLM (Groq) models
+    - API key status
+    - Current selections
+    """
+    return await build_settings_response()
 
 
 @router.post("/settings")
@@ -214,4 +219,4 @@ async def update_settings(request: SettingsUpdateRequest):
     container._instances.clear()
 
     # Return updated settings
-    return await get_settings()
+    return await build_settings_response()

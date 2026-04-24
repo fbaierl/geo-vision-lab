@@ -173,7 +173,7 @@ function createModelOption(model, isOnlineEnabled) {
                     body: JSON.stringify({ model: selected })
                 });
                 const responseData = await postRes.json();
-                if (!responseData.success) {
+                if (!postRes.ok) {
                     console.error('Failed to switch model:', responseData.message);
                     if (responseData.error === 'groq_api_key_missing') {
                         showErrorModal();
@@ -181,6 +181,9 @@ function createModelOption(model, isOnlineEnabled) {
                         alert(responseData.message || 'Model is still downloading. Please wait.');
                     }
                     loadCurrentModel();
+                } else {
+                    currentModelDisplay.textContent = responseData.active_model_name;
+                    currentModel = responseData.active_model_name;
                 }
             } catch (e) {
                 console.error('Error switching model:', e);
