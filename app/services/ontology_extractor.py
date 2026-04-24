@@ -129,7 +129,7 @@ class OntologyExtractorService:
         if self.structured_llm and not self.is_groq:
             try:
                 # Use native structured output
-                chain = self.prompt | self.structured_llm
+                chain = (self.prompt | self.structured_llm).with_config({"tags": ["ontology_extractor"]})
                 logger.debug("[ONTOLOGY_EXTRACTOR] Invoking structured LLM...")
                 result = chain.invoke({"query": query, "text": text})
                 logger.info(
@@ -156,7 +156,7 @@ class OntologyExtractorService:
                 # Ollama: use format="json" for better JSON compliance
                 fallback_llm = self.llm.bind(format="json")
 
-            chain = self.prompt | fallback_llm
+            chain = (self.prompt | fallback_llm).with_config({"tags": ["ontology_extractor"]})
             response = chain.invoke({"query": query, "text": text})
             content = response.content
 
@@ -238,7 +238,7 @@ class OntologyExtractorService:
                 # Ollama: use format="json" for better JSON compliance
                 gap_llm = self.llm.bind(format="json")
 
-            chain = self.gap_prompt | gap_llm
+            chain = (self.gap_prompt | gap_llm).with_config({"tags": ["ontology_extractor"]})
             response = chain.invoke(
                 {"query": query, "text": text, "missing_entities": missing_entities_str}
             )

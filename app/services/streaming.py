@@ -418,6 +418,7 @@ async def process_query_stream(
 
             elif kind == "on_chat_model_stream":
                 if _is_suppressed_event(event):
+                    logger.debug(f"[STREAM] Suppressed event from: {event.get('name')}, tags: {event.get('tags')}, metadata: {event.get('metadata', {}).get('langgraph_node')}")
                     continue
                 if "grader" in event_name.lower():
                     continue
@@ -435,6 +436,10 @@ async def process_query_stream(
                         )
                     elif not isinstance(content_chunk, str):
                         content_chunk = str(content_chunk)
+
+                    # Debug: log if content looks like JSON
+                    if content_chunk.strip().startswith('{') or content_chunk.strip().startswith('['):
+                        logger.debug(f"[STREAM] Possible JSON in stream from: {event.get('name')}, tags: {event.get('tags')}, metadata: {event.get('metadata', {}).get('langgraph_node')}")
 
                     for ui_event in parser.process_chunk(content_chunk):
                         yield ui_event

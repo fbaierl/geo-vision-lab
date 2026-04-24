@@ -51,6 +51,8 @@ If archival search found no relevant information, you will see a NOTE telling yo
 Respond in a clear, brief, unclassified military-style format, avoiding robotic language. Always summarize the intel you found.
 
 CRITICAL INSTRUCTION: Before you generate any final response or tool call, you MUST wrap your thought process inside <think>...</think> tags. Do not skip this reasoning step.
+
+IMPORTANT: Do NOT output any JSON in your response. Do NOT include entities, links, or knowledge graph data in your text response. The system will automatically extract ontology data separately.
 """
 
 critic_prompt = """You are a QA Reviewer. Validate the response against these rules:

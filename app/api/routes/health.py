@@ -101,8 +101,8 @@ async def system_status():
                     "status": base_status.value,
                     "gpu_available": gpu_available,
                     "model_loaded": model_info.get("name", "unknown"),
-                    "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
-                    "reviewer_model": settings.REASONING_LLM_MODEL_NAME,
+                    "reasoning_model": settings.ONLINE_LLM_MODEL_NAME if settings.USE_ONLINE_LLM else settings.REASONING_LLM_MODEL_NAME,
+                    "reviewer_model": settings.ONLINE_LLM_MODEL_NAME if settings.USE_ONLINE_LLM else settings.REASONING_LLM_MODEL_NAME,
                     "vram_bytes": vram_bytes,
                     "processing": get_processing_state(),
                     "error": error_msg,
@@ -110,12 +110,13 @@ async def system_status():
 
             # No model currently loaded - GPU is available if Ollama responded
             # (Ollama container has GPU configured in docker-compose.yml)
+            active_model = settings.ONLINE_LLM_MODEL_NAME if settings.USE_ONLINE_LLM else settings.REASONING_LLM_MODEL_NAME
             return {
                 "status": SystemStatusEnum.IDLE.value,
                 "gpu_available": True,
                 "model_loaded": None,
-                "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
-                "reviewer_model": settings.REASONING_LLM_MODEL_NAME,
+                "reasoning_model": active_model,
+                "reviewer_model": active_model,
                 "vram_bytes": 0,
                 "processing": get_processing_state(),
                 "error": error_msg,
@@ -123,12 +124,13 @@ async def system_status():
     except Exception as e:
         # Ollama not reachable - GPU not available
         logger.warning(f"[OLLAMA] /api/ps call failed: {e}")
+        active_model = settings.ONLINE_LLM_MODEL_NAME if settings.USE_ONLINE_LLM else settings.REASONING_LLM_MODEL_NAME
         return {
             "status": SystemStatusEnum.ERROR.value,
             "gpu_available": False,
             "model_loaded": None,
-            "reasoning_model": settings.REASONING_LLM_MODEL_NAME,
-            "reviewer_model": settings.REASONING_LLM_MODEL_NAME,
+            "reasoning_model": active_model,
+            "reviewer_model": active_model,
             "vram_bytes": 0,
             "processing": get_processing_state(),
             "error": str(e),
