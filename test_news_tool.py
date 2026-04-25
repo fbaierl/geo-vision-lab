@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO)
 
 def test_news_search():
     print("Testing news_archive_search with query 'Iran'...")
-    result = news_archive_search("Iran")
+    result = news_archive_search.invoke("Iran")
     print(result)
     if "Location:" in result:
         print("\nSUCCESS: Location found in results.")

@@ -11,8 +11,11 @@ This test:
 import asyncio
 import httpx
 import json
+import pytest
 
 
+@pytest.mark.asyncio
+@pytest.mark.skip(reason="Requires running server on localhost:8000")
 async def test_sse_stream_does_not_include_reasoning_content():
     """Test that the SSE stream doesn't include reasoning content in tool_result."""
     
@@ -40,7 +43,6 @@ async def test_sse_stream_does_not_include_reasoning_content():
                     # Parse SSE events with a timeout
                     events = []
                     reasoning_tool_results = []
-                    done_received = False
                     
                     # Read for max 15 seconds
                     try:
@@ -58,7 +60,6 @@ async def test_sse_stream_does_not_include_reasoning_content():
                                     
                                     # Stop when we get 'done' event
                                     if event.get('type') == 'done':
-                                        done_received = True
                                         break
                                         
                                 except json.JSONDecodeError:
@@ -100,59 +101,14 @@ async def test_sse_stream_does_not_include_reasoning_content():
             print(f"Error: {e}")
             import traceback
             traceback.print_exc()
-            return False
-                
-        except Exception as e:
-            print(f"Error connecting to server: {e}")
             # Try to check if server is running
             try:
                 health = await client.get("http://localhost:8000/system/status", timeout=3.0)
                 print(f"Server is running, status: {health.status_code}")
-            except:
+            except Exception:
                 print("Server doesn't seem to be running on port 8000")
                 print("Please start the server and try again")
-            return
-        
-        # Parse SSE events
-        events = []
-        reasoning_tool_results = []
-        
-        for line in response.text.split('\n'):
-            line = line.strip()
-            if line.startswith('data: '):
-                data_str = line[6:]  # Remove 'data: ' prefix
-                try:
-                    event = json.loads(data_str)
-                    events.append(event)
-                    
-                    # Collect tool_result events for reasoning
-                    if event.get('type') == 'tool_result' and event.get('tool') == 'reasoning':
-                        reasoning_tool_results.append(event)
-                        
-                except json.JSONDecodeError:
-                    pass
-        
-        print(f"Total events: {len(events)}")
-        print(f"Reasoning tool_result events: {len(reasoning_tool_results)}")
-        
-        # Verify that reasoning tool_result events don't have 'content'
-        for i, event in enumerate(reasoning_tool_results):
-            if 'content' in event:
-                print(f"❌ FAIL: Reasoning tool_result event {i} has 'content' field!")
-                print(f"   Event: {event}")
-                return False
-            else:
-                print(f"✅ Reasoning tool_result event {i} correctly has no 'content' field")
-        
-        # Verify that thinking_* events exist
-        thinking_events = [e for e in events if e.get('type') in ('thinking_start', 'thinking_token', 'thinking_end')]
-        if thinking_events:
-            print(f"✅ Found {len(thinking_events)} thinking events (thinking is properly sent separately)")
-        else:
-            print("⚠️  Warning: No thinking events found (might be using a model without thinking)")
-        
-        print("✅ Test passed: Reasoning content is not in tool_result events!")
-        return True
+            return False
 
 
 if __name__ == "__main__":
