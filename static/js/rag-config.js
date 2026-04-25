@@ -38,13 +38,13 @@ async function loadRAGConfig() {
 }
 
 async function saveRAGConfig(updates) {
+    const statusEl = document.getElementById('rag-config-status');
+    const statusText = document.getElementById('rag-status-text');
+
+    if (statusEl) statusEl.style.display = 'block';
+    if (statusText) statusText.textContent = 'Saving...';
+
     try {
-        const statusEl = document.getElementById('rag-config-status');
-        const statusText = document.getElementById('rag-status-text');
-
-        statusEl.style.display = 'block';
-        statusText.textContent = 'Saving...';
-
         const res = await fetch('/api/v1/rag/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -54,22 +54,24 @@ async function saveRAGConfig(updates) {
         if (!res.ok) throw new Error('Failed to save RAG config');
         const config = await res.json();
 
-        statusText.textContent = 'Configuration saved successfully';
-        statusEl.style.background = 'rgba(124, 179, 66, 0.2)';
-        statusEl.style.color = 'var(--green)';
+        if (statusText) statusText.textContent = 'Configuration saved successfully';
+        if (statusEl) {
+            statusEl.style.background = 'rgba(124, 179, 66, 0.2)';
+            statusEl.style.color = 'var(--green)';
+        }
 
         setTimeout(() => {
-            statusEl.style.display = 'none';
+            if (statusEl) statusEl.style.display = 'none';
         }, 3000);
 
         console.log('[RAG_CONFIG] Saved configuration:', config);
     } catch (error) {
         console.error('[RAG_CONFIG] Failed to save config:', error);
-        const statusEl = document.getElementById('rag-config-status');
-        const statusText = document.getElementById('rag-status-text');
-        statusEl.style.display = 'block';
-        statusText.textContent = 'Failed to save configuration';
-        statusEl.style.background = 'rgba(229, 57, 53, 0.2)';
-        statusEl.style.color = 'var(--red)';
+        if (statusEl) {
+            statusEl.style.display = 'block';
+            if (statusText) statusText.textContent = 'Failed to save configuration';
+            statusEl.style.background = 'rgba(229, 57, 53, 0.2)';
+            statusEl.style.color = 'var(--red)';
+        }
     }
 }

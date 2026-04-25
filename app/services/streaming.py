@@ -161,11 +161,11 @@ class StreamingResponseParser:
                         self.think_buffer += think_content
 
                     yield {"type": "thinking_end"}
+                    # Don't send content - thinking already sent via thinking_* events
                     yield {
                         "type": "tool_result",
                         "tool": "reasoning",
                         "summary": "Reasoning steps completed",
-                        "content": self.think_buffer.strip(),
                     }
                     self.think_buffer = ""
                     self.buffer = self.buffer[idx + len("</think>") :]
@@ -221,11 +221,11 @@ class StreamingResponseParser:
         else:
             yield from self._yield_think_token(self.buffer)
             yield {"type": "thinking_end"}
+            # Don't send content - thinking already sent via thinking_* events
             yield {
                 "type": "tool_result",
                 "tool": "reasoning",
                 "summary": "Reasoning steps completed",
-                "content": self.think_buffer.strip(),
             }
         self.buffer = ""
 
@@ -405,16 +405,8 @@ async def process_query_stream(
             elif kind == "on_chat_model_end":
                 if _is_suppressed_event(event):
                     continue
-                output = event.get("data", {}).get("output")
-                tool_calls = getattr(output, "tool_calls", [])
-                content = getattr(output, "content", "")
-                if tool_calls and content:
-                    yield {
-                        "type": "tool_result",
-                        "tool": "reasoning",
-                        "summary": "Reasoning steps completed",
-                        "content": content.strip(),
-                    }
+                # Don't send tool_result with content - tokens already streamed
+                # The thinking content is sent via thinking_* events
 
             elif kind == "on_chat_model_stream":
                 if _is_suppressed_event(event):
