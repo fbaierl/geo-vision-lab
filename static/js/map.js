@@ -2,8 +2,18 @@
  * Map rendering module - handles Leaflet map initialization and location rendering
  */
 
+const VIEW_PRESETS = {
+    global:   { lat: 20,  lon: 0,    zoom: 2 },
+    americas: { lat: 15,  lon: -90,  zoom: 3 },
+    mena:     { lat: 25,  lon: 45,   zoom: 4 },
+    europe:   { lat: 50,  lon: 15,   zoom: 4 },
+    asia:     { lat: 35,  lon: 100,  zoom: 4 },
+    africa:   { lat: 5,   lon: 20,   zoom: 3 },
+};
+
 let mapInstance = null;
 let mapMarkers = [];
+let currentView = 'global';
 
 export function getMapInstance() {
     return mapInstance;
@@ -16,35 +26,31 @@ export function getMapMarkers() {
 export function renderMap(locations, container) {
     if (!container) return;
 
-    // Properly remove existing map
     if (mapInstance) {
         mapInstance.remove();
         mapInstance = null;
     }
     mapMarkers = [];
-
-    // Clear container
     container.innerHTML = '';
 
     if (!locations || locations.length === 0) return;
 
-    // Sort by relevance
     const sortedLocations = [...locations].sort((a, b) =>
         (b.relevance || 0.5) - (a.relevance || 0.5)
     );
 
-    // Small delay to ensure container is visible and sized
+    buildViewPresets(container);
+
     setTimeout(() => {
         if (container.offsetWidth === 0 || container.offsetHeight === 0) {
             console.warn('Map container has no dimensions, waiting...');
-            setTimeout(() => initMap(), 100);
+            setTimeout(() => initMap(sortedLocations), 100);
             return;
         }
-        initMap();
+        initMap(sortedLocations);
     }, 50);
 
-    function initMap() {
-        // Create map
+    function initMap(locations) {
         mapInstance = L.map(container, {
             zoomControl: true,
             attributionControl: true,
@@ -52,27 +58,23 @@ export function renderMap(locations, container) {
             zoomAnimation: true
         });
 
-        // Add dark tile layer
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
             subdomains: 'abcd',
             maxZoom: 19
         }).addTo(mapInstance);
 
-        // Create boundary pane
         mapInstance.createPane('boundaryPane');
         mapInstance.getPane('boundaryPane').style.zIndex = 600;
         mapInstance.getPane('boundaryPane').style.pointerEvents = 'none';
 
         const bounds = [];
 
-        // Process locations
-        sortedLocations.forEach((loc, idx) => {
+        locations.forEach((loc, idx) => {
             const isPrimary = idx === 0;
             const color = isPrimary ? '#3daee9' : (idx < 3 ? '#5ec0ff' : '#88c0d0');
             const size = isPrimary ? 16 : 12;
 
-            // Add marker
             const icon = L.divIcon({
                 className: 'map-marker',
                 html: `<div style="width:${size}px; height:${size}px; background:${color}; border-radius:50%; box-shadow:0 0 12px ${color}, 0 0 20px ${color}; border:2px solid white;"></div>`,
@@ -85,7 +87,6 @@ export function renderMap(locations, container) {
             mapMarkers.push({ marker, loc, color });
         });
 
-        // Fit map to bounds
         if (bounds.length > 0) {
             setTimeout(() => {
                 try {
@@ -99,9 +100,43 @@ export function renderMap(locations, container) {
             }, 50);
         }
 
-        // Build legend
-        buildMapLegend(sortedLocations);
+        if (currentView && VIEW_PRESETS[currentView]) {
+            const v = VIEW_PRESETS[currentView];
+            mapInstance.setView([v.lat, v.lon], v.zoom);
+        }
+
+        buildMapLegend(locations);
     }
+}
+
+function buildViewPresets(container) {
+    const wrapper = container.closest('.map-wrapper');
+    if (!wrapper) return;
+
+    let bar = wrapper.querySelector('.map-view-presets');
+    if (bar) bar.remove();
+
+    bar = document.createElement('div');
+    bar.className = 'map-view-presets';
+
+    const labels = { global: '\u{1F30D} Global', americas: '\u{1F30E} Americas', mena: 'MENA', europe: '\u{1F1EA}\u{1F1FA} Europe', asia: '\u{1F30F} Asia', africa: '\u{1F30D} Africa' };
+
+    Object.keys(VIEW_PRESETS).forEach(key => {
+        const btn = document.createElement('button');
+        btn.className = `map-view-btn${currentView === key ? ' active' : ''}`;
+        btn.dataset.view = key;
+        btn.textContent = labels[key] || key;
+        btn.addEventListener('click', () => {
+            currentView = key;
+            const v = VIEW_PRESETS[key];
+            mapInstance.flyTo([v.lat, v.lon], v.zoom, { duration: 1.2 });
+            wrapper.querySelectorAll('.map-view-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+        bar.appendChild(btn);
+    });
+
+    container.parentNode.insertBefore(bar, container);
 }
 
 function buildMapLegend(locations) {
@@ -123,7 +158,6 @@ function buildMapLegend(locations) {
 
     legend.innerHTML = html;
 
-    // Add click handlers to focus on location
     legend.querySelectorAll('.map-legend-item').forEach((item, idx) => {
         item.addEventListener('click', () => {
             if (mapMarkers[idx] && mapInstance) {
