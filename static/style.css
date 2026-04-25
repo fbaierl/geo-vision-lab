@@ -1881,6 +1881,22 @@ html, body {
     color: var(--accent-bright);
 }
 
+/* ═══ MAP VIEW PRESETS ═══ */
+.map-view-presets {
+    display: flex; gap: 3px; padding: 4px 8px;
+    background: var(--bg-panel); border-bottom: 1px solid var(--border);
+}
+.map-view-btn {
+    padding: 3px 8px; border-radius: 4px; font-size: 10px;
+    background: transparent; border: 1px solid transparent;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+    font-family: var(--font-ui);
+}
+.map-view-btn:hover { background: var(--bg-hover); color: var(--text); }
+.map-view-btn.active {
+    background: var(--accent-dim); border-color: var(--accent); color: var(--accent-bright);
+}
+
 /* ═══ TYPING INDICATOR ═══ */
 #typing-indicator {
     display: none;
