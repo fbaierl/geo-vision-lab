@@ -209,12 +209,12 @@ graph TB
         MDB[("MongoDB 8.2+<br/>(Vector Search)")]
         N4J[("Neo4j 5.26<br/>(Ontology Graph)")]
         OL["Ollama<br/>(qwen3.5 LLM)"]
+        NOM["Nominatim<br/>(Self-Hosted Geocoding)"]
     end
 
     subgraph Tools["External Tools"]
         WEB["DuckDuckGo<br/>(Live Search)"]
         WIKI["Wikipedia API"]
-        NOM["Nominatim<br/>(Geocoding)"]
     end
 
     UI --> API
@@ -222,9 +222,9 @@ graph TB
     AGENT --> MDB
     AGENT --> N4J
     AGENT --> OL
+    AGENT --> NOM
     AGENT --> WEB
     AGENT --> WIKI
-    AGENT --> NOM
 ```
 
 ### Data Storage Strategy: Polyglot Persistence
@@ -287,6 +287,7 @@ This orchestrates:
 - MongoDB with vector search index
 - Neo4j graph database for ontology storage
 - Ollama pulling qwen3.5:9b and qwen3.5:4b models
+- Nominatim self-hosted geocoding service (Europe OSM data)
 - Document ingestion and chunking
 - FastAPI backend with streaming
 - Grafana + Loki observability stack
@@ -298,10 +299,71 @@ This orchestrates:
 | Web Interface | [localhost:8000](http://localhost:8000) | — |
 | MongoDB Browser | [localhost:8081](http://localhost:8081) | `admin` / `geovision` |
 | Neo4j Browser | [localhost:7474](http://localhost:7474) | `neo4j` / `geovision` |
+| Nominatim Geocoding | [localhost:8083](http://localhost:8083) | — |
 | Container Logs | [localhost:9999](http://localhost:9999) | — |
 | Grafana Dashboards | [localhost:3000](http://localhost:3000) | `admin` / `geovision` |
 
 **Optional: LangSmith Tracing** - See [docs/langsmith.md](docs/langsmith.md) for setup.
+
+---
+
+## Self-Hosted Nominatim Geocoding
+
+GeoVision Lab includes a **self-hosted Nominatim service** for geocoding location names to coordinates. This avoids rate limiting issues with the public Nominatim API (which limits to 1 request/second) and provides faster, more reliable geocoding.
+
+### Configuration
+
+The self-hosted Nominatim service is enabled by default in Docker Compose. It pre-loads OpenStreetMap data for Europe during initial startup.
+
+**Environment Variables:**
+
+```bash
+# Self-hosted Nominatim (default)
+NOMINATIM_URL=http://nominatim:8080/search
+NOMINATIM_TIMEOUT=10
+```
+
+**To use the public Nominatim API instead**, leave `NOMINATIM_URL` empty in your `.env` file:
+
+```bash
+NOMINATIM_URL=
+```
+
+The application will automatically fall back to the public API if the self-hosted service is unavailable.
+
+### Resource Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| RAM | 4 GB | 8 GB |
+| Storage | 20 GB | 50 GB (SSD) |
+| CPU | 2 cores | 4 cores |
+| Initial Import | ~60 min | ~30 min |
+
+### Initial Import
+
+On first startup, Nominatim downloads and imports Europe OSM data from Geofabrik. This takes **30-60 minutes** depending on your hardware and network speed. The service health check will monitor import progress.
+
+**For development/testing**, you can use smaller extracts by modifying `docker-compose.yml`:
+
+```yaml
+environment:
+  - PBF_URL=https://download.geofabrik.de/germany-latest.osm.pbf
+  - REPLICATION_URL=https://download.geofabrik.de/germany-updates/
+```
+
+### Access
+
+- **API Endpoint**: `http://localhost:8083/search?q=Berlin&format=json`
+- **Web Interface**: [localhost:8083](http://localhost:8083)
+
+### Benefits
+
+- No rate limiting
+- Faster response times (local network)
+- Reliable availability
+- Full control over data updates
+- Better for development/testing
 
 ---
 
@@ -486,7 +548,7 @@ geo-vision-lab/
 | **Agent Framework** | LangGraph + MemorySaver (with ontology subgraph) |
 | **Backend API** | FastAPI + uvicorn |
 | **Frontend UI** | Vanilla JS + Browser OS-style window manager + Knowledge Graph visualization |
-| **Geocoding** | Nominatim API (public or self-hosted) |
+| **Geocoding** | Nominatim (self-hosted with public API fallback) |
 | **Testing** | PyTest + Testcontainers |
 | **CI/CD** | GitHub Actions |
 | **Observability** | Grafana + Loki + Dozzle |
