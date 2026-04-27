@@ -79,7 +79,8 @@ loadCurrentModel();
 export function addMessage(content, isUser = false) {
     const msg = document.createElement('div');
     msg.className = `chat-message ${isUser ? 'user' : ''}`;
-    msg.innerHTML = `<div class="chat-message-content markdown-content">${content}</div>`;
+    const rendered = (!isUser && typeof marked !== 'undefined') ? marked.parse(content) : content;
+    msg.innerHTML = `<div class="chat-message-content markdown-content">${rendered}</div>`;
     chatMessages.appendChild(msg);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     return msg.querySelector('.chat-message-content');
