@@ -19,10 +19,14 @@ class OntologyExtractorService:
     def __init__(self, llm):
         self.llm = llm
         # Detect Groq even when wrapped with with_config()
+        # Check the underlying LLM if it's wrapped in a RunnableBinding
+        underlying_llm = llm
+        if hasattr(llm, "bound"):
+            underlying_llm = llm.bound
         self.is_groq = (
-            isinstance(llm, ChatGroq)
-            or "ChatGroq" in type(llm).__name__
-            or "ChatGroq" in str(type(llm))
+            isinstance(underlying_llm, ChatGroq)
+            or "ChatGroq" in type(underlying_llm).__name__
+            or "ChatGroq" in str(type(underlying_llm))
         )
 
         # We use a formal structured system prompt with concrete examples.
