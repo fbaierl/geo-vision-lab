@@ -104,8 +104,20 @@ export class PendingOntologyManager {
                 const data = await res.json();
                 this._showStatus(`✓ Approved ${data.approved_entities} entities, ${data.approved_links} links`, 'success');
                 await this.loadPendingOntology();
-                if (window.ontologyTabManager) {
-                    window.ontologyTabManager.loadOntology();
+                try {
+                    const ontRes = await fetch(`/api/ontology/${this.threadId}`);
+                    if (ontRes.ok) {
+                        const ontData = await ontRes.json();
+                        const ontology = {
+                            entities: Object.fromEntries((ontData.entities || []).map(e => [e.name, e])),
+                            links: Object.fromEntries((ontData.links || []).map(l => [`${l.source_name}-${l.target_name}-${l.type}`, l])),
+                        };
+                        if (window.ontologyTabManager) {
+                            window.ontologyTabManager.updateOntology(ontology);
+                        }
+                    }
+                } catch (e2) {
+                    console.warn('[PENDING] Failed to reload ontology after approve:', e2);
                 }
             } else {
                 this._showStatus('Approval failed', 'error');

@@ -22,6 +22,10 @@ export class MainTabManager {
                 this.switchTab(item.dataset.target.replace('panel-', ''));
             });
         });
+        const refreshBtn = document.getElementById('sources-refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this._renderSources());
+        }
     }
 
     switchTab(tabName) {
@@ -62,7 +66,7 @@ export class MainTabManager {
         container.innerHTML = log.slice().reverse().map((entry, i) => {
             const tools = entry.tools || [];
             const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
-            const toolBadges = tools.map(t => {
+            const toolBadges = tools.filter(t => t && t.name).map(t => {
                 let cls = '';
                 const tl = t.name.toLowerCase();
                 if (tl.includes('rag') || tl.includes('vector')) cls = 'rag';
@@ -71,7 +75,7 @@ export class MainTabManager {
                 return `<span class="intel-log-tool-badge ${cls}">${escapeHtml(t.name)}</span>`;
             }).join('');
 
-            const toolResults = tools.filter(t => t.summary).map(t => `
+            const toolResults = tools.filter(t => t && t.summary && t.name).map(t => `
                 <div class="intel-log-tool-result">
                     <span class="intel-log-tool-name">${escapeHtml(t.name)}</span>
                     <span class="intel-log-tool-summary">${escapeHtml(t.summary)}</span>
