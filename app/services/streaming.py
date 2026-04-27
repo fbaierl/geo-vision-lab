@@ -496,6 +496,15 @@ async def process_query_stream(
                     msg_dict["role"] = "tool"
                 serializable_messages.append(msg_dict)
 
+            # Serialize pending_ontology from graph state
+            pending_ontology_data = None
+            pending_state = final_state.values.get("pending_ontology")
+            if pending_state:
+                if hasattr(pending_state, "model_dump"):
+                    pending_ontology_data = pending_state.model_dump()
+                elif isinstance(pending_state, dict):
+                    pending_ontology_data = pending_state
+
             import httpx
 
             async with httpx.AsyncClient() as client:
@@ -503,6 +512,8 @@ async def process_query_stream(
                 save_data = {
                     "messages": serializable_messages,
                 }
+                if pending_ontology_data is not None:
+                    save_data["pending_ontology"] = pending_ontology_data
                 await client.post(save_url, json=save_data, timeout=10.0)
         except Exception as save_error:
             logger.error(f"[AUTO-SAVE] Error: {save_error}")

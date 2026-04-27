@@ -350,9 +350,11 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
 
         truly_new_links = {}
         for uuid_str, link in new_pending.links.items():
-            source_entity = truly_new_entities.get(str(link.source_uuid))
-            target_entity = truly_new_entities.get(str(link.target_uuid))
-            if source_entity and target_entity:
+            source_in_pending = str(link.source_uuid) in truly_new_entities
+            source_in_committed = str(link.source_uuid) in neo4j_ontology.entities
+            target_in_pending = str(link.target_uuid) in truly_new_entities
+            target_in_committed = str(link.target_uuid) in neo4j_ontology.entities
+            if (source_in_pending or source_in_committed) and (target_in_pending or target_in_committed):
                 truly_new_links[uuid_str] = link
 
         new_pending = SessionOntology(
@@ -494,6 +496,27 @@ def get_graph():
 
 
 app_graph = get_graph()
+
+
+def update_graph_pending_ontology(thread_id: str, pending_ontology_data: dict):
+    """Sync pending_ontology from MongoDB back into the LangGraph checkpointer state.
+
+    Called after approve/reject to keep graph state consistent with MongoDB.
+    """
+    from app.models.ontology import SessionOntology
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        current_state = app_graph.get_state(config)
+        current_values = dict(current_state.values)
+        if pending_ontology_data:
+            pending_ontology = SessionOntology.model_validate(pending_ontology_data)
+        else:
+            pending_ontology = SessionOntology()
+        current_values[STATE_KEY_PENDING_ONTOLOGY] = pending_ontology
+        app_graph.update_state(config, current_values)
+    except Exception as e:
+        import logging
+        logging.getLogger("agent_flow").warning(f"[GRAPH] Failed to update graph pending_ontology: {e}")
 
 
 # External interface

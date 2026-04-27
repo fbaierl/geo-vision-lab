@@ -30,6 +30,7 @@ class SessionUpdate(BaseModel):
 
 class SessionSave(BaseModel):
     messages: List[Dict[str, Any]] = Field(default_factory=list)
+    pending_ontology: Optional[Dict[str, Any]] = None
 
 
 class SessionListResponse(BaseModel):
@@ -272,22 +273,23 @@ async def save_session(thread_id: str, data: SessionSave):
         "created_at": now,
         "updated_at": now,
         "messages": data.messages,
+        "pending_ontology": data.pending_ontology or {"entities": {}, "links": {}},
     }
 
     # Try to find existing session first
     existing = db.sessions.find_one({"thread_id": thread_id})
 
     if existing:
-        # Update existing session (preserve pending_ontology)
+        update_fields = {
+            "messages": data.messages,
+            "updated_at": now,
+            "title": title,
+        }
+        if data.pending_ontology is not None:
+            update_fields["pending_ontology"] = data.pending_ontology
         db.sessions.update_one(
             {"thread_id": thread_id},
-            {
-                "$set": {
-                    "messages": data.messages,
-                    "updated_at": now,
-                    "title": title,
-                }
-            },
+            {"$set": update_fields},
         )
     else:
         # Create new session
@@ -400,6 +402,17 @@ async def approve_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]
         }},
     )
 
+    # Sync remaining pending back to LangGraph checkpointer
+    try:
+        from app.agents.graph import update_graph_pending_ontology
+        update_graph_pending_ontology(thread_id, {
+            "entities": remaining_entities,
+            "links": remaining_links,
+        })
+    except Exception as sync_err:
+        import logging
+        logging.getLogger("agent_flow").warning(f"[APPROVE] Failed to sync graph state: {sync_err}")
+
     return {
         "status": "success",
         "approved_entities": len(pending_entities),
@@ -465,6 +478,17 @@ async def reject_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]]
             "updated_at": datetime.utcnow(),
         }},
     )
+
+    # Sync remaining pending back to LangGraph checkpointer
+    try:
+        from app.agents.graph import update_graph_pending_ontology
+        update_graph_pending_ontology(thread_id, {
+            "entities": remaining_entities,
+            "links": remaining_links,
+        })
+    except Exception as sync_err:
+        import logging
+        logging.getLogger("agent_flow").warning(f"[REJECT] Failed to sync graph state: {sync_err}")
 
     return {
         "status": "success",
