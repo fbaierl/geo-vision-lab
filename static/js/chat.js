@@ -200,6 +200,8 @@ async function sendQuery() {
                         addReasoningResult(evt.tool || 'RAG', evt.summary, evt.hint || `Quality: ${evt.quality}`);
                     } else if (evt.type === 'ontology_updated') {
                         handleOntologyUpdated(evt.ontology);
+                    } else if (evt.type === 'pending_ontology_updated') {
+                        handlePendingOntologyUpdated(evt.pending_ontology);
                     } else if (evt.type === 'token') {
                         typingIndicator.classList.remove('show');
                         appendToMessageLive(responseEl, evt.content);
@@ -326,6 +328,12 @@ function handleOntologyError() {
     }
     if (mapLegend) {
         mapLegend.innerHTML = '<span style="color: var(--amber);">⚠ Ontology extraction failed</span>';
+    }
+}
+
+function handlePendingOntologyUpdated(pendingOntology) {
+    if (window.pendingOntologyManager) {
+        window.pendingOntologyManager.updatePendingOntology(pendingOntology);
     }
 }
 

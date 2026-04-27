@@ -58,6 +58,14 @@ export class SessionManager {
             if (session.ontology && (session.ontology.entities || session.ontology.links)) {
                 this.hydrateOntology(session.ontology);
             }
+
+            // Hydrate pending ontology
+            if (session.pending_ontology && (session.pending_ontology.entities || session.pending_ontology.links)) {
+                this.hydratePendingOntology(session.pending_ontology);
+            }
+
+            // Update pipeline status
+            this.updatePipelineStatus(session);
         } catch (error) {
             console.error('[SESSION] Error loading session data:', error);
         }
@@ -261,5 +269,26 @@ export class SessionManager {
 
     getThreadId() {
         return this.currentThreadId;
+    }
+
+    hydratePendingOntology(pendingOntology) {
+        if (window.pendingOntologyManager) {
+            window.pendingOntologyManager.updatePendingOntology(pendingOntology);
+        }
+    }
+
+    updatePipelineStatus(session) {
+        // Update User stage
+        const userValue = document.getElementById('pipeline-user-value');
+        if (userValue) {
+            userValue.textContent = '1 session';
+        }
+
+        // Update Ontology stage
+        const ontologyValue = document.getElementById('pipeline-ontology-value');
+        if (ontologyValue && session.ontology) {
+            const entityCount = Object.keys(session.ontology.entities || {}).length;
+            ontologyValue.textContent = `${entityCount} entities`;
+        }
     }
 }

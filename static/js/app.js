@@ -8,6 +8,8 @@ import { OntologyImportExportHandler } from './import-export.js';
 import { SessionManager } from './sessions.js';
 import { initModelStatusMonitoring } from './model-status.js';
 import { initRAGConfig } from './rag-config.js';
+import { MainTabManager } from './main-tabs.js';
+import { PendingOntologyManager } from './pending-ontology.js';
 // Import chat module (initializes models, GPU status, and event listeners)
 import './chat.js';
 
@@ -23,10 +25,22 @@ window.ontologyTabManager = ontologyTabManager;
 const ontologyImportExport = new OntologyImportExportHandler();
 window.ontologyImportExport = ontologyImportExport;
 
+// Initialize main tab manager (User, Sources, Ontology)
+const mainTabManager = new MainTabManager();
+window.mainTabManager = mainTabManager;
+
+// Initialize pending ontology manager
+const pendingOntologyManager = new PendingOntologyManager();
+window.pendingOntologyManager = pendingOntologyManager;
+
 // Initialize session manager
 (async function initSessionManager() {
     const sessionManager = new SessionManager();
     await sessionManager.init();
+    
+    // After session init, load pending ontology
+    const threadId = localStorage.getItem('geovision_thread_id') || 'default';
+    pendingOntologyManager.setThreadId(threadId);
 })();
 
 // Initialize model status monitoring
@@ -44,4 +58,9 @@ document.addEventListener('click', function(e) {
             menu.classList.remove('open');
         }
     });
+});
+
+// Snap layout button toggles desktop mode
+document.getElementById('snap-layout-btn')?.addEventListener('click', () => {
+    document.body.classList.toggle('desktop-mode');
 });

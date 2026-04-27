@@ -22,6 +22,7 @@ from app.core.constants import (
     STATE_KEY_MESSAGES,
     STATE_KEY_VECTOR_SEARCH_RESULTS,
     STATE_KEY_ONTOLOGY,
+    STATE_KEY_PENDING_ONTOLOGY,
     STATE_KEY_VALIDATION_ATTEMPTS,
     STATE_KEY_IS_VALID,
     STATE_KEY_RAG_CONTEXT,
@@ -220,7 +221,8 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
     """
     Run the ontology processing sub-graph.
 
-    Loads existing ontology from Neo4j, merges new extraction, saves back.
+    Extracts ontology delta and saves as pending (not merged to Neo4j).
+    User reviews and approves pending changes in batch.
     """
     logger.info("=" * 80)
     logger.info("[ONTOLOGY_SUBGRAPH] Starting ontology processing sub-graph")
@@ -272,12 +274,15 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
 
     if not assistant_response:
         logger.info("[ONTOLOGY_SUBGRAPH] No response content to process")
-        return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
+        return {
+            STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {}),
+            STATE_KEY_PENDING_ONTOLOGY: state.get(STATE_KEY_PENDING_ONTOLOGY, {}),
+        }
 
     try:
-        # Load existing ontology from Neo4j (cross-session persistence)
+        # Load existing ontology from Neo4j (committed/approved)
         logger.info(
-            f"[ONTOLOGY_SUBGRAPH] Loading existing ontology from Neo4j (thread={thread_id})"
+            f"[ONTOLOGY_SUBGRAPH] Loading committed ontology from Neo4j (thread={thread_id})"
         )
         try:
             ontology_service = get_ontology_service()
@@ -301,7 +306,7 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
             f"[ONTOLOGY_SUBGRAPH] Invoking sub-graph with {len(assistant_response)} chars of assistant response"
         )
 
-        # Run sub-graph
+        # Run sub-graph to extract new delta
         subgraph_result = ontology_subgraph.invoke(subgraph_input)
         delta = subgraph_result.get("extracted_delta")
 
@@ -312,38 +317,37 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
             )
         else:
             logger.warning("[ONTOLOGY_SUBGRAPH] Sub-graph returned None or empty delta")
+            delta = SessionOntology()
 
-        # Merge: Neo4j ontology + in-memory state + new delta
-        current_ontology = state.get(STATE_KEY_ONTOLOGY)
-        if not current_ontology:
-            current_ontology = SessionOntology()
-        elif isinstance(current_ontology, dict):
-            current_ontology = SessionOntology.model_validate(current_ontology)
+        # Get existing pending_ontology from session state
+        existing_pending = state.get(STATE_KEY_PENDING_ONTOLOGY)
+        if not existing_pending:
+            existing_pending = SessionOntology()
+        elif isinstance(existing_pending, dict):
+            existing_pending = SessionOntology.model_validate(existing_pending)
 
-        # First merge Neo4j state with in-memory state
-        current_ontology = merge_ontologies(neo4j_ontology, current_ontology)
+        # Merge new delta into pending_ontology (NOT into Neo4j)
+        new_pending = merge_ontologies(existing_pending, delta)
 
-        # Then merge the new delta
-        if delta:
-            current_ontology = merge_ontologies(current_ontology, delta)
+        # Build full ontology for display (Neo4j committed + pending)
+        full_ontology = merge_ontologies(neo4j_ontology, new_pending)
 
-        # Save merged ontology back to Neo4j
-        try:
-            logger.info(
-                f"[ONTOLOGY_SUBGRAPH] Saving merged ontology to Neo4j: "
-                f"{len(current_ontology.entities)} entities, {len(current_ontology.links)} links"
-            )
-            ontology_service.save_ontology(thread_id, current_ontology)
-            logger.info("[ONTOLOGY_SUBGRAPH] Neo4j save complete")
-        except Exception as save_err:
-            logger.error(f"[ONTOLOGY_SUBGRAPH] Failed to save to Neo4j: {save_err}")
+        entity_count = len(full_ontology.entities)
+        link_count = len(full_ontology.links)
+        pending_entity_count = len(new_pending.entities)
+        pending_link_count = len(new_pending.links)
 
-        entity_count = len(current_ontology.entities)
-        link_count = len(current_ontology.links)
         logger.info(
-            f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links accumulated."
+            f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links"
         )
-        return {STATE_KEY_ONTOLOGY: current_ontology}
+        logger.info(
+            f"[ONTOLOGY_SUBGRAPH] Pending changes: {pending_entity_count} entities, {pending_link_count} links"
+        )
+
+        return {
+            STATE_KEY_ONTOLOGY: full_ontology,
+            STATE_KEY_PENDING_ONTOLOGY: new_pending,
+        }
 
     except Exception as e:
         logger.error(f"[ONTOLOGY_SUBGRAPH] ✗ Sub-graph failed: {e}")
@@ -354,7 +358,10 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
         logger.debug(
             f"[ONTOLOGY_SUBGRAPH] Assistant response preview: {assistant_response[:500]}..."
         )
-        return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
+        return {
+            STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {}),
+            STATE_KEY_PENDING_ONTOLOGY: state.get(STATE_KEY_PENDING_ONTOLOGY, {}),
+        }
 
 
 def run_rag_subgraph_node(state: AgentState) -> Dict[str, Any]:

@@ -22,6 +22,7 @@ from app.core.constants import (
     STATE_KEY_RAG_QUALITY,
     STATE_KEY_RAG_HINT,
     STATE_KEY_ONTOLOGY,
+    STATE_KEY_PENDING_ONTOLOGY,
 )
 
 logger = logging.getLogger("geovision_app")
@@ -368,16 +369,20 @@ async def process_query_stream(
                 if event.get("name") == "ontology_extractor":
                     output = event.get("data", {}).get("output", {})
                     ontology_state = output.get(STATE_KEY_ONTOLOGY, {})
-                    if ontology_state:
+                    pending_state = output.get(STATE_KEY_PENDING_ONTOLOGY, {})
+
+                    def serialize_ontology(ont):
+                        if not ont:
+                            return {"entities": {}, "links": {}}
                         entities = (
-                            getattr(ontology_state, "entities", {})
-                            if not isinstance(ontology_state, dict)
-                            else ontology_state.get("entities", {})
+                            getattr(ont, "entities", {})
+                            if not isinstance(ont, dict)
+                            else ont.get("entities", {})
                         )
                         links = (
-                            getattr(ontology_state, "links", {})
-                            if not isinstance(ontology_state, dict)
-                            else ontology_state.get("links", {})
+                            getattr(ont, "links", {})
+                            if not isinstance(ont, dict)
+                            else ont.get("links", {})
                         )
 
                         def serialize_obj(obj):
@@ -387,19 +392,37 @@ async def process_query_stream(
                                 else obj
                             )
 
-                        yield {
-                            "type": "ontology_updated",
-                            "tool": "ontology_subgraph",
-                            "summary": f"Graph updated: {len(entities)} entities, {len(links)} relationships",
-                            "ontology": {
-                                "entities": {
-                                    str(k): serialize_obj(v)
-                                    for k, v in entities.items()
-                                },
-                                "links": {
-                                    str(k): serialize_obj(v) for k, v in links.items()
-                                },
+                        return {
+                            "entities": {
+                                str(k): serialize_obj(v)
+                                for k, v in entities.items()
                             },
+                            "links": {
+                                str(k): serialize_obj(v) for k, v in links.items()
+                            },
+                        }
+
+                    full_ontology = serialize_ontology(ontology_state)
+                    pending_ontology = serialize_ontology(pending_state)
+
+                    entities = full_ontology.get("entities", {})
+                    links = full_ontology.get("links", {})
+                    pending_entities = pending_ontology.get("entities", {})
+                    pending_links = pending_ontology.get("links", {})
+
+                    yield {
+                        "type": "ontology_updated",
+                        "tool": "ontology_subgraph",
+                        "summary": f"Graph updated: {len(entities)} entities, {len(links)} relationships",
+                        "ontology": full_ontology,
+                    }
+
+                    if pending_entities or pending_links:
+                        yield {
+                            "type": "pending_ontology_updated",
+                            "tool": "ontology_subgraph",
+                            "summary": f"Pending changes: {len(pending_entities)} entities, {len(pending_links)} relationships",
+                            "pending_ontology": pending_ontology,
                         }
 
             elif kind == "on_chat_model_end":

@@ -31,6 +31,7 @@ EVENT_TYPE_TOKEN = "token"
 EVENT_TYPE_DONE = "done"
 EVENT_TYPE_ERROR = "error"
 EVENT_TYPE_ONTOLOGY_UPDATED = "ontology_updated"
+EVENT_TYPE_PENDING_ONTOLOGY_UPDATED = "pending_ontology_updated"
 
 # Thinking/reasoning stream events
 EVENT_TYPE_THINKING_START = "thinking_start"
@@ -80,6 +81,7 @@ STATE_KEY_VALIDATION_ATTEMPTS = "validation_attempts"
 STATE_KEY_IS_VALID = "is_valid"
 STATE_KEY_VECTOR_SEARCH_RESULTS = "vector_search_results"
 STATE_KEY_ONTOLOGY = "ontology"
+STATE_KEY_PENDING_ONTOLOGY = "pending_ontology"
 
 # RAG Subgraph state keys
 STATE_KEY_RAG_QUERY = "rag_query"
