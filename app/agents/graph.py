@@ -329,13 +329,44 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
         # Merge new delta into pending_ontology (NOT into Neo4j)
         new_pending = merge_ontologies(existing_pending, delta)
 
+        # Filter out entities/links that already exist in committed Neo4j ontology
+        committed_entity_keys = {
+            f"{e.name.lower()}|{e.type}" for e in neo4j_ontology.entities.values()
+        }
+        committed_link_keys = set()
+        for link in neo4j_ontology.links.values():
+            source_name = neo4j_ontology.entities.get(str(link.source_uuid))
+            target_name = neo4j_ontology.entities.get(str(link.target_uuid))
+            if source_name and target_name:
+                committed_link_keys.add(
+                    f"{source_name.name.lower()}|{target_name.name.lower()}|{link.type.lower()}"
+                )
+
+        truly_new_entities = {}
+        for uuid_str, entity in new_pending.entities.items():
+            key = f"{entity.name.lower()}|{entity.type}"
+            if key not in committed_entity_keys:
+                truly_new_entities[uuid_str] = entity
+
+        truly_new_links = {}
+        for uuid_str, link in new_pending.links.items():
+            source_entity = truly_new_entities.get(str(link.source_uuid))
+            target_entity = truly_new_entities.get(str(link.target_uuid))
+            if source_entity and target_entity:
+                truly_new_links[uuid_str] = link
+
+        new_pending = SessionOntology(
+            entities=truly_new_entities,
+            links=truly_new_links,
+        )
+
         # Build full ontology for display (Neo4j committed + pending)
         full_ontology = merge_ontologies(neo4j_ontology, new_pending)
 
         entity_count = len(full_ontology.entities)
         link_count = len(full_ontology.links)
-        pending_entity_count = len(new_pending.entities)
-        pending_link_count = len(new_pending.links)
+        pending_entity_count = len(truly_new_entities)
+        pending_link_count = len(truly_new_links)
 
         logger.info(
             f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links"

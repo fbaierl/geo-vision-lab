@@ -16,6 +16,8 @@ export function showThinkingPanel() {
     if (reasoningPlaceholder) reasoningPlaceholder.style.display = 'none';
     if (reasoningLoading) reasoningLoading.style.display = 'none';
 
+    if (typeof window._onReasoningStep === 'function') window._onReasoningStep();
+
     thinkingSessionCounter++;
 
     const thinkingPanel = document.createElement('div');

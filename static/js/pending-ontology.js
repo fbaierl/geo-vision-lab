@@ -1,13 +1,22 @@
 /**
  * Pending Ontology Review Module
- * 
- * Handles batch review of pending ontology changes:
- * - Displays pending entities and links
- * - Allows selective approve/reject
- * - Syncs with backend API
  */
 
 import { escapeHtml } from './utils.js';
+
+const TYPE_COLORS = {
+    Person: 'Person',
+    Location: 'Location',
+    Organization: 'Organization',
+    Country: 'Country',
+    Event: 'Event',
+    Concept: 'Concept',
+    Military: 'Military',
+};
+
+function typeClass(type) {
+    return TYPE_COLORS[type] || 'default';
+}
 
 export class PendingOntologyManager {
     constructor() {
@@ -15,13 +24,16 @@ export class PendingOntologyManager {
         this.selectedEntities = new Set();
         this.selectedLinks = new Set();
         this.threadId = localStorage.getItem('geovision_thread_id') || 'default';
-        
+
         this.panel = document.getElementById('pending-review-panel');
         this.content = document.getElementById('pending-content');
         this.countEl = document.getElementById('pending-count');
+        this.emptyEl = document.getElementById('pending-empty');
+        this.actionsEl = document.getElementById('pending-actions');
+        this.statusEl = document.getElementById('pending-status');
         this.pipelinePendingDot = document.getElementById('pipeline-pending-dot');
         this.pipelinePendingCount = document.getElementById('pipeline-pending-count');
-        
+
         this._bindEvents();
     }
 
@@ -60,25 +72,23 @@ export class PendingOntologyManager {
     async approveSelected() {
         const entityUuids = this.selectedEntities.size > 0 ? Array.from(this.selectedEntities) : null;
         const linkUuids = this.selectedLinks.size > 0 ? Array.from(this.selectedLinks) : null;
-
-        if (!entityUuids && !linkUuids) {
-            console.warn('[PENDING] No items selected for approval');
-            return;
-        }
-
-        await this._sendApprove(entityUuids, linkUuids);
+        if (!entityUuids && !linkUuids) return;
+        await this._sendApprove(entityUuids, linkUuids, 'selected');
     }
 
     async approveAll() {
         const entityUuids = Object.keys(this.pendingOntology.entities);
         const linkUuids = Object.keys(this.pendingOntology.links);
-
         if (entityUuids.length === 0 && linkUuids.length === 0) return;
-
-        await this._sendApprove(entityUuids, linkUuids);
+        await this._sendApprove(entityUuids, linkUuids, 'all');
     }
 
-    async _sendApprove(entityUuids, linkUuids) {
+    async _sendApprove(entityUuids, linkUuids, mode) {
+        const btn = mode === 'all'
+            ? document.getElementById('pending-approve-all')
+            : document.getElementById('pending-approve-selected');
+        this._setButtonLoading(btn, true);
+
         try {
             const body = {};
             if (entityUuids) body.entity_uuids = entityUuids;
@@ -92,36 +102,39 @@ export class PendingOntologyManager {
 
             if (res.ok) {
                 const data = await res.json();
-                // Reload pending to get remaining items
+                this._showStatus(`✓ Approved ${data.approved_entities} entities, ${data.approved_links} links`, 'success');
                 await this.loadPendingOntology();
-                // Trigger ontology reload to show newly approved items
                 if (window.ontologyTabManager) {
                     window.ontologyTabManager.loadOntology();
                 }
-                console.log(`[PENDING] Approved ${data.approved_entities} entities, ${data.approved_links} links`);
+            } else {
+                this._showStatus('Approval failed', 'error');
             }
         } catch (e) {
             console.error('[PENDING] Failed to approve:', e);
+            this._showStatus('Approval failed', 'error');
+        } finally {
+            this._setButtonLoading(btn, false);
         }
     }
 
     async rejectSelected() {
         const entityUuids = this.selectedEntities.size > 0 ? Array.from(this.selectedEntities) : null;
         const linkUuids = this.selectedLinks.size > 0 ? Array.from(this.selectedLinks) : null;
-
-        if (!entityUuids && !linkUuids) {
-            console.warn('[PENDING] No items selected for rejection');
-            return;
-        }
-
-        await this._sendReject(entityUuids, linkUuids);
+        if (!entityUuids && !linkUuids) return;
+        await this._sendReject(entityUuids, linkUuids, 'selected');
     }
 
     async rejectAll() {
-        await this._sendReject(null, null);
+        await this._sendReject(null, null, 'all');
     }
 
-    async _sendReject(entityUuids, linkUuids) {
+    async _sendReject(entityUuids, linkUuids, mode) {
+        const btn = mode === 'all'
+            ? document.getElementById('pending-reject-all')
+            : document.getElementById('pending-reject-selected');
+        this._setButtonLoading(btn, true);
+
         try {
             const body = {};
             if (entityUuids) body.entity_uuids = entityUuids;
@@ -135,12 +148,33 @@ export class PendingOntologyManager {
 
             if (res.ok) {
                 const data = await res.json();
+                this._showStatus(`✗ Rejected ${data.rejected_entities} entities, ${data.rejected_links} links`, 'error');
                 await this.loadPendingOntology();
-                console.log(`[PENDING] Rejected ${data.rejected_entities} entities, ${data.rejected_links} links`);
+            } else {
+                this._showStatus('Rejection failed', 'error');
             }
         } catch (e) {
             console.error('[PENDING] Failed to reject:', e);
+            this._showStatus('Rejection failed', 'error');
+        } finally {
+            this._setButtonLoading(btn, false);
         }
+    }
+
+    _setButtonLoading(btn, loading) {
+        if (!btn) return;
+        btn.classList.toggle('loading', loading);
+        btn.disabled = loading;
+    }
+
+    _showStatus(message, type) {
+        if (!this.statusEl) return;
+        this.statusEl.textContent = message;
+        this.statusEl.className = `pending-status ${type}`;
+        this.statusEl.style.display = 'inline-block';
+        setTimeout(() => {
+            this.statusEl.style.display = 'none';
+        }, 3000);
     }
 
     _render() {
@@ -148,33 +182,57 @@ export class PendingOntologyManager {
         const links = this.pendingOntology.links || {};
         const totalCount = Object.keys(entities).length + Object.keys(links).length;
 
+        this.countEl.textContent = totalCount;
+
         if (totalCount === 0) {
-            this.panel.style.display = 'none';
+            this.panel.classList.remove('has-pending');
+            this.content.style.display = 'none';
+            this.actionsEl.style.display = 'none';
+            this.emptyEl.style.display = 'flex';
             return;
         }
 
-        this.panel.style.display = 'block';
-        this.countEl.textContent = totalCount;
+        this.panel.classList.add('has-pending');
+        this.content.style.display = 'block';
+        this.actionsEl.style.display = 'flex';
+        this.emptyEl.style.display = 'none';
 
         let html = '';
 
         // Entities section
         const entityEntries = Object.entries(entities);
         if (entityEntries.length > 0) {
-            html += '<div class="pending-section-title">New Entities</div>';
+            html += `<div class="pending-section-header">
+                <input type="checkbox" id="select-all-entities" data-section="entities">
+                <span class="pending-section-title">New Entities (${entityEntries.length})</span>
+            </div>`;
             for (const [uuid, entity] of entityEntries) {
                 const checked = this.selectedEntities.has(uuid) ? 'checked' : '';
                 const type = entity.type || 'Unknown';
                 const name = escapeHtml(entity.name || 'Unnamed');
-                let extra = '';
+                const tc = typeClass(type);
+                let meta = '';
                 if (entity.properties?.lat && entity.properties?.lon) {
-                    extra = ` (${entity.properties.lat}, ${entity.properties.lon})`;
+                    meta = `<span class="pending-item-coords">(${entity.properties.lat}, ${entity.properties.lon})</span>`;
+                }
+                let sourceHtml = '';
+                if (entity.mentions && entity.mentions.length > 0) {
+                    const src = entity.mentions[0].source_text;
+                    if (src) {
+                        sourceHtml = `<div class="pending-source">${escapeHtml(src.substring(0, 120))}${src.length > 120 ? '...' : ''}</div>`;
+                    }
                 }
                 html += `
-                    <div class="pending-item">
+                    <div class="pending-item" data-uuid="${uuid}" data-type="entity">
                         <input type="checkbox" data-type="entity" data-uuid="${uuid}" ${checked}>
-                        <span class="pending-item-type">${escapeHtml(type)}</span>
-                        <span class="pending-item-label">${name}${extra}</span>
+                        <div class="pending-item-body">
+                            <div class="pending-item-main">
+                                <span class="pending-item-label">${name}</span>
+                                <span class="pending-item-type ${tc}">${escapeHtml(type)}</span>
+                                ${meta}
+                            </div>
+                            ${sourceHtml}
+                        </div>
                     </div>
                 `;
             }
@@ -183,18 +241,27 @@ export class PendingOntologyManager {
         // Links section
         const linkEntries = Object.entries(links);
         if (linkEntries.length > 0) {
-            html += '<div class="pending-section-title">New Relationships</div>';
+            html += `<div class="pending-section-header">
+                <input type="checkbox" id="select-all-links" data-section="links">
+                <span class="pending-section-title">New Relationships (${linkEntries.length})</span>
+            </div>`;
             for (const [uuid, link] of linkEntries) {
                 const checked = this.selectedLinks.has(uuid) ? 'checked' : '';
                 const linkType = escapeHtml(link.type || 'RELATED');
                 const sourceName = this._getEntityName(link.source_uuid, entities);
                 const targetName = this._getEntityName(link.target_uuid, entities);
                 html += `
-                    <div class="pending-item">
+                    <div class="pending-item" data-uuid="${uuid}" data-type="link">
                         <input type="checkbox" data-type="link" data-uuid="${uuid}" ${checked}>
-                        <span class="pending-item-link">
-                            ${sourceName} <span class="pending-link-type">[${linkType}]</span> ${targetName}
-                        </span>
+                        <div class="pending-item-body">
+                            <div class="pending-item-link">
+                                <span class="pending-link-entity">${sourceName}</span>
+                                <span class="pending-link-arrow">→</span>
+                                <span class="pending-link-type">${linkType}</span>
+                                <span class="pending-link-arrow">→</span>
+                                <span class="pending-link-entity">${targetName}</span>
+                            </div>
+                        </div>
                     </div>
                 `;
             }
@@ -202,8 +269,8 @@ export class PendingOntologyManager {
 
         this.content.innerHTML = html;
 
-        // Bind checkbox events
-        this.content.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        // Bind individual checkbox events
+        this.content.querySelectorAll('input[type="checkbox"][data-type]').forEach(cb => {
             cb.addEventListener('change', (e) => {
                 const { type, uuid } = e.target.dataset;
                 if (type === 'entity') {
@@ -213,20 +280,52 @@ export class PendingOntologyManager {
                     if (e.target.checked) this.selectedLinks.add(uuid);
                     else this.selectedLinks.delete(uuid);
                 }
+                this._updateButtonStates();
             });
         });
+
+        // Bind select-all checkboxes
+        this.content.querySelectorAll('input[type="checkbox"][data-section]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const section = e.target.dataset.section;
+                const checked = e.target.checked;
+                if (section === 'entities') {
+                    entityEntries.forEach(([uuid]) => {
+                        if (checked) this.selectedEntities.add(uuid);
+                        else this.selectedEntities.delete(uuid);
+                    });
+                    this.content.querySelectorAll('input[data-type="entity"]').forEach(i => { i.checked = checked; });
+                } else if (section === 'links') {
+                    linkEntries.forEach(([uuid]) => {
+                        if (checked) this.selectedLinks.add(uuid);
+                        else this.selectedLinks.delete(uuid);
+                    });
+                    this.content.querySelectorAll('input[data-type="link"]').forEach(i => { i.checked = checked; });
+                }
+                this._updateButtonStates();
+            });
+        });
+
+        this._updateButtonStates();
+    }
+
+    _updateButtonStates() {
+        const hasSelection = this.selectedEntities.size > 0 || this.selectedLinks.size > 0;
+        const approveSelected = document.getElementById('pending-approve-selected');
+        const rejectSelected = document.getElementById('pending-reject-selected');
+        if (approveSelected) approveSelected.disabled = !hasSelection;
+        if (rejectSelected) rejectSelected.disabled = !hasSelection;
     }
 
     _getEntityName(uuid, entities) {
         if (entities[uuid]) {
             return escapeHtml(entities[uuid].name || 'Unknown');
         }
-        // Try to find in full ontology
-        return escapeHtml(uuid.slice(0, 8) + '...');
+        return escapeHtml(String(uuid).slice(0, 8) + '...');
     }
 
     _updatePipelineStatus() {
-        const totalCount = Object.keys(this.pendingOntology.entities || {}).length + 
+        const totalCount = Object.keys(this.pendingOntology.entities || {}).length +
                           Object.keys(this.pendingOntology.links || {}).length;
 
         if (this.pipelinePendingDot) {

@@ -213,6 +213,22 @@
                                     </div>
                                 </div>
                             </div>
+                            <!-- Reasoning Trail -->
+                            <div id="reasoning-trail">
+                                <div class="reasoning-trail-toggle" id="reasoning-trail-toggle">
+                                    <span class="reasoning-trail-arrow">▶</span>
+                                    <span class="reasoning-trail-label">Reasoning Trail</span>
+                                    <span class="reasoning-trail-badge" id="reasoning-trail-badge" style="display: none;">0</span>
+                                </div>
+                                <div class="reasoning-trail-content" id="reasoning-trail-content">
+                                    <div class="reasoning-content" id="reasoning-content">
+                                        <div class="reasoning-placeholder" id="reasoning-placeholder">
+                                            <span class="reasoning-placeholder-icon">⬡</span>
+                                            <span>Awaiting query to begin analysis...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="chat-input-container">
                                 <div id="typing-indicator">
                                     <div class="typing-bar"></div>
@@ -246,6 +262,20 @@
                 <!-- SOURCES TAB -->
                 <div class="main-tab-panel" id="panel-sources">
                     <div class="sources-panel-layout">
+                        <!-- Intelligence Log (Chat + Tool Results) -->
+                        <div class="sources-section">
+                            <div class="sources-section-header">
+                                <span>Intelligence Log</span>
+                                <span class="sources-section-subtitle" id="intel-log-count">0 entries</span>
+                            </div>
+                            <div class="sources-intel-log" id="sources-intel-log">
+                                <div class="sources-empty" id="intel-log-empty">
+                                    <div class="sources-empty-icon">📋</div>
+                                    <div class="sources-empty-text">No queries yet</div>
+                                    <div class="sources-empty-subtext">Submit a query to start building intelligence</div>
+                                </div>
+                            </div>
+                        </div>
                         <!-- Documents Section -->
                         <div class="sources-section">
                             <div class="sources-section-header">
@@ -265,13 +295,40 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- Tool Usage Section -->
+                        <!-- Services Section -->
                         <div class="sources-section">
-                            <div class="sources-section-header">Tool Usage Summary</div>
-                            <div class="sources-tools-list" id="sources-tools-list">
-                                <div class="sources-empty">
-                                    <div class="sources-empty-text">No tool usage yet</div>
-                                </div>
+                            <div class="sources-section-header">Services</div>
+                            <div class="sources-services-grid">
+                                <a class="service-card" href="http://localhost:8000" target="_blank">
+                                    <span class="service-card-icon">▸</span>
+                                    <span class="service-card-name">Terminal</span>
+                                    <span class="service-card-port">:8000</span>
+                                </a>
+                                <a class="service-card" href="http://localhost:9999" target="_blank">
+                                    <span class="service-card-icon">⬡</span>
+                                    <span class="service-card-name">Dozzle</span>
+                                    <span class="service-card-port">:9999</span>
+                                </a>
+                                <a class="service-card" href="http://localhost:3000" target="_blank">
+                                    <span class="service-card-icon">◈</span>
+                                    <span class="service-card-name">Grafana</span>
+                                    <span class="service-card-port">:3000</span>
+                                </a>
+                                <a class="service-card" href="http://localhost:8081" target="_blank">
+                                    <span class="service-card-icon">❖</span>
+                                    <span class="service-card-name">MongoDB</span>
+                                    <span class="service-card-port">:8081</span>
+                                </a>
+                                <a class="service-card" href="http://localhost:7474" target="_blank">
+                                    <span class="service-card-icon">⬢</span>
+                                    <span class="service-card-name">Neo4j</span>
+                                    <span class="service-card-port">:7474</span>
+                                </a>
+                                <a class="service-card" href="https://eu.smith.langchain.com/" target="_blank">
+                                    <span class="service-card-icon">◇</span>
+                                    <span class="service-card-name">LangSmith</span>
+                                    <span class="service-card-port">Cloud</span>
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -281,31 +338,52 @@
                 <div class="main-tab-panel" id="panel-ontology">
                     <div class="ontology-panel-layout">
                         <!-- Pending Review Panel -->
-                        <div id="pending-review-panel" style="display: none;">
+                        <div id="pending-review-panel" class="pending-review-panel">
                             <div class="pending-header">
                                 <span class="pending-icon">⚡</span>
                                 <span class="pending-title">Pending Ontology Changes</span>
                                 <span class="pending-count" id="pending-count">0</span>
+                                <span class="pending-status" id="pending-status" style="display: none;"></span>
                             </div>
                             <div class="pending-content" id="pending-content">
                                 <!-- Pending entities and links rendered here -->
                             </div>
-                            <div class="pending-actions">
-                                <button class="pending-btn approve-selected" id="pending-approve-selected">
+                            <div class="pending-empty" id="pending-empty" style="display: none;">
+                                <div class="pending-empty-icon">✓</div>
+                                <div class="pending-empty-text">No pending changes</div>
+                                <div class="pending-empty-subtext">Ontology is up to date</div>
+                            </div>
+                            <div class="pending-actions" id="pending-actions">
+                                <button class="pending-btn approve-selected" id="pending-approve-selected" disabled>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
-                                    Approve Selected
+                                    <span>Approve Selected</span>
+                                    <div class="btn-spinner" style="display: none;"></div>
                                 </button>
-                                <button class="pending-btn reject-selected" id="pending-reject-selected">
+                                <button class="pending-btn reject-selected" id="pending-reject-selected" disabled>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <line x1="18" y1="6" x2="6" y2="18"></line>
                                         <line x1="6" y1="6" x2="18" y2="18"></line>
                                     </svg>
-                                    Reject Selected
+                                    <span>Reject Selected</span>
+                                    <div class="btn-spinner" style="display: none;"></div>
                                 </button>
-                                <button class="pending-btn approve-all" id="pending-approve-all">Approve All</button>
-                                <button class="pending-btn reject-all" id="pending-reject-all">Reject All</button>
+                                <button class="pending-btn approve-all" id="pending-approve-all">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Approve All</span>
+                                    <div class="btn-spinner" style="display: none;"></div>
+                                </button>
+                                <button class="pending-btn reject-all" id="pending-reject-all">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Reject All</span>
+                                    <div class="btn-spinner" style="display: none;"></div>
+                                </button>
                             </div>
                         </div>
                         <!-- Ontology Tabs (Graph, JSON, Table, Cards) -->

@@ -62,6 +62,8 @@ export function addReasoningStep(phase, tool, query, model) {
 
     reasoningContent.appendChild(step);
 
+    if (typeof window._onReasoningStep === 'function') window._onReasoningStep();
+
     if (tool && tool !== 'unknown') {
         reasoningSteps.set(tool, {
             step,

@@ -29,6 +29,8 @@ let threadId = localStorage.getItem('geovision_thread_id');
 console.log('[THREAD] Loaded thread ID from localStorage:', threadId);
 let rawStreamBuffer = '';
 let markdownRenderTimeout = null;
+let currentLogEntry = null;
+window.sourceLog = [];
 
 // Clock
 function updateClock() {
@@ -134,6 +136,7 @@ async function sendQuery() {
     if (!q) return;
 
     resetThinkingState();
+    resetReasoningTrail();
 
     addMessage(escapeHtml(q), true);
     addHistory(q);
@@ -190,15 +193,43 @@ async function sendQuery() {
                         threadId = evt.thread_id;
                         window.currentThreadId = threadId;
                         localStorage.setItem('geovision_thread_id', threadId);
+                        currentLogEntry = {
+                            query: q,
+                            timestamp: Date.now(),
+                            response: '',
+                            tools: [],
+                            responseStarted: false,
+                        };
                     } else if (evt.type === 'status') {
                         addReasoningStep(evt.phase, evt.tool, evt.query, evt.model);
                         if (evt.tool && evt.tool !== 'unknown') {
                             statTool.textContent = evt.tool;
                         }
+                        if (currentLogEntry) {
+                            currentLogEntry.tools.push({
+                                name: evt.tool,
+                                summary: '',
+                                content: '',
+                            });
+                        }
                     } else if (evt.type === 'tool_result') {
                         addReasoningResult(evt.tool, evt.summary, evt.content);
+                        if (currentLogEntry && currentLogEntry.tools.length > 0) {
+                            const lastTool = currentLogEntry.tools[currentLogEntry.tools.length - 1];
+                            if (lastTool.name === evt.tool) {
+                                lastTool.summary = evt.summary;
+                                lastTool.content = evt.content;
+                            }
+                        }
                     } else if (evt.type === 'rag_result') {
                         addReasoningResult(evt.tool || 'RAG', evt.summary, evt.hint || `Quality: ${evt.quality}`);
+                        if (currentLogEntry) {
+                            currentLogEntry.tools.push({
+                                name: evt.tool || 'RAG',
+                                summary: evt.summary,
+                                content: evt.hint || `Quality: ${evt.quality}`,
+                            });
+                        }
                     } else if (evt.type === 'ontology_updated') {
                         handleOntologyUpdated(evt.ontology);
                     } else if (evt.type === 'pending_ontology_updated') {
@@ -206,6 +237,12 @@ async function sendQuery() {
                     } else if (evt.type === 'token') {
                         typingIndicator.classList.remove('show');
                         appendToMessageLive(responseEl, evt.content);
+                        if (currentLogEntry) {
+                            currentLogEntry.response += evt.content;
+                            if (!currentLogEntry.responseStarted) {
+                                currentLogEntry.responseStarted = true;
+                            }
+                        }
                     } else if (evt.type === 'thinking_start') {
                         showThinkingPanel();
                     } else if (evt.type === 'thinking_token') {
@@ -224,6 +261,11 @@ async function sendQuery() {
                         if (rawStreamBuffer && !responseEl.classList.contains('md-rendered')) {
                             renderMarkdown(responseEl);
                         }
+                        if (currentLogEntry) {
+                            window.sourceLog.push(currentLogEntry);
+                            currentLogEntry = null;
+                        }
+                        expandReasoningTrail();
                     }
                 } catch (parseErr) {
                     // Skip malformed
@@ -346,3 +388,36 @@ chatInput.addEventListener('keypress', (e) => {
 
 // Expose addMessage for session manager hydration
 window.addMessageFn = addMessage;
+
+// Reasoning trail toggle
+const reasoningTrail = document.getElementById('reasoning-trail');
+const reasoningTrailToggle = document.getElementById('reasoning-trail-toggle');
+const reasoningTrailBadge = document.getElementById('reasoning-trail-badge');
+let reasoningStepCount = 0;
+
+window._onReasoningStep = function() {
+    reasoningStepCount++;
+    if (reasoningTrailBadge) {
+        reasoningTrailBadge.textContent = reasoningStepCount;
+        reasoningTrailBadge.style.display = 'inline-block';
+    }
+};
+
+if (reasoningTrailToggle) {
+    reasoningTrailToggle.addEventListener('click', () => {
+        reasoningTrail.classList.toggle('expanded');
+    });
+}
+
+export function resetReasoningTrail() {
+    reasoningStepCount = 0;
+    if (reasoningTrailBadge) {
+        reasoningTrailBadge.textContent = '0';
+        reasoningTrailBadge.style.display = 'none';
+    }
+    if (reasoningTrail) reasoningTrail.classList.remove('expanded');
+}
+
+export function expandReasoningTrail() {
+    if (reasoningTrail) reasoningTrail.classList.add('expanded');
+}
