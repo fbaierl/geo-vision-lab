@@ -481,7 +481,7 @@ async def process_query_stream(
             serializable_messages = []
             for msg in messages:
                 msg_dict = (
-                    msg.model_dump()
+                    msg.model_dump(mode="json")
                     if hasattr(msg, "model_dump")
                     else {"content": str(msg)}
                 )
@@ -501,7 +501,7 @@ async def process_query_stream(
             pending_state = final_state.values.get("pending_ontology")
             if pending_state:
                 if hasattr(pending_state, "model_dump"):
-                    pending_ontology_data = pending_state.model_dump()
+                    pending_ontology_data = pending_state.model_dump(mode="json")
                 elif isinstance(pending_state, dict):
                     pending_ontology_data = pending_state
 

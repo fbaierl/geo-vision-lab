@@ -63,6 +63,16 @@ export class PendingOntologyManager {
                 };
                 this._render();
                 this._updatePipelineStatus();
+                const graphContainer = document.getElementById('graph-container');
+                const graphEmptyState = document.getElementById('graph-empty-state');
+                const hasPending = Object.keys(this.pendingOntology.entities).length > 0 ||
+                                   Object.keys(this.pendingOntology.links).length > 0;
+                if (graphContainer && window.renderMergedGraph) {
+                    window.renderMergedGraph(graphContainer);
+                }
+                if (graphEmptyState && hasPending) {
+                    graphEmptyState.style.display = 'none';
+                }
             }
         } catch (e) {
             console.warn('[PENDING] Failed to load pending ontology:', e);
@@ -81,6 +91,35 @@ export class PendingOntologyManager {
         const linkUuids = Object.keys(this.pendingOntology.links);
         if (entityUuids.length === 0 && linkUuids.length === 0) return;
         await this._sendApprove(entityUuids, linkUuids, 'all');
+    }
+
+    async _reloadCommittedOntology() {
+        try {
+            const ontRes = await fetch(`/api/ontology/${this.threadId}`);
+            if (!ontRes.ok) return;
+            const ontData = await ontRes.json();
+            const ontology = {
+                entities: Object.fromEntries((ontData.entities || []).map(e => [e.uuid, e])),
+                links: Object.fromEntries((ontData.links || []).map(l => [l.uuid, l])),
+            };
+            if (window.ontologyTabManager) {
+                window.ontologyTabManager.updateOntology(ontology);
+            }
+            const graphContainer = document.getElementById('graph-container');
+            const graphEmptyState = document.getElementById('graph-empty-state');
+            if (graphContainer && window.renderMergedGraph) {
+                window.renderMergedGraph(graphContainer);
+            }
+            if (graphEmptyState) {
+                const hasCommitted = Object.keys(ontology.entities || {}).length > 0 ||
+                                     Object.keys(ontology.links || {}).length > 0;
+                const hasPending = Object.keys(this.pendingOntology.entities || {}).length > 0 ||
+                                   Object.keys(this.pendingOntology.links || {}).length > 0;
+                graphEmptyState.style.display = (hasCommitted || hasPending) ? 'none' : 'flex';
+            }
+        } catch (e) {
+            console.warn('[PENDING] Failed to reload committed ontology:', e);
+        }
     }
 
     async _sendApprove(entityUuids, linkUuids, mode) {
@@ -104,21 +143,7 @@ export class PendingOntologyManager {
                 const data = await res.json();
                 this._showStatus(`✓ Approved ${data.approved_entities} entities, ${data.approved_links} links`, 'success');
                 await this.loadPendingOntology();
-                try {
-                    const ontRes = await fetch(`/api/ontology/${this.threadId}`);
-                    if (ontRes.ok) {
-                        const ontData = await ontRes.json();
-                        const ontology = {
-                            entities: Object.fromEntries((ontData.entities || []).map(e => [e.name, e])),
-                            links: Object.fromEntries((ontData.links || []).map(l => [`${l.source_name}-${l.target_name}-${l.type}`, l])),
-                        };
-                        if (window.ontologyTabManager) {
-                            window.ontologyTabManager.updateOntology(ontology);
-                        }
-                    }
-                } catch (e2) {
-                    console.warn('[PENDING] Failed to reload ontology after approve:', e2);
-                }
+                await this._reloadCommittedOntology();
             } else {
                 this._showStatus('Approval failed', 'error');
             }
@@ -162,6 +187,7 @@ export class PendingOntologyManager {
                 const data = await res.json();
                 this._showStatus(`✗ Rejected ${data.rejected_entities} entities, ${data.rejected_links} links`, 'error');
                 await this.loadPendingOntology();
+                await this._reloadCommittedOntology();
             } else {
                 this._showStatus('Rejection failed', 'error');
             }

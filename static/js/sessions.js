@@ -3,7 +3,7 @@
  */
 
 import { escapeHtml, getTimeAgo, showToast } from './utils.js';
-import { renderGraph } from './graph.js';
+import { renderMergedGraph } from './graph.js';
 import { renderMap } from './map.js';
 
 export class SessionManager {
@@ -112,7 +112,7 @@ export class SessionManager {
         const graphEmptyState = document.getElementById('graph-empty-state');
 
         if (graphContainer && hasData) {
-            renderGraph(ontology, graphContainer);
+            renderMergedGraph(graphContainer);
             if (graphEmptyState) graphEmptyState.style.display = 'none';
         } else if (graphEmptyState) {
             graphEmptyState.style.display = 'flex';
@@ -274,6 +274,16 @@ export class SessionManager {
     hydratePendingOntology(pendingOntology) {
         if (window.pendingOntologyManager) {
             window.pendingOntologyManager.updatePendingOntology(pendingOntology);
+        }
+        const graphContainer = document.getElementById('graph-container');
+        const graphEmptyState = document.getElementById('graph-empty-state');
+        const hasPending = Object.keys(pendingOntology.entities || {}).length > 0 ||
+                           Object.keys(pendingOntology.links || {}).length > 0;
+        if (graphContainer) {
+            renderMergedGraph(graphContainer);
+            if (graphEmptyState && hasPending) {
+                graphEmptyState.style.display = 'none';
+            }
         }
     }
 

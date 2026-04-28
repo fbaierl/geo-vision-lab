@@ -343,10 +343,24 @@ async def approve_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]
     db = get_database()
 
     session = db.sessions.find_one({"thread_id": thread_id})
-    if not session:
-        raise HTTPException(status_code=404, detail=f"Session {thread_id} not found")
+    if session:
+        pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+    else:
+        # Session not yet saved to MongoDB; try to read pending from LangGraph state
+        try:
+            from app.agents.graph import app_graph
+            config = {"configurable": {"thread_id": thread_id}}
+            current_state = app_graph.get_state(config)
+            pending_state = current_state.values.get("pending_ontology")
+            if pending_state and hasattr(pending_state, "model_dump"):
+                pending = pending_state.model_dump(mode="json")
+            elif pending_state and isinstance(pending_state, dict):
+                pending = pending_state
+            else:
+                pending = {"entities": {}, "links": {}}
+        except Exception:
+            pending = {"entities": {}, "links": {}}
 
-    pending = session.get("pending_ontology", {"entities": {}, "links": {}})
     pending_entities = pending.get("entities", {})
     pending_links = pending.get("links", {})
 
@@ -400,6 +414,7 @@ async def approve_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]
             },
             "updated_at": datetime.utcnow(),
         }},
+        upsert=True,
     )
 
     # Sync remaining pending back to LangGraph checkpointer
@@ -433,10 +448,24 @@ async def reject_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]]
     db = get_database()
 
     session = db.sessions.find_one({"thread_id": thread_id})
-    if not session:
-        raise HTTPException(status_code=404, detail=f"Session {thread_id} not found")
+    if session:
+        pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+    else:
+        # Session not yet saved to MongoDB; try to read pending from LangGraph state
+        try:
+            from app.agents.graph import app_graph
+            config = {"configurable": {"thread_id": thread_id}}
+            current_state = app_graph.get_state(config)
+            pending_state = current_state.values.get("pending_ontology")
+            if pending_state and hasattr(pending_state, "model_dump"):
+                pending = pending_state.model_dump(mode="json")
+            elif pending_state and isinstance(pending_state, dict):
+                pending = pending_state
+            else:
+                pending = {"entities": {}, "links": {}}
+        except Exception:
+            pending = {"entities": {}, "links": {}}
 
-    pending = session.get("pending_ontology", {"entities": {}, "links": {}})
     pending_entities = pending.get("entities", {})
     pending_links = pending.get("links", {})
 
@@ -477,6 +506,7 @@ async def reject_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]]
             },
             "updated_at": datetime.utcnow(),
         }},
+        upsert=True,
     )
 
     # Sync remaining pending back to LangGraph checkpointer

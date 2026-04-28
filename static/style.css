@@ -3428,22 +3428,34 @@ html, body {
 /* Ontology Panel Layout */
 .ontology-panel-layout {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: 100%;
+    overflow: hidden;
+}
+
+.ontology-main-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
 /* Pending Review Panel */
 .pending-review-panel {
     background: rgba(255, 179, 0, 0.04);
-    border-bottom: 1px solid rgba(255, 179, 0, 0.15);
+    border-right: 1px solid rgba(255, 179, 0, 0.15);
     padding: 12px;
     transition: all 0.3s ease;
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .pending-review-panel.has-pending {
     background: rgba(255, 179, 0, 0.06);
-    border-bottom-color: rgba(255, 179, 0, 0.25);
+    border-right-color: rgba(255, 179, 0, 0.25);
 }
 
 .pending-header {
@@ -3494,9 +3506,10 @@ html, body {
 }
 
 .pending-content {
-    max-height: 250px;
+    flex: 1;
     overflow-y: auto;
     margin-bottom: 10px;
+    min-height: 0;
 }
 
 .pending-content::-webkit-scrollbar {
@@ -3696,6 +3709,7 @@ html, body {
     justify-content: center;
     padding: 24px;
     text-align: center;
+    flex: 1;
 }
 
 .pending-empty-icon {

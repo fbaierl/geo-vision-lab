@@ -4,7 +4,7 @@
 
 import { escapeHtml } from './utils.js';
 import { renderMap } from './map.js';
-import { renderGraph } from './graph.js';
+import { renderMergedGraph } from './graph.js';
 import { loadCurrentModel, getCurrentModel } from './model-selector.js';
 import { showThinkingPanel, appendToThinkingPanel, collapseThinkingPanel, resetThinkingState } from './thinking-panels.js';
 import { addReasoningStep, addReasoningResult, addReasoningError } from './reasoning-steps.js';
@@ -314,7 +314,7 @@ function handleOntologyUpdated(ontology) {
     const graphEmptyState = document.getElementById('graph-empty-state');
     if (graphContainer) {
         if (hasData) {
-            renderGraph(ontology, graphContainer);
+            renderMergedGraph(graphContainer);
             if (graphEmptyState) graphEmptyState.style.display = 'none';
             const winData = window.windowManager.windows.get('window-graph');
             if (winData && winData.minimized) {
@@ -377,6 +377,16 @@ function handleOntologyError() {
 function handlePendingOntologyUpdated(pendingOntology) {
     if (window.pendingOntologyManager) {
         window.pendingOntologyManager.updatePendingOntology(pendingOntology);
+    }
+    const graphContainer = document.getElementById('graph-container');
+    const graphEmptyState = document.getElementById('graph-empty-state');
+    const hasPending = Object.keys(pendingOntology.entities || {}).length > 0 ||
+                       Object.keys(pendingOntology.links || {}).length > 0;
+    if (graphContainer) {
+        renderMergedGraph(graphContainer);
+        if (graphEmptyState && hasPending) {
+            graphEmptyState.style.display = 'none';
+        }
     }
 }
 
