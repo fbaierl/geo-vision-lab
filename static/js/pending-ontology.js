@@ -224,6 +224,7 @@ export class PendingOntologyManager {
 
         if (totalCount === 0) {
             this.panel.classList.remove('has-pending');
+            this.panel.classList.add('collapsed');
             this.content.style.display = 'none';
             this.actionsEl.style.display = 'none';
             this.emptyEl.style.display = 'flex';
@@ -231,6 +232,7 @@ export class PendingOntologyManager {
         }
 
         this.panel.classList.add('has-pending');
+        this.panel.classList.remove('collapsed');
         this.content.style.display = 'block';
         this.actionsEl.style.display = 'flex';
         this.emptyEl.style.display = 'none';

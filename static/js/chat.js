@@ -148,8 +148,10 @@ async function sendQuery() {
     pillProcessing.style.display = 'flex';
 
     if (mapsLoading) mapsLoading.style.display = 'flex';
-    const graphLoadingEl = document.getElementById('graph-loading');
-    if (graphLoadingEl) graphLoadingEl.style.display = 'flex';
+    if (window.mainTabManager) {
+        window.mainTabManager.setTabLoading('ontology', true);
+        window.mainTabManager.setTabLoading('map', true);
+    }
 
     const responseEl = addMessage('');
     rawStreamBuffer = '';
@@ -202,7 +204,7 @@ async function sendQuery() {
                         };
                     } else if (evt.type === 'status') {
                         addReasoningStep(evt.phase, evt.tool, evt.query, evt.model);
-                        if (evt.tool && evt.tool !== 'unknown') {
+                        if (evt.tool && evt.tool !== 'unknown' && statTool) {
                             statTool.textContent = evt.tool;
                         }
                         if (currentLogEntry) {
@@ -265,7 +267,6 @@ async function sendQuery() {
                             window.sourceLog.push(currentLogEntry);
                             currentLogEntry = null;
                         }
-                        expandReasoningTrail();
                     }
                 } catch (parseErr) {
                     // Skip malformed
@@ -281,8 +282,8 @@ async function sendQuery() {
         const ms = Date.now() - t0;
         queryCount++;
         totalMs += ms;
-        statQueries.textContent = queryCount;
-        statAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
+        if (statQueries) statQueries.textContent = queryCount;
+        if (statAvg) statAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
 
     } catch (e) {
         responseEl.innerHTML = `<div class="error-message">Connection error: ${escapeHtml(e.message)}</div>`;
@@ -297,8 +298,10 @@ async function sendQuery() {
 
 function handleOntologyUpdated(ontology) {
     if (mapsLoading) mapsLoading.style.display = 'none';
-    const graphLoadingEl = document.getElementById('graph-loading');
-    if (graphLoadingEl) graphLoadingEl.style.display = 'none';
+    if (window.mainTabManager) {
+        window.mainTabManager.setTabLoading('ontology', false);
+        window.mainTabManager.setTabLoading('map', false);
+    }
 
     console.log("[DEBUG] Current SessionOntology data:", ontology);
 
@@ -321,10 +324,6 @@ function handleOntologyUpdated(ontology) {
         if (hasData) {
             renderMergedGraph(graphContainer);
             if (graphEmptyState) graphEmptyState.style.display = 'none';
-            const winData = window.windowManager.windows.get('window-graph');
-            if (winData && winData.minimized) {
-                window.windowManager.restoreWindow('window-graph');
-            }
         } else {
             if (graphEmptyState) graphEmptyState.style.display = 'flex';
         }
@@ -345,10 +344,6 @@ function handleOntologyUpdated(ontology) {
     if (locations && locations.length > 0) {
         renderMap(locations, mapContainer);
         if (mapEmptyState) mapEmptyState.style.display = 'none';
-        const winData = window.windowManager.windows.get('window-maps');
-        if (winData && winData.minimized) {
-            window.windowManager.restoreWindow('window-maps');
-        }
     } else {
         if (mapEmptyState) mapEmptyState.style.display = 'flex';
     }
@@ -357,8 +352,10 @@ function handleOntologyUpdated(ontology) {
 function handleOntologyError() {
     addReasoningError('ontology_subgraph', 'Ontology extraction failed');
     if (mapsLoading) mapsLoading.style.display = 'none';
-    const graphLoadingEl = document.getElementById('graph-loading');
-    if (graphLoadingEl) graphLoadingEl.style.display = 'none';
+    if (window.mainTabManager) {
+        window.mainTabManager.setTabLoading('ontology', false);
+        window.mainTabManager.setTabLoading('map', false);
+    }
 
     const mapEmptyState = document.getElementById('map-empty-state');
     const graphEmptyState = document.getElementById('graph-empty-state');
@@ -415,6 +412,11 @@ window._onReasoningStep = function() {
     if (reasoningTrailBadge) {
         reasoningTrailBadge.textContent = reasoningStepCount;
         reasoningTrailBadge.style.display = 'inline-block';
+    }
+    if (reasoningTrailToggle) {
+        reasoningTrailToggle.classList.remove('has-new-reasoning');
+        void reasoningTrailToggle.offsetWidth; // trigger reflow
+        reasoningTrailToggle.classList.add('has-new-reasoning');
     }
 };
 

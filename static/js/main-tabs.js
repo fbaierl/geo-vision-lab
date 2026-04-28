@@ -3,24 +3,20 @@
  */
 
 import { escapeHtml } from './utils.js';
+import { getMapInstance } from './map.js';
+import { getNetworkInstance } from './graph.js';
 
 export class MainTabManager {
     constructor() {
         this.currentTab = 'user';
         this.tabs = document.querySelectorAll('.main-tab');
         this.panels = document.querySelectorAll('.main-tab-panel');
-        this.shelfItems = document.querySelectorAll('.shelf-item[data-target^="panel-"]');
         this._bindEvents();
     }
 
     _bindEvents() {
         this.tabs.forEach(tab => {
             tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
-        });
-        this.shelfItems.forEach(item => {
-            item.addEventListener('click', () => {
-                this.switchTab(item.dataset.target.replace('panel-', ''));
-            });
         });
         const refreshBtn = document.getElementById('sources-refresh-btn');
         if (refreshBtn) {
@@ -34,9 +30,32 @@ export class MainTabManager {
 
         this.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
         this.panels.forEach(panel => panel.classList.toggle('active', panel.id === `panel-${tabName}`));
-        this.shelfItems.forEach(item => item.classList.toggle('active', item.dataset.target === `panel-${tabName}`));
 
         if (tabName === 'sources') this._renderSources();
+        if (tabName === 'map') {
+            setTimeout(() => {
+                const map = getMapInstance();
+                if (map) map.invalidateSize();
+            }, 100);
+        }
+        if (tabName === 'ontology') {
+            setTimeout(() => {
+                const network = getNetworkInstance();
+                if (network) {
+                    network.redraw();
+                    network.fit();
+                }
+            }, 100);
+        }
+    }
+
+    setTabLoading(tabName, isLoading) {
+        const tab = document.querySelector(`.main-tab[data-tab="${tabName}"]`);
+        if (!tab) return;
+        const loader = tab.querySelector('.tab-loader');
+        if (loader) {
+            loader.style.display = isLoading ? 'inline-block' : 'none';
+        }
     }
 
     _renderSources() {

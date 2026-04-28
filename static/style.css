@@ -4144,3 +4144,45 @@ body.desktop-mode .shelf-item[data-target^="panel-"] {
 }
 
 
+
+
+/* --- NEW UI IMPROVEMENTS --- */
+
+/* Reasoning Trail Animation */
+@keyframes softPulse {
+    0% { background-color: transparent; color: var(--text-muted); }
+    30% { background-color: rgba(61, 174, 233, 0.2); color: var(--primary); }
+    100% { background-color: transparent; color: var(--text-muted); }
+}
+
+.has-new-reasoning {
+    animation: softPulse 1.5s ease-out;
+}
+
+/* Tab Loading Spinner */
+.tab-loader {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* Collapsed state for pending review panel */
+#pending-review-panel.collapsed {
+    max-height: 40px;
+    overflow: hidden;
+    padding-bottom: 0;
+}
+#pending-review-panel.collapsed .pending-content,
+#pending-review-panel.collapsed .pending-actions,
+#pending-review-panel.collapsed .pending-empty {
+    display: none !important;
+}
+#pending-review-panel {
+    transition: max-height 0.3s ease;
+}

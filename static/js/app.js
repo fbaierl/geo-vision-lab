@@ -2,7 +2,6 @@
  * Main application entry point - initializes all modules
  */
 
-import { WindowManager } from './window-manager.js';
 import { OntologyTabManager } from './ontology-tabs.js';
 import { OntologyImportExportHandler } from './import-export.js';
 import { SessionManager } from './sessions.js';
@@ -12,10 +11,6 @@ import { MainTabManager } from './main-tabs.js';
 import { PendingOntologyManager } from './pending-ontology.js';
 // Import chat module (initializes models, GPU status, and event listeners)
 import './chat.js';
-
-// Initialize window manager
-const windowManager = new WindowManager();
-window.windowManager = windowManager;
 
 // Initialize ontology tab manager
 const ontologyTabManager = new OntologyTabManager();
@@ -60,7 +55,4 @@ document.addEventListener('click', function(e) {
     });
 });
 
-// Snap layout button toggles desktop mode
-document.getElementById('snap-layout-btn')?.addEventListener('click', () => {
-    document.body.classList.toggle('desktop-mode');
-});
+
