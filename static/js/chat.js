@@ -302,9 +302,14 @@ function handleOntologyUpdated(ontology) {
 
     console.log("[DEBUG] Current SessionOntology data:", ontology);
 
-    if (window.ontologyTabManager) {
-        window.ontologyTabManager.updateOntology(ontology);
-    }
+    // NOTE: We intentionally do NOT update ontologyTabManager here.
+    // The streamed 'ontology' is the MERGED view (committed + pending).
+    // ontologyTabManager should only hold COMMITTED data (loaded from Neo4j
+    // on init / after approve / after reject). The graph renders the merged
+    // view on-the-fly via renderMergedGraph().
+    // if (window.ontologyTabManager) {
+    //     window.ontologyTabManager.updateOntology(ontology);
+    // }
 
     const entityCount = Object.keys(ontology.entities || {}).length;
     const linkCount = Object.keys(ontology.links || {}).length;

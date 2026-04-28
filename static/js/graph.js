@@ -9,16 +9,7 @@ export function getNetworkInstance() {
 }
 
 // ─── Visual styling for pending ("staged") items ───
-const PENDING_NODE_STYLE = {
-    background: '#FFB300',
-    border: '#FF8F00',
-    hover: '#FFD54F',
-};
-
-const PENDING_EDGE_STYLE = {
-    color: '#FFB300',
-    highlight: '#FFD54F',
-};
+// Pending items keep their normal type colors; only borders and edges get dashed.
 
 // Format colors based on type
 const typeColors = {
@@ -51,14 +42,14 @@ function buildNode(id, ent, isPending) {
             label: ent.name,
             title: tooltipHtml,
             color: {
-                background: PENDING_NODE_STYLE.background,
-                border: PENDING_NODE_STYLE.border,
+                background: colors.background,
+                border: '#ffffff',
                 highlight: {
-                    background: PENDING_NODE_STYLE.hover,
-                    border: PENDING_NODE_STYLE.border
+                    background: colors.hover,
+                    border: '#ffffff'
                 }
             },
-            font: { color: '#FFB300', size: 14, face: 'sans-serif', strokeWidth: 2, strokeColor: '#15171e' },
+            font: { color: '#ffffff' },
             shape: 'dot',
             size: 24,
             shapeProperties: { borderDashes: [6, 4] },
@@ -105,11 +96,11 @@ function buildEdge(id, link, entities, isPending) {
             label: relationType,
             title: `${description || relationType} (staged)`,
             color: {
-                color: PENDING_EDGE_STYLE.color,
-                highlight: PENDING_EDGE_STYLE.highlight
+                color: '#9CA3AF',
+                highlight: '#5ec0ff'
             },
             font: {
-                color: '#FFB300',
+                color: '#ffffff',
                 size: 13,
                 strokeWidth: 3,
                 strokeColor: '#15171e',
@@ -252,8 +243,22 @@ export function renderGraph(ontology, container, pendingOntology = null) {
  * from the global managers. Call this whenever either side changes.
  */
 export function renderMergedGraph(container) {
-    const currentOntology = window.ontologyTabManager?.currentOntology || { entities: {}, links: {} };
+    const rawCurrentOntology = window.ontologyTabManager?.currentOntology || { entities: {}, links: {} };
     const pendingOntology = window.pendingOntologyManager?.pendingOntology || { entities: {}, links: {} };
+
+    // Guard against stale merged data in ontologyTabManager: strip any items
+    // whose UUIDs also appear in pending, so the graph only renders them once
+    // with the pending (amber/dashed) visual style.
+    const currentEntities = { ...rawCurrentOntology.entities };
+    const currentLinks = { ...rawCurrentOntology.links };
+    for (const uuid of Object.keys(pendingOntology.entities || {})) {
+        delete currentEntities[uuid];
+    }
+    for (const uuid of Object.keys(pendingOntology.links || {})) {
+        delete currentLinks[uuid];
+    }
+    const currentOntology = { entities: currentEntities, links: currentLinks };
+
     renderGraph(currentOntology, container, pendingOntology);
 }
 
