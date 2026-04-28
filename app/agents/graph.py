@@ -1,4 +1,5 @@
 from typing import Literal, Dict, Any
+from uuid import UUID
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 import logging
@@ -335,6 +336,11 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
         committed_entity_keys = {
             f"{e.name.lower()}|{e.type}" for e in neo4j_ontology.entities.values()
         }
+        # Also build a map from name|type -> committed UUID so we can remap links
+        committed_entity_key_to_uuid = {
+            f"{e.name.lower()}|{e.type}": uuid_str
+            for uuid_str, e in neo4j_ontology.entities.items()
+        }
         committed_link_keys = set()
         for link in neo4j_ontology.links.values():
             source_name = neo4j_ontology.entities.get(str(link.source_uuid))
@@ -345,18 +351,41 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
                 )
 
         truly_new_entities = {}
+        # Map from fresh (pending) UUID -> committed UUID for duplicate entities
+        uuid_remap = {}
         for uuid_str, entity in new_pending.entities.items():
             key = f"{entity.name.lower()}|{entity.type}"
             if key not in committed_entity_keys:
                 truly_new_entities[uuid_str] = entity
+            else:
+                # Entity already committed: map its fresh UUID to the committed UUID
+                committed_uuid = committed_entity_key_to_uuid.get(key)
+                if committed_uuid:
+                    uuid_remap[uuid_str] = committed_uuid
 
         truly_new_links = {}
         for uuid_str, link in new_pending.links.items():
-            source_in_pending = str(link.source_uuid) in truly_new_entities
-            source_in_committed = str(link.source_uuid) in neo4j_ontology.entities
-            target_in_pending = str(link.target_uuid) in truly_new_entities
-            target_in_committed = str(link.target_uuid) in neo4j_ontology.entities
+            # Remap source/target UUIDs to committed ones where applicable
+            source_uuid = uuid_remap.get(str(link.source_uuid), str(link.source_uuid))
+            target_uuid = uuid_remap.get(str(link.target_uuid), str(link.target_uuid))
+
+            source_in_pending = source_uuid in truly_new_entities
+            source_in_committed = source_uuid in neo4j_ontology.entities
+            target_in_pending = target_uuid in truly_new_entities
+            target_in_committed = target_uuid in neo4j_ontology.entities
+
             if (source_in_pending or source_in_committed) and (target_in_pending or target_in_committed):
+                # Skip links that already exist in committed ontology
+                source_entity = truly_new_entities.get(source_uuid) or neo4j_ontology.entities.get(source_uuid)
+                target_entity = truly_new_entities.get(target_uuid) or neo4j_ontology.entities.get(target_uuid)
+                if source_entity and target_entity:
+                    link_key = f"{source_entity.name.lower()}|{target_entity.name.lower()}|{link.type.lower()}"
+                    if link_key in committed_link_keys:
+                        continue
+
+                # Apply the remapped UUIDs to the link before saving
+                link.source_uuid = UUID(source_uuid)
+                link.target_uuid = UUID(target_uuid)
                 truly_new_links[uuid_str] = link
 
         new_pending = SessionOntology(
