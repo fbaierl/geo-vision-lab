@@ -152,8 +152,41 @@ def _merge_cross_type(
     return True
 
 
+def _deduplicate_entities_by_name(
+    entities: dict[str, OntologyEntity],
+    uuid_remap: dict[str, str],
+) -> dict[str, OntologyEntity]:
+    """Merge entities that share the same name regardless of type.
+
+    First occurrence wins; subsequent duplicates are merged into it
+    and their UUIDs are recorded in uuid_remap for link remapping.
+    """
+    name_to_uuid: dict[str, str] = {}
+    to_remove: list[str] = []
+
+    for uuid_str, entity in list(entities.items()):
+        name = entity.name.lower()
+        if name in name_to_uuid:
+            existing_uuid = name_to_uuid[name]
+            existing = entities[existing_uuid]
+            _merge_mentions(existing, entity)
+            _merge_properties(existing, entity)
+            existing.updated_at = datetime.utcnow()
+            uuid_remap[uuid_str] = existing_uuid
+            to_remove.append(uuid_str)
+        else:
+            name_to_uuid[name] = uuid_str
+
+    for uuid_str in to_remove:
+        del entities[uuid_str]
+
+    return entities
+
+
 def merge_ontologies(
-    current: SessionOntology, delta: SessionOntology
+    current: SessionOntology,
+    delta: SessionOntology,
+    deduplicate_names: bool = False,
 ) -> SessionOntology:
     """Merge delta into current ontology.
 
@@ -163,7 +196,8 @@ def merge_ontologies(
     3. Same name, cross-type (Location↔Country) → merge into canonical type
     4. Otherwise → add as new entity
     5. Post-merge pass: resolve any remaining cross-type duplicates
-    6. Merge links with UUID remapping
+    6. (Optional) Post-merge pass: resolve any remaining same-name duplicates
+    7. Merge links with UUID remapping
     """
     merged = SessionOntology()
     merged.entities = dict(current.entities)
@@ -209,6 +243,9 @@ def merge_ontologies(
 
     merged.entities, post_remap = _resolve_cross_type(merged.entities)
     uuid_remap.update(post_remap)
+
+    if deduplicate_names:
+        merged.entities = _deduplicate_entities_by_name(merged.entities, uuid_remap)
 
     merged.links = dict(current.links)
     _merge_links(merged, delta, uuid_remap)

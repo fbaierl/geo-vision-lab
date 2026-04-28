@@ -353,3 +353,110 @@ class TestOntologyMerge:
             e for e in merged.entities.values() if e.name.lower() == "germany"
         ]
         assert len(germany_entities) == 1
+
+    # ═══════════════════════════════════════════════════════════════════
+    # deduplicate_names=True tests (new in this session)
+    # ═══════════════════════════════════════════════════════════════════
+
+    def test_different_types_not_deduplicated_by_default(self):
+        """By default, same name + different types = keep both (homonyms)."""
+        uuid_location = "550e8400-e29b-41d4-a716-446655440001"
+        uuid_person = "550e8400-e29b-41d4-a716-446655440002"
+
+        current = SessionOntology()
+        current.entities[uuid_location] = self.create_entity("Georgia", "Location", uuid=uuid_location)
+
+        delta = SessionOntology()
+        delta.entities[uuid_person] = self.create_entity("Georgia", "Person", uuid=uuid_person)
+
+        # default: deduplicate_names=False
+        merged = merge_ontologies(current, delta)
+
+        georgia_entities = [e for e in merged.entities.values() if e.name == "Georgia"]
+        assert len(georgia_entities) == 2
+        assert {e.type for e in georgia_entities} == {"Location", "Person"}
+
+    def test_deduplicate_names_merges_different_types(self):
+        """With deduplicate_names=True, same name merges regardless of type."""
+        uuid_location = "550e8400-e29b-41d4-a716-446655440001"
+        uuid_org = "550e8400-e29b-41d4-a716-446655440002"
+
+        current = SessionOntology()
+        soviet_loc = self.create_entity("Soviet Union", "Location", uuid=uuid_location)
+        soviet_loc.properties = {"lat": 44.56, "lon": 27.35}
+        soviet_loc.mentions = [self.create_mention("He ruled the Soviet Union")]
+        current.entities[uuid_location] = soviet_loc
+
+        delta = SessionOntology()
+        soviet_org = self.create_entity("Soviet Union", "Organization", uuid=uuid_org)
+        soviet_org.mentions = [self.create_mention("He served the Soviet Union")]
+        delta.entities[uuid_org] = soviet_org
+
+        merged = merge_ontologies(current, delta, deduplicate_names=True)
+
+        soviet_entities = [e for e in merged.entities.values() if e.name == "Soviet Union"]
+        assert len(soviet_entities) == 1, f"Expected 1 Soviet Union, got {len(soviet_entities)}"
+        # First occurrence (Location) wins
+        assert soviet_entities[0].type == "Location"
+        # Mentions from both are accumulated
+        assert len(soviet_entities[0].mentions) == 2
+        # Properties from first are preserved
+        assert soviet_entities[0].properties.get("lat") == 44.56
+
+    def test_deduplicate_names_link_remap(self):
+        """Links pointing to a deduplicated entity are remapped."""
+        uuid_loc = "550e8400-e29b-41d4-a716-446655440001"
+        uuid_org = "550e8400-e29b-41d4-a716-446655440002"
+        uuid_person = "550e8400-e29b-41d4-a716-446655440003"
+
+        current = SessionOntology()
+        current.entities[uuid_loc] = self.create_entity("Soviet Union", "Location", uuid=uuid_loc)
+        current.entities[uuid_person] = self.create_entity("Joseph Stalin", "Person", uuid=uuid_person)
+
+        delta = SessionOntology()
+        delta.entities[uuid_org] = self.create_entity("Soviet Union", "Organization", uuid=uuid_org)
+
+        link = self.create_link(uuid_person, uuid_org, "RULED")
+        delta.links[str(link.uuid)] = link
+
+        merged = merge_ontologies(current, delta, deduplicate_names=True)
+
+        assert len(merged.entities) == 2
+        soviet = next(e for e in merged.entities.values() if e.name == "Soviet Union")
+        assert str(soviet.uuid) == uuid_loc
+
+        assert len(merged.links) == 1
+        link = next(iter(merged.links.values()))
+        assert str(link.target_uuid) == uuid_loc
+
+    def test_deduplicate_names_preserves_case(self):
+        """Name deduplication is case-insensitive but keeps the first casing."""
+        uuid1 = "550e8400-e29b-41d4-a716-446655440001"
+        uuid2 = "550e8400-e29b-41d4-a716-446655440002"
+
+        current = SessionOntology()
+        current.entities[uuid1] = self.create_entity("soviet union", "Location", uuid=uuid1)
+
+        delta = SessionOntology()
+        delta.entities[uuid2] = self.create_entity("Soviet Union", "Organization", uuid=uuid2)
+
+        merged = merge_ontologies(current, delta, deduplicate_names=True)
+
+        soviet_entities = [e for e in merged.entities.values() if e.name.lower() == "soviet union"]
+        assert len(soviet_entities) == 1
+        assert soviet_entities[0].name == "soviet union"
+
+    def test_deduplicate_names_only_affects_same_name(self):
+        """Entities with different names are never merged."""
+        uuid1 = "550e8400-e29b-41d4-a716-446655440001"
+        uuid2 = "550e8400-e29b-41d4-a716-446655440002"
+
+        current = SessionOntology()
+        current.entities[uuid1] = self.create_entity("Stalin", "Person", uuid=uuid1)
+
+        delta = SessionOntology()
+        delta.entities[uuid2] = self.create_entity("Khrushchev", "Person", uuid=uuid2)
+
+        merged = merge_ontologies(current, delta, deduplicate_names=True)
+
+        assert len(merged.entities) == 2

@@ -257,9 +257,33 @@ export function renderMergedGraph(container) {
     for (const uuid of Object.keys(pendingOntology.links || {})) {
         delete currentLinks[uuid];
     }
-    const currentOntology = { entities: currentEntities, links: currentLinks };
 
-    renderGraph(currentOntology, container, pendingOntology);
+    // Deduplicate by name: if the same name exists in both committed and pending,
+    // only show the pending version (it has visual staging indicators).
+    // Also deduplicate within pending as a safety net.
+    const pendingNames = new Set();
+    const dedupedPendingEntities = {};
+    for (const [uuid, ent] of Object.entries(pendingOntology.entities || {})) {
+        const name = (ent.name || '').toLowerCase().trim();
+        if (name && !pendingNames.has(name)) {
+            pendingNames.add(name);
+            dedupedPendingEntities[uuid] = ent;
+        }
+    }
+
+    const dedupedCurrentEntities = {};
+    for (const [uuid, ent] of Object.entries(currentEntities)) {
+        const name = (ent.name || '').toLowerCase().trim();
+        if (name && !pendingNames.has(name)) {
+            dedupedCurrentEntities[uuid] = ent;
+        }
+    }
+
+    renderGraph(
+        { entities: dedupedCurrentEntities, links: currentLinks },
+        container,
+        { entities: dedupedPendingEntities, links: pendingOntology.links || {} }
+    );
 }
 
 window.renderMergedGraph = renderMergedGraph;

@@ -327,7 +327,9 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
             existing_pending = SessionOntology.model_validate(existing_pending)
 
         # Merge new delta into pending_ontology (NOT into Neo4j)
-        new_pending = merge_ontologies(existing_pending, delta)
+        # Deduplicate by name so the LLM extracting the same entity with a
+        # different type in a later query does not create duplicates.
+        new_pending = merge_ontologies(existing_pending, delta, deduplicate_names=True)
 
         # Filter out entities/links that already exist in committed Neo4j ontology
         committed_entity_keys = {
