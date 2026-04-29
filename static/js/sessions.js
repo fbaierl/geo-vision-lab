@@ -3,7 +3,7 @@
  */
 
 import { escapeHtml, getTimeAgo, showToast } from './utils.js';
-import { renderGraph } from './graph.js';
+import { renderMergedGraph } from './graph.js';
 import { renderMap } from './map.js';
 
 export class SessionManager {
@@ -58,6 +58,14 @@ export class SessionManager {
             if (session.ontology && (session.ontology.entities || session.ontology.links)) {
                 this.hydrateOntology(session.ontology);
             }
+
+            // Hydrate pending ontology
+            if (session.pending_ontology && (session.pending_ontology.entities || session.pending_ontology.links)) {
+                this.hydratePendingOntology(session.pending_ontology);
+            }
+
+            // Update pipeline status
+            this.updatePipelineStatus(session);
         } catch (error) {
             console.error('[SESSION] Error loading session data:', error);
         }
@@ -104,7 +112,7 @@ export class SessionManager {
         const graphEmptyState = document.getElementById('graph-empty-state');
 
         if (graphContainer && hasData) {
-            renderGraph(ontology, graphContainer);
+            renderMergedGraph(graphContainer);
             if (graphEmptyState) graphEmptyState.style.display = 'none';
         } else if (graphEmptyState) {
             graphEmptyState.style.display = 'flex';
@@ -261,5 +269,36 @@ export class SessionManager {
 
     getThreadId() {
         return this.currentThreadId;
+    }
+
+    hydratePendingOntology(pendingOntology) {
+        if (window.pendingOntologyManager) {
+            window.pendingOntologyManager.updatePendingOntology(pendingOntology);
+        }
+        const graphContainer = document.getElementById('graph-container');
+        const graphEmptyState = document.getElementById('graph-empty-state');
+        const hasPending = Object.keys(pendingOntology.entities || {}).length > 0 ||
+                           Object.keys(pendingOntology.links || {}).length > 0;
+        if (graphContainer) {
+            renderMergedGraph(graphContainer);
+            if (graphEmptyState && hasPending) {
+                graphEmptyState.style.display = 'none';
+            }
+        }
+    }
+
+    updatePipelineStatus(session) {
+        // Update User stage
+        const userValue = document.getElementById('pipeline-user-value');
+        if (userValue) {
+            userValue.textContent = '1 session';
+        }
+
+        // Update Ontology stage
+        const ontologyValue = document.getElementById('pipeline-ontology-value');
+        if (ontologyValue && session.ontology) {
+            const entityCount = Object.keys(session.ontology.entities || {}).length;
+            ontologyValue.textContent = `${entityCount} entities`;
+        }
     }
 }

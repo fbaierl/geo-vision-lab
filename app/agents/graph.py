@@ -1,4 +1,5 @@
 from typing import Literal, Dict, Any
+from uuid import UUID
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 import logging
@@ -22,6 +23,7 @@ from app.core.constants import (
     STATE_KEY_MESSAGES,
     STATE_KEY_VECTOR_SEARCH_RESULTS,
     STATE_KEY_ONTOLOGY,
+    STATE_KEY_PENDING_ONTOLOGY,
     STATE_KEY_VALIDATION_ATTEMPTS,
     STATE_KEY_IS_VALID,
     STATE_KEY_RAG_CONTEXT,
@@ -220,7 +222,8 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
     """
     Run the ontology processing sub-graph.
 
-    Loads existing ontology from Neo4j, merges new extraction, saves back.
+    Extracts ontology delta and saves as pending (not merged to Neo4j).
+    User reviews and approves pending changes in batch.
     """
     logger.info("=" * 80)
     logger.info("[ONTOLOGY_SUBGRAPH] Starting ontology processing sub-graph")
@@ -272,12 +275,15 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
 
     if not assistant_response:
         logger.info("[ONTOLOGY_SUBGRAPH] No response content to process")
-        return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
+        return {
+            STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {}),
+            STATE_KEY_PENDING_ONTOLOGY: state.get(STATE_KEY_PENDING_ONTOLOGY, {}),
+        }
 
     try:
-        # Load existing ontology from Neo4j (cross-session persistence)
+        # Load existing ontology from Neo4j (committed/approved)
         logger.info(
-            f"[ONTOLOGY_SUBGRAPH] Loading existing ontology from Neo4j (thread={thread_id})"
+            f"[ONTOLOGY_SUBGRAPH] Loading committed ontology from Neo4j (thread={thread_id})"
         )
         try:
             ontology_service = get_ontology_service()
@@ -301,7 +307,7 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
             f"[ONTOLOGY_SUBGRAPH] Invoking sub-graph with {len(assistant_response)} chars of assistant response"
         )
 
-        # Run sub-graph
+        # Run sub-graph to extract new delta
         subgraph_result = ontology_subgraph.invoke(subgraph_input)
         delta = subgraph_result.get("extracted_delta")
 
@@ -312,38 +318,100 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
             )
         else:
             logger.warning("[ONTOLOGY_SUBGRAPH] Sub-graph returned None or empty delta")
+            delta = SessionOntology()
 
-        # Merge: Neo4j ontology + in-memory state + new delta
-        current_ontology = state.get(STATE_KEY_ONTOLOGY)
-        if not current_ontology:
-            current_ontology = SessionOntology()
-        elif isinstance(current_ontology, dict):
-            current_ontology = SessionOntology.model_validate(current_ontology)
+        # Get existing pending_ontology from session state
+        existing_pending = state.get(STATE_KEY_PENDING_ONTOLOGY)
+        if not existing_pending:
+            existing_pending = SessionOntology()
+        elif isinstance(existing_pending, dict):
+            existing_pending = SessionOntology.model_validate(existing_pending)
 
-        # First merge Neo4j state with in-memory state
-        current_ontology = merge_ontologies(neo4j_ontology, current_ontology)
+        # Merge new delta into pending_ontology (NOT into Neo4j)
+        # Deduplicate by name so the LLM extracting the same entity with a
+        # different type in a later query does not create duplicates.
+        new_pending = merge_ontologies(existing_pending, delta, deduplicate_names=True)
 
-        # Then merge the new delta
-        if delta:
-            current_ontology = merge_ontologies(current_ontology, delta)
+        # Filter out entities/links that already exist in committed Neo4j ontology
+        committed_entity_keys = {
+            f"{e.name.lower()}|{e.type}" for e in neo4j_ontology.entities.values()
+        }
+        # Also build a map from name|type -> committed UUID so we can remap links
+        committed_entity_key_to_uuid = {
+            f"{e.name.lower()}|{e.type}": uuid_str
+            for uuid_str, e in neo4j_ontology.entities.items()
+        }
+        committed_link_keys = set()
+        for link in neo4j_ontology.links.values():
+            source_name = neo4j_ontology.entities.get(str(link.source_uuid))
+            target_name = neo4j_ontology.entities.get(str(link.target_uuid))
+            if source_name and target_name:
+                committed_link_keys.add(
+                    f"{source_name.name.lower()}|{target_name.name.lower()}|{link.type.lower()}"
+                )
 
-        # Save merged ontology back to Neo4j
-        try:
-            logger.info(
-                f"[ONTOLOGY_SUBGRAPH] Saving merged ontology to Neo4j: "
-                f"{len(current_ontology.entities)} entities, {len(current_ontology.links)} links"
-            )
-            ontology_service.save_ontology(thread_id, current_ontology)
-            logger.info("[ONTOLOGY_SUBGRAPH] Neo4j save complete")
-        except Exception as save_err:
-            logger.error(f"[ONTOLOGY_SUBGRAPH] Failed to save to Neo4j: {save_err}")
+        truly_new_entities = {}
+        # Map from fresh (pending) UUID -> committed UUID for duplicate entities
+        uuid_remap = {}
+        for uuid_str, entity in new_pending.entities.items():
+            key = f"{entity.name.lower()}|{entity.type}"
+            if key not in committed_entity_keys:
+                truly_new_entities[uuid_str] = entity
+            else:
+                # Entity already committed: map its fresh UUID to the committed UUID
+                committed_uuid = committed_entity_key_to_uuid.get(key)
+                if committed_uuid:
+                    uuid_remap[uuid_str] = committed_uuid
 
-        entity_count = len(current_ontology.entities)
-        link_count = len(current_ontology.links)
-        logger.info(
-            f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links accumulated."
+        truly_new_links = {}
+        for uuid_str, link in new_pending.links.items():
+            # Remap source/target UUIDs to committed ones where applicable
+            source_uuid = uuid_remap.get(str(link.source_uuid), str(link.source_uuid))
+            target_uuid = uuid_remap.get(str(link.target_uuid), str(link.target_uuid))
+
+            source_in_pending = source_uuid in truly_new_entities
+            source_in_committed = source_uuid in neo4j_ontology.entities
+            target_in_pending = target_uuid in truly_new_entities
+            target_in_committed = target_uuid in neo4j_ontology.entities
+
+            if (source_in_pending or source_in_committed) and (target_in_pending or target_in_committed):
+                # Skip links that already exist in committed ontology
+                source_entity = truly_new_entities.get(source_uuid) or neo4j_ontology.entities.get(source_uuid)
+                target_entity = truly_new_entities.get(target_uuid) or neo4j_ontology.entities.get(target_uuid)
+                if source_entity and target_entity:
+                    link_key = f"{source_entity.name.lower()}|{target_entity.name.lower()}|{link.type.lower()}"
+                    if link_key in committed_link_keys:
+                        continue
+
+                # Apply the remapped UUIDs to the link before saving
+                link.source_uuid = UUID(source_uuid)
+                link.target_uuid = UUID(target_uuid)
+                truly_new_links[uuid_str] = link
+
+        new_pending = SessionOntology(
+            entities=truly_new_entities,
+            links=truly_new_links,
         )
-        return {STATE_KEY_ONTOLOGY: current_ontology}
+
+        # Build full ontology for display (Neo4j committed + pending)
+        full_ontology = merge_ontologies(neo4j_ontology, new_pending)
+
+        entity_count = len(full_ontology.entities)
+        link_count = len(full_ontology.links)
+        pending_entity_count = len(truly_new_entities)
+        pending_link_count = len(truly_new_links)
+
+        logger.info(
+            f"[ONTOLOGY_SUBGRAPH] ✓ Sub-graph complete: {entity_count} total entities, {link_count} total links"
+        )
+        logger.info(
+            f"[ONTOLOGY_SUBGRAPH] Pending changes: {pending_entity_count} entities, {pending_link_count} links"
+        )
+
+        return {
+            STATE_KEY_ONTOLOGY: full_ontology,
+            STATE_KEY_PENDING_ONTOLOGY: new_pending,
+        }
 
     except Exception as e:
         logger.error(f"[ONTOLOGY_SUBGRAPH] ✗ Sub-graph failed: {e}")
@@ -354,7 +422,10 @@ def run_ontology_subgraph(state: AgentState, config: RunnableConfig) -> Dict[str
         logger.debug(
             f"[ONTOLOGY_SUBGRAPH] Assistant response preview: {assistant_response[:500]}..."
         )
-        return {STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {})}
+        return {
+            STATE_KEY_ONTOLOGY: state.get(STATE_KEY_ONTOLOGY, {}),
+            STATE_KEY_PENDING_ONTOLOGY: state.get(STATE_KEY_PENDING_ONTOLOGY, {}),
+        }
 
 
 def run_rag_subgraph_node(state: AgentState) -> Dict[str, Any]:
@@ -456,6 +527,27 @@ def get_graph():
 
 
 app_graph = get_graph()
+
+
+def update_graph_pending_ontology(thread_id: str, pending_ontology_data: dict):
+    """Sync pending_ontology from MongoDB back into the LangGraph checkpointer state.
+
+    Called after approve/reject to keep graph state consistent with MongoDB.
+    """
+    from app.models.ontology import SessionOntology
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        current_state = app_graph.get_state(config)
+        current_values = dict(current_state.values)
+        if pending_ontology_data:
+            pending_ontology = SessionOntology.model_validate(pending_ontology_data)
+        else:
+            pending_ontology = SessionOntology()
+        current_values[STATE_KEY_PENDING_ONTOLOGY] = pending_ontology
+        app_graph.update_state(config, current_values)
+    except Exception as e:
+        import logging
+        logging.getLogger("agent_flow").warning(f"[GRAPH] Failed to update graph pending_ontology: {e}")
 
 
 # External interface

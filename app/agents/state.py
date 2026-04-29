@@ -12,6 +12,9 @@ class AgentState(TypedDict):
     ontology: Optional[
         Any
     ]  # Will store SessionOntology.Dict since TypedDict serializes easier
+    pending_ontology: Optional[
+        Any
+    ]  # Unreviewed ontology changes (queued for batch review)
 
     # RAG Subgraph outputs
     rag_quality: Optional[str]  # RELEVANT, PARTIALLY_RELEVANT, IRRELEVANT

@@ -68,6 +68,44 @@ services:
       retries: 5
       start_period: 60s
 
+  # --- Self-Hosted Nominatim (DISABLED by default) ---
+  # Uncomment to enable local geocoding. Requires:
+  #   - 120GB+ RAM for full planet, 8GB+ for single continent
+  #   - 1-2 hours initial import time
+  #   - ~100GB disk space for world, ~30GB for Europe
+  # Change PBF_URL to desired region:
+  #   World:     https://download.geofabrik.de/world-latest.osm.pbf
+  #   Europe:    https://download.geofabrik.de/europe-latest.osm.pbf
+  #   N. America: https://download.geofabrik.de/north-america-latest.osm.pbf
+  #
+  # nominatim:
+  #   image: mediagis/nominatim:4.4
+  #   container_name: geovision-nominatim
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8083:8080"
+  #   environment:
+  #     - PBF_URL=https://download.geofabrik.de/world-latest.osm.pbf
+  #     - REPLICATION_URL=https://download.geofabrik.de/world-updates/
+  #     - NOMINATIM_PASSWORD=geovision
+  #     - IMPORT_STYLE=extratags
+  #     - FLATNODE_FILE=/nominatim/data/flatnodes
+  #   volumes:
+  #     - nominatim-data:/var/lib/postgresql/14/main
+  #     - nominatim-cache:/nominatim/data
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 8G
+  #       reservations:
+  #         memory: 4G
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/search?q=Berlin&format=json"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 120s
+
   mongo-express:
     image: mongo-express:latest
     container_name: geovision-mongo-express
@@ -116,6 +154,8 @@ services:
       - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://eu.api.smith.langchain.com}
       - LANGSMITH_PROJECT=geo-vision-lab
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - NOMINATIM_URL=${NOMINATIM_URL:-}
+      - NOMINATIM_TIMEOUT=${NOMINATIM_TIMEOUT:-10}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -125,6 +165,8 @@ services:
         condition: service_started
       ingest:
         condition: service_completed_successfully
+      # nominatim:
+      #   condition: service_started
     ports:
       - "8000:8000"
     command: >
@@ -187,3 +229,5 @@ volumes:
   hf_cache:
   loki_data:
   grafana_data:
+  # nominatim-data:
+  # nominatim-cache:

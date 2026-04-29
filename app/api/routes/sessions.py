@@ -13,6 +13,8 @@ from uuid import uuid4
 from app.core.di_database import get_database
 from app.core.di_graph import get_graph_store
 from app.core.di import get_ontology_service
+from app.services.ontology.merge import merge_ontologies
+from app.models.ontology import SessionOntology
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -28,6 +30,7 @@ class SessionUpdate(BaseModel):
 
 class SessionSave(BaseModel):
     messages: List[Dict[str, Any]] = Field(default_factory=list)
+    pending_ontology: Optional[Dict[str, Any]] = None
 
 
 class SessionListResponse(BaseModel):
@@ -155,6 +158,7 @@ async def get_session(thread_id: str):
         "updated_at": session.get("updated_at"),
         "messages": session.get("messages", []),
         "ontology": ontology_data,
+        "pending_ontology": session.get("pending_ontology", {"entities": {}, "links": {}}),
     }
 
 
@@ -269,22 +273,23 @@ async def save_session(thread_id: str, data: SessionSave):
         "created_at": now,
         "updated_at": now,
         "messages": data.messages,
+        "pending_ontology": data.pending_ontology or {"entities": {}, "links": {}},
     }
 
     # Try to find existing session first
     existing = db.sessions.find_one({"thread_id": thread_id})
 
     if existing:
-        # Update existing session
+        update_fields = {
+            "messages": data.messages,
+            "updated_at": now,
+            "title": title,
+        }
+        if data.pending_ontology is not None:
+            update_fields["pending_ontology"] = data.pending_ontology
         db.sessions.update_one(
             {"thread_id": thread_id},
-            {
-                "$set": {
-                    "messages": data.messages,
-                    "updated_at": now,
-                    "title": title,
-                }
-            },
+            {"$set": update_fields},
         )
     else:
         # Create new session
@@ -295,3 +300,460 @@ async def save_session(thread_id: str, data: SessionSave):
         "thread_id": thread_id,
         "message_count": len(data.messages),
     }
+
+
+@router.get("/{thread_id}/pending-ontology")
+async def get_pending_ontology(thread_id: str):
+    """
+    Get pending ontology changes for a session.
+
+    Returns unreviewed ontology changes that have been extracted but not yet committed to Neo4j.
+    """
+    db = get_database()
+
+    session = db.sessions.find_one({"thread_id": thread_id})
+    if not session:
+        return {
+            "thread_id": thread_id,
+            "entities": {},
+            "links": {},
+            "entity_count": 0,
+            "link_count": 0,
+        }
+
+    pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+
+    return {
+        "thread_id": thread_id,
+        "entities": pending.get("entities", {}),
+        "links": pending.get("links", {}),
+        "entity_count": len(pending.get("entities", {})),
+        "link_count": len(pending.get("links", {})),
+    }
+
+
+@router.post("/{thread_id}/pending-ontology/approve")
+async def approve_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]] = None):
+    """
+    Approve pending ontology changes and merge them into Neo4j.
+
+    Optionally, specific entity/link UUIDs can be provided to approve only selected changes.
+    If no UUIDs provided, all pending changes are approved.
+    """
+    db = get_database()
+
+    session = db.sessions.find_one({"thread_id": thread_id})
+    if session:
+        pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+    else:
+        # Session not yet saved to MongoDB; try to read pending from LangGraph state
+        try:
+            from app.agents.graph import app_graph
+            config = {"configurable": {"thread_id": thread_id}}
+            current_state = app_graph.get_state(config)
+            pending_state = current_state.values.get("pending_ontology")
+            if pending_state and hasattr(pending_state, "model_dump"):
+                pending = pending_state.model_dump(mode="json")
+            elif pending_state and isinstance(pending_state, dict):
+                pending = pending_state
+            else:
+                pending = {"entities": {}, "links": {}}
+        except Exception:
+            pending = {"entities": {}, "links": {}}
+
+    pending_entities = pending.get("entities", {})
+    pending_links = pending.get("links", {})
+
+    if not pending_entities and not pending_links:
+        return {
+            "status": "success",
+            "message": "No pending changes to approve",
+            "approved_entities": 0,
+            "approved_links": 0,
+        }
+
+    # Filter by selected UUIDs if provided
+    selected_entity_uuids = None
+    selected_link_uuids = None
+    if data:
+        selected_entity_uuids = data.get("entity_uuids")
+        selected_link_uuids = data.get("link_uuids")
+
+    if selected_entity_uuids:
+        pending_entities = {k: v for k, v in pending_entities.items() if k in selected_entity_uuids}
+    if selected_link_uuids:
+        pending_links = {k: v for k, v in pending_links.items() if k in selected_link_uuids}
+
+    # Build SessionOntology from pending changes
+    delta = SessionOntology(
+        entities={k: _dict_to_entity(v) for k, v in pending_entities.items()},
+        links={k: _dict_to_link(v) for k, v in pending_links.items()},
+    )
+
+    # Load existing ontology from Neo4j and merge
+    try:
+        ontology_service = get_ontology_service()
+        existing_ontology = ontology_service.load_ontology(thread_id)
+        merged_ontology = merge_ontologies(existing_ontology, delta)
+        ontology_service.save_ontology(thread_id, merged_ontology)
+    except Exception as e:
+        import logging
+        logging.getLogger("agent_flow").error(f"[APPROVE] Failed to merge ontology: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to merge ontology: {str(e)}")
+
+    # Remove approved changes from pending
+    remaining_entities = {k: v for k, v in pending.get("entities", {}).items() if k not in pending_entities}
+    remaining_links = {k: v for k, v in pending.get("links", {}).items() if k not in pending_links}
+
+    db.sessions.update_one(
+        {"thread_id": thread_id},
+        {"$set": {
+            "pending_ontology": {
+                "entities": remaining_entities,
+                "links": remaining_links,
+            },
+            "updated_at": datetime.utcnow(),
+        }},
+        upsert=True,
+    )
+
+    # Sync remaining pending back to LangGraph checkpointer
+    try:
+        from app.agents.graph import update_graph_pending_ontology
+        update_graph_pending_ontology(thread_id, {
+            "entities": remaining_entities,
+            "links": remaining_links,
+        })
+    except Exception as sync_err:
+        import logging
+        logging.getLogger("agent_flow").warning(f"[APPROVE] Failed to sync graph state: {sync_err}")
+
+    return {
+        "status": "success",
+        "approved_entities": len(pending_entities),
+        "approved_links": len(pending_links),
+        "remaining_entities": len(remaining_entities),
+        "remaining_links": len(remaining_links),
+    }
+
+
+@router.post("/{thread_id}/pending-ontology/reject")
+async def reject_pending_ontology(thread_id: str, data: Optional[Dict[str, Any]] = None):
+    """
+    Reject pending ontology changes (discard them).
+
+    Optionally, specific entity/link UUIDs can be provided to reject only selected changes.
+    If no UUIDs provided, all pending changes are rejected.
+    """
+    db = get_database()
+
+    session = db.sessions.find_one({"thread_id": thread_id})
+    if session:
+        pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+    else:
+        # Session not yet saved to MongoDB; try to read pending from LangGraph state
+        try:
+            from app.agents.graph import app_graph
+            config = {"configurable": {"thread_id": thread_id}}
+            current_state = app_graph.get_state(config)
+            pending_state = current_state.values.get("pending_ontology")
+            if pending_state and hasattr(pending_state, "model_dump"):
+                pending = pending_state.model_dump(mode="json")
+            elif pending_state and isinstance(pending_state, dict):
+                pending = pending_state
+            else:
+                pending = {"entities": {}, "links": {}}
+        except Exception:
+            pending = {"entities": {}, "links": {}}
+
+    pending_entities = pending.get("entities", {})
+    pending_links = pending.get("links", {})
+
+    if not pending_entities and not pending_links:
+        return {
+            "status": "success",
+            "message": "No pending changes to reject",
+            "rejected_entities": 0,
+            "rejected_links": 0,
+        }
+
+    # Filter by selected UUIDs if provided
+    selected_entity_uuids = None
+    selected_link_uuids = None
+    if data:
+        selected_entity_uuids = data.get("entity_uuids")
+        selected_link_uuids = data.get("link_uuids")
+
+    if selected_entity_uuids:
+        remaining_entities = {k: v for k, v in pending_entities.items() if k not in selected_entity_uuids}
+    else:
+        remaining_entities = {}
+
+    if selected_link_uuids:
+        remaining_links = {k: v for k, v in pending_links.items() if k not in selected_link_uuids}
+    else:
+        remaining_links = {}
+
+    rejected_entity_count = len(pending_entities) - len(remaining_entities)
+    rejected_link_count = len(pending_links) - len(remaining_links)
+
+    db.sessions.update_one(
+        {"thread_id": thread_id},
+        {"$set": {
+            "pending_ontology": {
+                "entities": remaining_entities,
+                "links": remaining_links,
+            },
+            "updated_at": datetime.utcnow(),
+        }},
+        upsert=True,
+    )
+
+    # Sync remaining pending back to LangGraph checkpointer
+    try:
+        from app.agents.graph import update_graph_pending_ontology
+        update_graph_pending_ontology(thread_id, {
+            "entities": remaining_entities,
+            "links": remaining_links,
+        })
+    except Exception as sync_err:
+        import logging
+        logging.getLogger("agent_flow").warning(f"[REJECT] Failed to sync graph state: {sync_err}")
+
+    return {
+        "status": "success",
+        "rejected_entities": rejected_entity_count,
+        "rejected_links": rejected_link_count,
+        "remaining_entities": len(remaining_entities),
+        "remaining_links": len(remaining_links),
+    }
+
+
+@router.post("/{thread_id}/ontology/build")
+async def build_ontology_from_conversation(thread_id: str):
+    """
+    Manual trigger: extract ontology from full conversation history.
+
+    Re-runs ontology extraction on all messages in the session and adds to pending.
+    """
+    import logging
+    logger = logging.getLogger("agent_flow")
+
+    db = get_database()
+    session = db.sessions.find_one({"thread_id": thread_id})
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {thread_id} not found")
+
+    messages = session.get("messages", [])
+    if not messages:
+        return {
+            "status": "success",
+            "message": "No messages in session to process",
+            "entities_extracted": 0,
+            "links_extracted": 0,
+        }
+
+    # Build conversation context
+    conversation_parts = []
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        if role == "user":
+            conversation_parts.append(f"User: {content}")
+        elif role == "assistant":
+            conversation_parts.append(f"Assistant: {content}")
+
+    full_context = "\n\n".join(conversation_parts)
+
+    try:
+        from app.agents.ontology_subgraph import ontology_subgraph
+
+        subgraph_input = {
+            "user_query": full_context,
+            "assistant_response": "",
+            "query_id": thread_id,
+        }
+
+        subgraph_result = ontology_subgraph.invoke(subgraph_input)
+        delta = subgraph_result.get("extracted_delta")
+
+        if not delta or (not delta.entities and not delta.links):
+            return {
+                "status": "success",
+                "message": "No new ontology extracted from conversation",
+                "entities_extracted": 0,
+                "links_extracted": 0,
+            }
+
+        # Serialize delta
+        def serialize_entity(e):
+            return e.model_dump(mode="json") if hasattr(e, "model_dump") else e
+
+        def serialize_link(link):
+            return link.model_dump(mode="json") if hasattr(link, "model_dump") else link
+
+        new_entities = {str(k): serialize_entity(v) for k, v in delta.entities.items()}
+        new_links = {str(k): serialize_link(v) for k, v in delta.links.items()}
+
+        # Merge with existing pending
+        existing_pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+        existing_pending["entities"].update(new_entities)
+        existing_pending["links"].update(new_links)
+
+        db.sessions.update_one(
+            {"thread_id": thread_id},
+            {"$set": {
+                "pending_ontology": existing_pending,
+                "updated_at": datetime.utcnow(),
+            }},
+        )
+
+        logger.info(f"[ONTOLOGY_BUILD] Extracted {len(new_entities)} entities, {len(new_links)} links from conversation")
+
+        return {
+            "status": "success",
+            "entities_extracted": len(new_entities),
+            "links_extracted": len(new_links),
+            "total_pending_entities": len(existing_pending["entities"]),
+            "total_pending_links": len(existing_pending["links"]),
+        }
+
+    except Exception as e:
+        logger.error(f"[ONTOLOGY_BUILD] Failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to build ontology: {str(e)}")
+
+
+@router.get("/{thread_id}/documents")
+async def list_session_documents(thread_id: str):
+    """
+    List ingested documents for a session.
+
+    Returns documents that have been uploaded/ingested and are available for RAG.
+    """
+    import os
+    import glob
+
+    documents_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "documents")
+
+    if not os.path.exists(documents_dir):
+        return {
+            "thread_id": thread_id,
+            "documents": [],
+            "count": 0,
+        }
+
+    documents = []
+    for filepath in glob.glob(os.path.join(documents_dir, "**/*"), recursive=True):
+        if os.path.isfile(filepath):
+            rel_path = os.path.relpath(filepath, documents_dir)
+            stat = os.stat(filepath)
+            documents.append({
+                "name": os.path.basename(filepath),
+                "path": rel_path,
+                "size": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            })
+
+    documents.sort(key=lambda d: d["modified"], reverse=True)
+
+    return {
+        "thread_id": thread_id,
+        "documents": documents,
+        "count": len(documents),
+    }
+
+
+def _dict_to_entity(data: dict):
+    """Convert dict to OntologyEntity."""
+    from app.models.ontology import OntologyEntity, Mention
+    from uuid import UUID
+
+    mentions = []
+    for m in data.get("mentions", []):
+        if isinstance(m, dict):
+            mentions.append(Mention(
+                source_text=m.get("source_text", ""),
+                extracted_at=datetime.fromisoformat(m.get("extracted_at", datetime.utcnow().isoformat())),
+                confidence=m.get("confidence", 1.0),
+                thread_id=m.get("thread_id"),
+            ))
+
+    properties = data.get("properties", {})
+    if isinstance(properties, str):
+        import json
+        try:
+            properties = json.loads(properties)
+        except (json.JSONDecodeError, ValueError):
+            properties = {}
+
+    created_at_str = data.get("created_at", datetime.utcnow().isoformat())
+    updated_at_str = data.get("updated_at", datetime.utcnow().isoformat())
+
+    try:
+        created_at = datetime.fromisoformat(created_at_str)
+    except (ValueError, TypeError):
+        created_at = datetime.utcnow()
+
+    try:
+        updated_at = datetime.fromisoformat(updated_at_str)
+    except (ValueError, TypeError):
+        updated_at = datetime.utcnow()
+
+    return OntologyEntity(
+        uuid=UUID(data.get("uuid")),
+        name=data.get("name", ""),
+        type=data.get("type", ""),
+        properties=properties,
+        mentions=mentions,
+        created_at=created_at,
+        updated_at=updated_at,
+        created_by=data.get("created_by", "llm_extractor"),
+    )
+
+
+def _dict_to_link(data: dict):
+    """Convert dict to OntologyLink."""
+    from app.models.ontology import OntologyLink, Mention
+    from uuid import UUID
+
+    mentions = []
+    for m in data.get("mentions", []):
+        if isinstance(m, dict):
+            mentions.append(Mention(
+                source_text=m.get("source_text", ""),
+                extracted_at=datetime.fromisoformat(m.get("extracted_at", datetime.utcnow().isoformat())),
+                confidence=m.get("confidence", 1.0),
+                thread_id=m.get("thread_id"),
+            ))
+
+    properties = data.get("properties", {})
+    if isinstance(properties, str):
+        import json
+        try:
+            properties = json.loads(properties)
+        except (json.JSONDecodeError, ValueError):
+            properties = {}
+
+    created_at_str = data.get("created_at", datetime.utcnow().isoformat())
+    updated_at_str = data.get("updated_at", datetime.utcnow().isoformat())
+
+    try:
+        created_at = datetime.fromisoformat(created_at_str)
+    except (ValueError, TypeError):
+        created_at = datetime.utcnow()
+
+    try:
+        updated_at = datetime.fromisoformat(updated_at_str)
+    except (ValueError, TypeError):
+        updated_at = datetime.utcnow()
+
+    return OntologyLink(
+        uuid=UUID(data.get("uuid")),
+        source_uuid=UUID(data.get("source_uuid")),
+        target_uuid=UUID(data.get("target_uuid")),
+        type=data.get("type", ""),
+        properties=properties,
+        mentions=mentions,
+        created_at=created_at,
+        updated_at=updated_at,
+    )

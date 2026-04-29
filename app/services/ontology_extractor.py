@@ -5,6 +5,7 @@ Extracts full Entities (People, Orgs, Locations, Events) and their Links.
 """
 
 import logging
+import re
 from typing import Optional, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -15,14 +16,32 @@ from app.models.ontology import OntologyDelta, OntologyDeltaEntity
 logger = logging.getLogger("agent_flow")
 
 
+def _extract_json_from_response(content: str) -> str:
+    """Extract JSON from an LLM response that may contain markdown fences or prose."""
+    # Try markdown code fence first: ```json ... ``` or ``` ... ```
+    fence_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+    if fence_match:
+        return fence_match.group(1).strip()
+    # Fallback: find outermost { ... }
+    brace_start = content.find('{')
+    brace_end = content.rfind('}')
+    if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
+        return content[brace_start:brace_end + 1]
+    return content
+
+
 class OntologyExtractorService:
     def __init__(self, llm):
         self.llm = llm
         # Detect Groq even when wrapped with with_config()
+        # Check the underlying LLM if it's wrapped in a RunnableBinding
+        underlying_llm = llm
+        if hasattr(llm, "bound"):
+            underlying_llm = llm.bound
         self.is_groq = (
-            isinstance(llm, ChatGroq)
-            or "ChatGroq" in type(llm).__name__
-            or "ChatGroq" in str(type(llm))
+            isinstance(underlying_llm, ChatGroq)
+            or "ChatGroq" in type(underlying_llm).__name__
+            or "ChatGroq" in str(type(underlying_llm))
         )
 
         # We use a formal structured system prompt with concrete examples.
@@ -165,13 +184,8 @@ class OntologyExtractorService:
                 f"[ONTOLOGY_EXTRACTOR] Raw LLM response ({len(content)} chars): {content[:500]}..."
             )
 
-            # Clean possible markdown
-            if content.startswith("```json"):
-                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown json code block")
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif content.startswith("```"):
-                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown code block")
-                content = content.split("```")[1].split("```")[0].strip()
+            content = _extract_json_from_response(content)
+            logger.debug("[ONTOLOGY_EXTRACTOR] Extracted JSON for parsing")
 
             data = json.loads(content)
             logger.debug(
@@ -249,13 +263,8 @@ class OntologyExtractorService:
                 f"[ONTOLOGY_EXTRACTOR] Raw gap extraction response ({len(content)} chars): {content[:500]}..."
             )
 
-            # Clean possible markdown
-            if content.startswith("```json"):
-                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown json code block")
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif content.startswith("```"):
-                logger.debug("[ONTOLOGY_EXTRACTOR] Stripping markdown code block")
-                content = content.split("```")[1].split("```")[0].strip()
+            content = _extract_json_from_response(content)
+            logger.debug("[ONTOLOGY_EXTRACTOR] Extracted gap JSON for parsing")
 
             data = json.loads(content)
             entities_data = data.get("entities", [])

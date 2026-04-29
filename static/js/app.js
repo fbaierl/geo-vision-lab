@@ -2,18 +2,15 @@
  * Main application entry point - initializes all modules
  */
 
-import { WindowManager } from './window-manager.js';
 import { OntologyTabManager } from './ontology-tabs.js';
 import { OntologyImportExportHandler } from './import-export.js';
 import { SessionManager } from './sessions.js';
 import { initModelStatusMonitoring } from './model-status.js';
 import { initRAGConfig } from './rag-config.js';
+import { MainTabManager } from './main-tabs.js';
+import { PendingOntologyManager } from './pending-ontology.js';
 // Import chat module (initializes models, GPU status, and event listeners)
 import './chat.js';
-
-// Initialize window manager
-const windowManager = new WindowManager();
-window.windowManager = windowManager;
 
 // Initialize ontology tab manager
 const ontologyTabManager = new OntologyTabManager();
@@ -23,10 +20,22 @@ window.ontologyTabManager = ontologyTabManager;
 const ontologyImportExport = new OntologyImportExportHandler();
 window.ontologyImportExport = ontologyImportExport;
 
+// Initialize main tab manager (User, Sources, Ontology)
+const mainTabManager = new MainTabManager();
+window.mainTabManager = mainTabManager;
+
+// Initialize pending ontology manager
+const pendingOntologyManager = new PendingOntologyManager();
+window.pendingOntologyManager = pendingOntologyManager;
+
 // Initialize session manager
 (async function initSessionManager() {
     const sessionManager = new SessionManager();
     await sessionManager.init();
+    
+    // After session init, load pending ontology
+    const threadId = localStorage.getItem('geovision_thread_id') || 'default';
+    pendingOntologyManager.setThreadId(threadId);
 })();
 
 // Initialize model status monitoring
@@ -45,3 +54,5 @@ document.addEventListener('click', function(e) {
         }
     });
 });
+
+

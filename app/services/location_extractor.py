@@ -28,6 +28,9 @@ logger = logging.getLogger("agent_flow")
 NOMINATIM_URL = os.getenv("NOMINATIM_URL", None)
 NOMINATIM_TIMEOUT = int(os.getenv("NOMINATIM_TIMEOUT", "10"))
 
+# Fallback to public Nominatim if self-hosted is unavailable
+PUBLIC_NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+
 
 class LocationExtractorService:
     """
@@ -104,6 +107,7 @@ class LocationExtractorService:
 
         Returns ALL geocoding candidates (not just the first match).
         Handles rate limiting gracefully with retries.
+        Falls back to public Nominatim if self-hosted service is unavailable.
         """
         # Check cache first
         if location_name in self.geocode_cache:
@@ -113,19 +117,25 @@ class LocationExtractorService:
 
         max_retries = 3
         retry_delay = 2.0
+        use_fallback = False
 
         for attempt in range(max_retries):
             try:
-                # Use custom URL if configured (self-hosted Nominatim)
-                if NOMINATIM_URL:
-                    from geopy.adapters import HTTPAdapter
+                # Determine which URL to use
+                current_url = NOMINATIM_URL if not use_fallback else PUBLIC_NOMINATIM_URL
+                
+                if current_url:
+                    from geopy.adapters import RequestsAdapter
 
                     geolocator = Nominatim(
                         user_agent="geovision_lab_location_extractor",
-                        adapter_factory=HTTPAdapter,
+                        adapter_factory=RequestsAdapter,
                     )
                     # Override default URL
-                    geolocator.base_url = NOMINATIM_URL.replace("/search", "")
+                    if current_url == PUBLIC_NOMINATIM_URL:
+                        geolocator.base_url = "https://nominatim.openstreetmap.org"
+                    else:
+                        geolocator.base_url = current_url.replace("/search", "")
                 else:
                     geolocator = Nominatim(
                         user_agent="geovision_lab_location_extractor"
@@ -192,6 +202,12 @@ class LocationExtractorService:
                 logger.warning(
                     f"[LOCATION_EXTRACTOR] Geocoding error for '{location_name}': {e}"
                 )
+                # If using self-hosted and it fails, try fallback to public
+                if not use_fallback and NOMINATIM_URL:
+                    logger.info(f"[LOCATION_EXTRACTOR] Falling back to public Nominatim for '{location_name}'")
+                    use_fallback = True
+                    continue
+                    
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                 else:

@@ -4,7 +4,7 @@
 
 import { escapeHtml } from './utils.js';
 import { renderMap } from './map.js';
-import { renderGraph } from './graph.js';
+import { renderMergedGraph } from './graph.js';
 import { loadCurrentModel, getCurrentModel } from './model-selector.js';
 import { showThinkingPanel, appendToThinkingPanel, collapseThinkingPanel, resetThinkingState } from './thinking-panels.js';
 import { addReasoningStep, addReasoningResult, addReasoningError } from './reasoning-steps.js';
@@ -29,6 +29,8 @@ let threadId = localStorage.getItem('geovision_thread_id');
 console.log('[THREAD] Loaded thread ID from localStorage:', threadId);
 let rawStreamBuffer = '';
 let markdownRenderTimeout = null;
+let currentLogEntry = null;
+window.sourceLog = [];
 
 // Clock
 function updateClock() {
@@ -79,7 +81,8 @@ loadCurrentModel();
 export function addMessage(content, isUser = false) {
     const msg = document.createElement('div');
     msg.className = `chat-message ${isUser ? 'user' : ''}`;
-    msg.innerHTML = `<div class="chat-message-content markdown-content">${content}</div>`;
+    const rendered = (!isUser && typeof marked !== 'undefined') ? marked.parse(content) : content;
+    msg.innerHTML = `<div class="chat-message-content markdown-content">${rendered}</div>`;
     chatMessages.appendChild(msg);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     return msg.querySelector('.chat-message-content');
@@ -133,6 +136,7 @@ async function sendQuery() {
     if (!q) return;
 
     resetThinkingState();
+    resetReasoningTrail();
 
     addMessage(escapeHtml(q), true);
     addHistory(q);
@@ -144,8 +148,10 @@ async function sendQuery() {
     pillProcessing.style.display = 'flex';
 
     if (mapsLoading) mapsLoading.style.display = 'flex';
-    const graphLoadingEl = document.getElementById('graph-loading');
-    if (graphLoadingEl) graphLoadingEl.style.display = 'flex';
+    if (window.mainTabManager) {
+        window.mainTabManager.setTabLoading('ontology', true);
+        window.mainTabManager.setTabLoading('map', true);
+    }
 
     const responseEl = addMessage('');
     rawStreamBuffer = '';
@@ -189,20 +195,56 @@ async function sendQuery() {
                         threadId = evt.thread_id;
                         window.currentThreadId = threadId;
                         localStorage.setItem('geovision_thread_id', threadId);
+                        currentLogEntry = {
+                            query: q,
+                            timestamp: Date.now(),
+                            response: '',
+                            tools: [],
+                            responseStarted: false,
+                        };
                     } else if (evt.type === 'status') {
                         addReasoningStep(evt.phase, evt.tool, evt.query, evt.model);
-                        if (evt.tool && evt.tool !== 'unknown') {
+                        if (evt.tool && evt.tool !== 'unknown' && statTool) {
                             statTool.textContent = evt.tool;
+                        }
+                        if (currentLogEntry) {
+                            currentLogEntry.tools.push({
+                                name: evt.tool,
+                                summary: '',
+                                content: '',
+                            });
                         }
                     } else if (evt.type === 'tool_result') {
                         addReasoningResult(evt.tool, evt.summary, evt.content);
+                        if (currentLogEntry && currentLogEntry.tools.length > 0) {
+                            const lastTool = currentLogEntry.tools[currentLogEntry.tools.length - 1];
+                            if (lastTool.name === evt.tool) {
+                                lastTool.summary = evt.summary;
+                                lastTool.content = evt.content;
+                            }
+                        }
                     } else if (evt.type === 'rag_result') {
                         addReasoningResult(evt.tool || 'RAG', evt.summary, evt.hint || `Quality: ${evt.quality}`);
+                        if (currentLogEntry) {
+                            currentLogEntry.tools.push({
+                                name: evt.tool || 'RAG',
+                                summary: evt.summary,
+                                content: evt.hint || `Quality: ${evt.quality}`,
+                            });
+                        }
                     } else if (evt.type === 'ontology_updated') {
                         handleOntologyUpdated(evt.ontology);
+                    } else if (evt.type === 'pending_ontology_updated') {
+                        handlePendingOntologyUpdated(evt.pending_ontology);
                     } else if (evt.type === 'token') {
                         typingIndicator.classList.remove('show');
                         appendToMessageLive(responseEl, evt.content);
+                        if (currentLogEntry) {
+                            currentLogEntry.response += evt.content;
+                            if (!currentLogEntry.responseStarted) {
+                                currentLogEntry.responseStarted = true;
+                            }
+                        }
                     } else if (evt.type === 'thinking_start') {
                         showThinkingPanel();
                     } else if (evt.type === 'thinking_token') {
@@ -221,6 +263,10 @@ async function sendQuery() {
                         if (rawStreamBuffer && !responseEl.classList.contains('md-rendered')) {
                             renderMarkdown(responseEl);
                         }
+                        if (currentLogEntry) {
+                            window.sourceLog.push(currentLogEntry);
+                            currentLogEntry = null;
+                        }
                     }
                 } catch (parseErr) {
                     // Skip malformed
@@ -236,8 +282,8 @@ async function sendQuery() {
         const ms = Date.now() - t0;
         queryCount++;
         totalMs += ms;
-        statQueries.textContent = queryCount;
-        statAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
+        if (statQueries) statQueries.textContent = queryCount;
+        if (statAvg) statAvg.textContent = (totalMs / queryCount / 1000).toFixed(1) + 's';
 
     } catch (e) {
         responseEl.innerHTML = `<div class="error-message">Connection error: ${escapeHtml(e.message)}</div>`;
@@ -252,14 +298,21 @@ async function sendQuery() {
 
 function handleOntologyUpdated(ontology) {
     if (mapsLoading) mapsLoading.style.display = 'none';
-    const graphLoadingEl = document.getElementById('graph-loading');
-    if (graphLoadingEl) graphLoadingEl.style.display = 'none';
+    if (window.mainTabManager) {
+        window.mainTabManager.setTabLoading('ontology', false);
+        window.mainTabManager.setTabLoading('map', false);
+    }
 
     console.log("[DEBUG] Current SessionOntology data:", ontology);
 
-    if (window.ontologyTabManager) {
-        window.ontologyTabManager.updateOntology(ontology);
-    }
+    // NOTE: We intentionally do NOT update ontologyTabManager here.
+    // The streamed 'ontology' is the MERGED view (committed + pending).
+    // ontologyTabManager should only hold COMMITTED data (loaded from Neo4j
+    // on init / after approve / after reject). The graph renders the merged
+    // view on-the-fly via renderMergedGraph().
+    // if (window.ontologyTabManager) {
+    //     window.ontologyTabManager.updateOntology(ontology);
+    // }
 
     const entityCount = Object.keys(ontology.entities || {}).length;
     const linkCount = Object.keys(ontology.links || {}).length;
@@ -269,12 +322,8 @@ function handleOntologyUpdated(ontology) {
     const graphEmptyState = document.getElementById('graph-empty-state');
     if (graphContainer) {
         if (hasData) {
-            renderGraph(ontology, graphContainer);
+            renderMergedGraph(graphContainer);
             if (graphEmptyState) graphEmptyState.style.display = 'none';
-            const winData = window.windowManager.windows.get('window-graph');
-            if (winData && winData.minimized) {
-                window.windowManager.restoreWindow('window-graph');
-            }
         } else {
             if (graphEmptyState) graphEmptyState.style.display = 'flex';
         }
@@ -295,10 +344,6 @@ function handleOntologyUpdated(ontology) {
     if (locations && locations.length > 0) {
         renderMap(locations, mapContainer);
         if (mapEmptyState) mapEmptyState.style.display = 'none';
-        const winData = window.windowManager.windows.get('window-maps');
-        if (winData && winData.minimized) {
-            window.windowManager.restoreWindow('window-maps');
-        }
     } else {
         if (mapEmptyState) mapEmptyState.style.display = 'flex';
     }
@@ -307,8 +352,10 @@ function handleOntologyUpdated(ontology) {
 function handleOntologyError() {
     addReasoningError('ontology_subgraph', 'Ontology extraction failed');
     if (mapsLoading) mapsLoading.style.display = 'none';
-    const graphLoadingEl = document.getElementById('graph-loading');
-    if (graphLoadingEl) graphLoadingEl.style.display = 'none';
+    if (window.mainTabManager) {
+        window.mainTabManager.setTabLoading('ontology', false);
+        window.mainTabManager.setTabLoading('map', false);
+    }
 
     const mapEmptyState = document.getElementById('map-empty-state');
     const graphEmptyState = document.getElementById('graph-empty-state');
@@ -329,6 +376,22 @@ function handleOntologyError() {
     }
 }
 
+function handlePendingOntologyUpdated(pendingOntology) {
+    if (window.pendingOntologyManager) {
+        window.pendingOntologyManager.updatePendingOntology(pendingOntology);
+    }
+    const graphContainer = document.getElementById('graph-container');
+    const graphEmptyState = document.getElementById('graph-empty-state');
+    const hasPending = Object.keys(pendingOntology.entities || {}).length > 0 ||
+                       Object.keys(pendingOntology.links || {}).length > 0;
+    if (graphContainer) {
+        renderMergedGraph(graphContainer);
+        if (graphEmptyState && hasPending) {
+            graphEmptyState.style.display = 'none';
+        }
+    }
+}
+
 // Event listeners
 sendBtn.addEventListener('click', sendQuery);
 chatInput.addEventListener('keypress', (e) => {
@@ -337,3 +400,41 @@ chatInput.addEventListener('keypress', (e) => {
 
 // Expose addMessage for session manager hydration
 window.addMessageFn = addMessage;
+
+// Reasoning trail toggle
+const reasoningTrail = document.getElementById('reasoning-trail');
+const reasoningTrailToggle = document.getElementById('reasoning-trail-toggle');
+const reasoningTrailBadge = document.getElementById('reasoning-trail-badge');
+let reasoningStepCount = 0;
+
+window._onReasoningStep = function() {
+    reasoningStepCount++;
+    if (reasoningTrailBadge) {
+        reasoningTrailBadge.textContent = reasoningStepCount;
+        reasoningTrailBadge.style.display = 'inline-block';
+    }
+    if (reasoningTrailToggle) {
+        reasoningTrailToggle.classList.remove('has-new-reasoning');
+        void reasoningTrailToggle.offsetWidth; // trigger reflow
+        reasoningTrailToggle.classList.add('has-new-reasoning');
+    }
+};
+
+if (reasoningTrailToggle) {
+    reasoningTrailToggle.addEventListener('click', () => {
+        reasoningTrail.classList.toggle('expanded');
+    });
+}
+
+export function resetReasoningTrail() {
+    reasoningStepCount = 0;
+    if (reasoningTrailBadge) {
+        reasoningTrailBadge.textContent = '0';
+        reasoningTrailBadge.style.display = 'none';
+    }
+    if (reasoningTrail) reasoningTrail.classList.remove('expanded');
+}
+
+export function expandReasoningTrail() {
+    if (reasoningTrail) reasoningTrail.classList.add('expanded');
+}
