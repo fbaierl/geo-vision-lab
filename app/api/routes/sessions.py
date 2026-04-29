@@ -567,7 +567,6 @@ async def build_ontology_from_conversation(thread_id: str):
 
     try:
         from app.agents.ontology_subgraph import ontology_subgraph
-        from app.core.di import get_ontology_service
 
         subgraph_input = {
             "user_query": full_context,
@@ -590,8 +589,8 @@ async def build_ontology_from_conversation(thread_id: str):
         def serialize_entity(e):
             return e.model_dump(mode="json") if hasattr(e, "model_dump") else e
 
-        def serialize_link(l):
-            return l.model_dump(mode="json") if hasattr(l, "model_dump") else l
+        def serialize_link(link):
+            return link.model_dump(mode="json") if hasattr(link, "model_dump") else link
 
         new_entities = {str(k): serialize_entity(v) for k, v in delta.entities.items()}
         new_links = {str(k): serialize_link(v) for k, v in delta.links.items()}
