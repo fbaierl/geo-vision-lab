@@ -9,11 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="static/demo_screenshot.png" alt="GeoVision Lab Demo" width="1200" />
-</p>
-
-<p align="center">
-  <img src="geovision_showcase.gif" alt="GeoVision Lab Showcase — chat, knowledge graph, ontology review, relationship discovery, sources" width="900" />
+  <img src="geovision_showcase.gif" alt="GeoVision Lab Showcase — chat, knowledge graph, ontology review, relationship discovery, sources" width="700" />
 </p>
 
 <p align="center">
