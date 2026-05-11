@@ -103,6 +103,13 @@ export class MainTabManager {
 
             const responseHtml = entry.response ? `<div class="intel-log-response">${entry.response}</div>` : '';
 
+            const promptHtml = entry.prompt ? `
+                <details class="intel-log-prompt-details">
+                    <summary class="intel-log-prompt-summary">Show LLM Prompt</summary>
+                    <pre class="intel-log-prompt-content">${escapeHtml(entry.prompt)}</pre>
+                </details>
+            ` : '';
+
             return `
                 <div class="intel-log-entry" data-index="${i}">
                     <div class="intel-log-header">
@@ -112,6 +119,7 @@ export class MainTabManager {
                         <span class="intel-log-time">${time}</span>
                     </div>
                     <div class="intel-log-body">
+                        ${promptHtml}
                         ${responseHtml}
                         ${toolResults}
                     </div>

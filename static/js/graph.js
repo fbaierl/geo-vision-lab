@@ -3,9 +3,21 @@
  */
 
 let networkInstance = null;
+let selectedNodeIds = new Set();
 
 export function getNetworkInstance() {
     return networkInstance;
+}
+
+export function getSelectedNodeIds() {
+    return Array.from(selectedNodeIds);
+}
+
+function _notifySelectionChange() {
+    const event = new CustomEvent('graph-selection-change', {
+        detail: { selectedIds: Array.from(selectedNodeIds), count: selectedNodeIds.size }
+    });
+    document.dispatchEvent(event);
 }
 
 // ─── Visual styling for pending ("staged") items ───
@@ -224,7 +236,25 @@ export function renderGraph(ontology, container, pendingOntology = null) {
         interaction: {
             hover: true,
             tooltipDelay: 200,
-            hoverConnectedEdges: true
+            hoverConnectedEdges: true,
+            multiselect: true,
+            keyboard: true
+        },
+        nodes: {
+            borderWidthSelected: 5,
+            color: {
+                highlight: {
+                    border: '#ffffff',
+                    background: '#5ec0ff'
+                }
+            },
+            shadow: {
+                enabled: true,
+                color: 'rgba(94, 192, 255, 0.6)',
+                size: 15,
+                x: 0,
+                y: 0
+            }
         },
         edges: {
             hoverWidth: 3
@@ -233,8 +263,38 @@ export function renderGraph(ontology, container, pendingOntology = null) {
 
     if (!networkInstance) {
         networkInstance = new vis.Network(container, data, options);
+
+        // Track selection changes
+        networkInstance.on('selectNode', (params) => {
+            selectedNodeIds = new Set(params.nodes);
+            _notifySelectionChange();
+        });
+        networkInstance.on('deselectNode', (params) => {
+            selectedNodeIds = new Set(params.nodes);
+            _notifySelectionChange();
+        });
+
+        // Keyboard: Escape to clear selection
+        container.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && selectedNodeIds.size > 0) {
+                networkInstance.unselectAll();
+                selectedNodeIds = new Set();
+                _notifySelectionChange();
+            }
+        });
+        container.setAttribute('tabindex', '0');
     } else {
+        // Preserve selection across re-renders
+        const prevSelection = Array.from(selectedNodeIds);
         networkInstance.setData(data);
+        // Restore selection for nodes that still exist
+        const existingNodes = new Set(data.nodes.getIds());
+        const toReselect = prevSelection.filter(id => existingNodes.has(id));
+        if (toReselect.length > 0) {
+            networkInstance.selectNodes(toReselect);
+            selectedNodeIds = new Set(toReselect);
+            _notifySelectionChange();
+        }
     }
 }
 

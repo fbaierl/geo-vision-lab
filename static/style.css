@@ -23,9 +23,11 @@
     --text-bright: #ffffff;
     
     --accent: #3daee9;
+    --accent-hover: #2d8bc2;
     --accent-dim: rgba(61, 174, 233, 0.3);
     --accent-bright: #5ec0ff;
     --accent-glow: rgba(61, 174, 233, 0.15);
+    --bg-disabled: #2a2d35;
     
     --green: #7cb342;
     --amber: #ffb300;
@@ -71,7 +73,7 @@ html, body {
 #desktop {
     position: relative;
     width: 100%;
-    height: calc(100vh - var(--header-height) - var(--shelf-height));
+    height: calc(100vh - var(--header-height));
     margin-top: var(--header-height);
     overflow: hidden;
     background: linear-gradient(180deg, var(--bg-desktop) 0%, var(--bg-desktop-gradient) 100%);
@@ -2197,9 +2199,195 @@ html, body {
     height: 14px;
 }
 
+/* Ontology Toolbar */
+.ontology-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+}
+
+.ontology-toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: var(--font-ui);
+}
+
+.ontology-toolbar-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.ontology-toolbar-btn:disabled {
+    background: var(--bg-disabled);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.ontology-toolbar-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ontology-toolbar-btn .selection-count {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.ontology-toolbar-btn:disabled .selection-count {
+    background: var(--border);
+}
+
+/* Graph Selection Panel */
+.graph-selection-panel {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    min-width: 220px;
+    max-width: 280px;
+    background: var(--bg-window);
+    border: 1px solid var(--border-active);
+    border-radius: var(--radius-window);
+    box-shadow: var(--shadow-window-focused);
+    padding: 10px 12px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.graph-selection-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.graph-selection-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-bright);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex: 1;
+}
+
+.graph-selection-count {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.graph-selection-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+}
+
+.graph-selection-clear:hover {
+    color: var(--red);
+    background: rgba(229, 57, 53, 0.1);
+}
+
+.graph-selection-clear svg {
+    width: 14px;
+    height: 14px;
+}
+
+.graph-selection-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.graph-selection-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--bg-panel);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text);
+}
+
+.graph-selection-item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.graph-selection-item .name {
+    flex: 1;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.graph-selection-item .type {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.graph-selection-hint {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.graph-selection-hint kbd {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-bright);
+}
+
 .ontology-tab-content {
     display: none;
-    height: calc(100% - 45px); /* Account for tabs */
+    flex: 1;
+    position: relative;
+    overflow: hidden;
 }
 
 .ontology-tab-content.active {
@@ -4047,6 +4235,34 @@ html, body {
 
 .intel-log-response p {
     margin: 0 0 6px;
+}
+
+.intel-log-prompt-details {
+    margin-bottom: 8px;
+}
+
+.intel-log-prompt-summary {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    padding: 6px 0;
+}
+
+.intel-log-prompt-content {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    background: var(--bg-desktop);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    padding: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-top: 4px;
 }
 
 .intel-log-response p:last-child {

@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  <img src="geovision_showcase.gif" alt="GeoVision Lab Showcase — chat, knowledge graph, ontology review, relationship discovery, sources" width="900" />
+</p>
+
+<p align="center">
   <strong>Version:</strong> v0.4.0
 </p>
 
@@ -190,6 +194,56 @@ When querying "What happened in Iran last week?", the knowledge graph automatica
 - Key figures (President Trump, military leaders)
 - Military bases and infrastructure (Ras Laffan Industrial City, Meyssam Tammar Basij base)
 - Relationships between entities (ATTACKED, LOCATED_IN, SENT_PLAN_TO, etc.)
+
+## Ontology Features
+
+The ontology system provides a full knowledge graph management interface with multiple visualization modes, LLM-driven relationship discovery, and a review workflow for extracted changes.
+
+### Multiple Visualization Modes
+
+Switch between four views using the tab bar in the Ontology panel:
+
+| View | Description |
+|------|-------------|
+| **Graph** | Interactive force-directed network with color-coded nodes (blue=Location, orange=Person, purple=Organization, red=Event, green=Asset, etc.), curved relationship edges with labels, hover tooltips, and multi-select for relationship discovery |
+| **Table** | Sortable data tables for entities (name, type, mentions, created date) and links (source → target, relationship type, mentions) |
+| **JSON** | Expandable/collapsible tree view of the full ontology with copy-to-clipboard and download options |
+| **Cards** | Filterable entity cards grouped by type (Person, Location, Organization, Event, Asset, Document, Concept) |
+
+### Discover Relationships
+
+Select two or more entities in the **Graph** view (Ctrl/Cmd+click or drag-to-select), then click **"Discover Relationships"**. The system:
+
+1. Gathers existing ontology context, conversation history, and relevant source document chunks
+2. Sends a structured prompt to the LLM asking it to discover *all* relevant relationships between the selected entities
+3. The LLM may also discover **new intermediary entities** and relationships involving them
+4. Discovered entities and links are added to **Pending Review** for approval
+5. The full LLM prompt is recorded in the **Intelligence Log** for transparency — expand any "Discover relationships" entry to inspect exactly what was asked
+
+### Review Changes (Pending Ontology)
+
+All extracted or discovered entities and links land in the **Pending Review** panel before being committed to the graph database:
+
+- **Inspect** — Browse pending entities and links with type badges and context summaries
+- **Select** — Click checkboxes to select individual entities or links for targeted approval
+- **Approve Selected** — Commit only the selected items to Neo4j
+- **Reject Selected** — Discard only the selected items
+- **Approve All** — Commit everything in the pending queue at once
+- **Reject All** — Discard everything at once
+
+Approved changes are persisted to Neo4j and immediately reflected in all ontology views. Rejected changes are removed from the pending queue.
+
+### Import & Export
+
+- **Export Project** — Download the current session's full ontology (entities + links) as a JSON file via the File menu
+- **Import Project** — Upload a previously exported JSON file to restore an ontology into the current session
+
+### Manual Build
+
+Click **"Build Ontology from Conversation"** to re-run ontology extraction on the entire chat history. This is useful when:
+- You want to re-extract after adding new documents
+- Previous extraction missed entities due to model limitations
+- You're continuing an older session and want to refresh the graph
 
 ### System Architecture
 
