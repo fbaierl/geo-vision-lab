@@ -61,6 +61,10 @@ export class OntologyTabManager {
         this.discoverBtn = document.getElementById('discover-relationships-btn');
         this.discoverBtn?.addEventListener('click', () => this._discoverRelationships());
 
+        // Merge entities button
+        this.mergeBtn = document.getElementById('merge-entities-btn');
+        this.mergeBtn?.addEventListener('click', () => this._mergeEntities());
+
         // Selection panel clear button
         document.getElementById('graph-selection-clear')?.addEventListener('click', () => {
             const network = getNetworkInstance();
@@ -138,6 +142,20 @@ export class OntologyTabManager {
             this.discoverBtn.disabled = true;
             if (countEl) countEl.textContent = '';
         }
+        this._updateMergeButton();
+    }
+
+    _updateMergeButton() {
+        if (!this.mergeBtn) return;
+        const count = this.selectedGraphNodeIds.length;
+        const countEl = document.getElementById('merge-selection-count');
+        if (count >= 2) {
+            this.mergeBtn.disabled = false;
+            if (countEl) countEl.textContent = count;
+        } else {
+            this.mergeBtn.disabled = true;
+            if (countEl) countEl.textContent = '';
+        }
     }
 
     async _discoverRelationships() {
@@ -209,6 +227,111 @@ export class OntologyTabManager {
         } finally {
             if (spinner) spinner.style.display = 'none';
             this._updateDiscoverButton();
+        }
+    }
+
+    async _mergeEntities() {
+        if (this.selectedGraphNodeIds.length < 2) return;
+
+        // Build list of selected entity names for the confirmation dialog
+        const entityNames = this.selectedGraphNodeIds.map(uuid => {
+            const ent = this._getEntityByUuid(uuid);
+            return ent ? ent.name : 'Unknown';
+        });
+
+        const firstEntity = this._getEntityByUuid(this.selectedGraphNodeIds[0]);
+        const defaultName = firstEntity ? firstEntity.name : '';
+
+        const confirmed = confirm(
+            `Merge ${this.selectedGraphNodeIds.length} entities into one?\n\n` +
+            `Selected entities:\n${entityNames.map(n => `  - ${n}`).join('\n')}\n\n` +
+            `The first entity (${defaultName}) will be the primary. All relationships will be rewired to it.`
+        );
+
+        if (!confirmed) return;
+
+        const btn = this.mergeBtn;
+        const spinner = btn.querySelector('.btn-spinner');
+        btn.disabled = true;
+        if (spinner) spinner.style.display = 'inline-block';
+
+        const threadId = localStorage.getItem('geovision_thread_id') || 'default';
+
+        try {
+            const res = await fetch(`/api/ontology/${threadId}/merge-entities`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    entity_uuids: this.selectedGraphNodeIds,
+                }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                // Clear selection
+                const network = getNetworkInstance();
+                if (network) {
+                    network.unselectAll();
+                }
+                this.selectedGraphNodeIds = [];
+                this._updateDiscoverButton();
+                this._renderSelectionPanel();
+
+                // Refresh ontology
+                await this._reloadCommittedOntology();
+
+                // Show success notification
+                if (window.pendingOntologyManager) {
+                    window.pendingOntologyManager._showStatus(
+                        `Merged ${data.merged_entities} entities into "${data.name}"`,
+                        'success'
+                    );
+                }
+            } else {
+                const err = await res.text();
+                console.error('[MERGE] Failed:', err);
+                if (window.pendingOntologyManager) {
+                    window.pendingOntologyManager._showStatus('Merge failed', 'error');
+                }
+            }
+        } catch (e) {
+            console.error('[MERGE] Error:', e);
+            if (window.pendingOntologyManager) {
+                window.pendingOntologyManager._showStatus('Merge failed', 'error');
+            }
+        } finally {
+            if (spinner) spinner.style.display = 'none';
+            this._updateMergeButton();
+        }
+    }
+
+    async _reloadCommittedOntology() {
+        try {
+            const threadId = localStorage.getItem('geovision_thread_id') || 'default';
+            const ontRes = await fetch(`/api/ontology/${threadId}`);
+            if (!ontRes.ok) return;
+            const ontData = await ontRes.json();
+            const ontology = {
+                entities: Object.fromEntries((ontData.entities || []).map(e => [e.uuid, e])),
+                links: Object.fromEntries((ontData.links || []).map(l => [l.uuid, l])),
+            };
+            this.updateOntology(ontology);
+            const graphContainer = document.getElementById('graph-container');
+            const graphEmptyState = document.getElementById('graph-empty-state');
+            if (graphContainer && window.renderMergedGraph) {
+                window.renderMergedGraph(graphContainer);
+            }
+            if (graphEmptyState) {
+                const hasCommitted = Object.keys(ontology.entities || {}).length > 0 ||
+                                     Object.keys(ontology.links || {}).length > 0;
+                const hasPending = window.pendingOntologyManager && (
+                    Object.keys(window.pendingOntologyManager.pendingOntology.entities || {}).length > 0 ||
+                    Object.keys(window.pendingOntologyManager.pendingOntology.links || {}).length > 0
+                );
+                graphEmptyState.style.display = (hasCommitted || hasPending) ? 'none' : 'flex';
+            }
+        } catch (e) {
+            console.warn('[MERGE] Failed to reload committed ontology:', e);
         }
     }
 

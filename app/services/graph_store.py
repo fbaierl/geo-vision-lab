@@ -146,6 +146,242 @@ class GraphStoreService:
         """
         self._run_write(query, {"uuid": uuid})
 
+    def merge_entities(self, entity_uuids: List[str], target_name: str = None, target_type: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Merge multiple entities into a single entity.
+
+        The first UUID becomes the primary entity. All other entities are:
+        - Detached (their relationships are rewired to the primary)
+        - Deleted
+        - Their properties and mentions are merged into the primary
+
+        Args:
+            entity_uuids: List of entity UUIDs to merge (first is primary)
+            target_name: Optional new name for the merged entity (defaults to primary's name)
+            target_type: Optional type override (defaults to primary's type)
+
+        Returns:
+            Dict with merged entity info or None if failed
+        """
+        if not entity_uuids or len(entity_uuids) < 2:
+            return None
+
+        primary_uuid = entity_uuids[0]
+        secondary_uuids = entity_uuids[1:]
+
+        # Get all entities to merge
+        all_entities = []
+        for uuid in entity_uuids:
+            ent = self.get_entity_by_uuid(uuid)
+            if ent:
+                all_entities.append(ent)
+
+        if len(all_entities) < 2:
+            return None
+
+        primary = all_entities[0]
+
+        # Build merged properties
+        merged_properties = {}
+        for ent in all_entities:
+            props_raw = ent.get("properties", "{}")
+            if isinstance(props_raw, str):
+                try:
+                    props = json.loads(props_raw)
+                except (json.JSONDecodeError, ValueError):
+                    props = {}
+            elif isinstance(props_raw, dict):
+                props = props_raw
+            else:
+                props = {}
+            merged_properties.update(props)
+
+        # Build merged mentions
+        merged_mentions = []
+        for ent in all_entities:
+            mentions_raw = ent.get("mentions", "[]")
+            if isinstance(mentions_raw, str):
+                try:
+                    mentions = json.loads(mentions_raw)
+                except (json.JSONDecodeError, ValueError):
+                    mentions = []
+            elif isinstance(mentions_raw, list):
+                mentions = mentions_raw
+            else:
+                mentions = []
+            merged_mentions.extend(mentions)
+
+        # Determine final name and type
+        final_name = target_name or primary.get("name", "")
+        final_type = target_type or primary.get("type", "")
+        final_label = self._type_to_label(final_type)
+
+        now = datetime.utcnow().isoformat()
+
+        # Update primary entity with merged data
+        old_label = self._type_to_label(primary.get("type", "Entity"))
+        update_query = """
+        MATCH (primary:Entity {uuid: $primary_uuid})
+        SET primary.name = $name,
+            primary.type = $type,
+            primary.properties = $properties,
+            primary.mentions = $mentions,
+            primary.updated_at = $now
+        """
+        if old_label != final_label:
+            update_query += f"""
+        WITH primary
+        REMOVE primary:{old_label}
+        SET primary:{final_label}
+        """
+        update_query += " RETURN primary"
+
+        self._run_write(
+            update_query,
+            {
+                "primary_uuid": primary_uuid,
+                "name": final_name,
+                "type": final_type,
+                "properties": json.dumps(merged_properties),
+                "mentions": json.dumps(merged_mentions),
+                "now": now,
+            },
+        )
+
+        # Rewire all relationships from secondary entities to primary.
+        # We iterate per relationship type because Neo4j requires dynamic relationship types
+        # to be embedded in the query string.
+        for sec_uuid in secondary_uuids:
+            # Get all outgoing relationships from secondary
+            outgoing = self._run(
+                """
+                MATCH (secondary:Entity {uuid: $secondary_uuid})-[r]->(target:Entity)
+                WHERE target.uuid <> $primary_uuid
+                RETURN type(r) AS rel_type, r.uuid AS uuid, r.type AS rel_label,
+                       r.thread_id AS thread_id, r.properties AS properties,
+                       r.mentions AS mentions, r.created_at AS created_at,
+                       r.updated_at AS updated_at, target.uuid AS target_uuid
+                """,
+                {"secondary_uuid": sec_uuid, "primary_uuid": primary_uuid},
+            )
+            for rel in outgoing:
+                rel_type = self._type_to_rel_type(rel.get("rel_type", "RELATED_TO"))
+                create_rel_query = f"""
+                MATCH (primary:Entity {{uuid: $primary_uuid}})
+                MATCH (target:Entity {{uuid: $target_uuid}})
+                MERGE (primary)-[r:{rel_type} {{uuid: $uuid}}]->(target)
+                ON CREATE SET r.type = $type, r.thread_id = $thread_id,
+                              r.created_at = $created_at, r.updated_at = $updated_at,
+                              r.properties = $properties, r.mentions = $mentions
+                ON MATCH SET r.updated_at = $updated_at, r.properties = $properties, r.mentions = $mentions
+                """
+                self._run_write(
+                    create_rel_query,
+                    {
+                        "primary_uuid": primary_uuid,
+                        "target_uuid": rel.get("target_uuid"),
+                        "uuid": rel.get("uuid"),
+                        "type": rel.get("rel_label", rel.get("rel_type", "RELATED_TO")),
+                        "thread_id": rel.get("thread_id", ""),
+                        "properties": rel.get("properties", "{}"),
+                        "mentions": rel.get("mentions", "[]"),
+                        "created_at": rel.get("created_at", now),
+                        "updated_at": now,
+                    },
+                )
+
+            # Delete outgoing relationships from secondary
+            self._run_write(
+                """
+                MATCH (secondary:Entity {uuid: $secondary_uuid})-[r]->(target:Entity)
+                WHERE target.uuid <> $primary_uuid
+                DELETE r
+                """,
+                {"secondary_uuid": sec_uuid, "primary_uuid": primary_uuid},
+            )
+
+            # Get all incoming relationships to secondary
+            incoming = self._run(
+                """
+                MATCH (source:Entity)-[r]->(secondary:Entity {uuid: $secondary_uuid})
+                WHERE source.uuid <> $primary_uuid
+                RETURN type(r) AS rel_type, r.uuid AS uuid, r.type AS rel_label,
+                       r.thread_id AS thread_id, r.properties AS properties,
+                       r.mentions AS mentions, r.created_at AS created_at,
+                       r.updated_at AS updated_at, source.uuid AS source_uuid
+                """,
+                {"secondary_uuid": sec_uuid, "primary_uuid": primary_uuid},
+            )
+            for rel in incoming:
+                rel_type = self._type_to_rel_type(rel.get("rel_type", "RELATED_TO"))
+                create_rel_query = f"""
+                MATCH (source:Entity {{uuid: $source_uuid}})
+                MATCH (primary:Entity {{uuid: $primary_uuid}})
+                MERGE (source)-[r:{rel_type} {{uuid: $uuid}}]->(primary)
+                ON CREATE SET r.type = $type, r.thread_id = $thread_id,
+                              r.created_at = $created_at, r.updated_at = $updated_at,
+                              r.properties = $properties, r.mentions = $mentions
+                ON MATCH SET r.updated_at = $updated_at, r.properties = $properties, r.mentions = $mentions
+                """
+                self._run_write(
+                    create_rel_query,
+                    {
+                        "source_uuid": rel.get("source_uuid"),
+                        "primary_uuid": primary_uuid,
+                        "uuid": rel.get("uuid"),
+                        "type": rel.get("rel_label", rel.get("rel_type", "RELATED_TO")),
+                        "thread_id": rel.get("thread_id", ""),
+                        "properties": rel.get("properties", "{}"),
+                        "mentions": rel.get("mentions", "[]"),
+                        "created_at": rel.get("created_at", now),
+                        "updated_at": now,
+                    },
+                )
+
+            # Delete incoming relationships to secondary
+            self._run_write(
+                """
+                MATCH (source:Entity)-[r]->(secondary:Entity {uuid: $secondary_uuid})
+                WHERE source.uuid <> $primary_uuid
+                DELETE r
+                """,
+                {"secondary_uuid": sec_uuid, "primary_uuid": primary_uuid},
+            )
+
+            # Delete self-relationships on secondary
+            self._run_write(
+                """
+                MATCH (secondary:Entity {uuid: $secondary_uuid})-[r]->(secondary)
+                DELETE r
+                """,
+                {"secondary_uuid": sec_uuid},
+            )
+
+        # Delete secondary entities
+        delete_secondary_query = """
+        MATCH (secondary:Entity)
+        WHERE secondary.uuid IN $secondary_uuids
+        DETACH DELETE secondary
+        """
+        self._run_write(delete_secondary_query, {"secondary_uuids": secondary_uuids})
+
+        logger.info(
+            "[GRAPH_STORE] Merged %d entities into primary %s (%s). Name: %s, Type: %s",
+            len(entity_uuids),
+            primary_uuid,
+            primary.get("name", ""),
+            final_name,
+            final_type,
+        )
+
+        return {
+            "primary_uuid": primary_uuid,
+            "name": final_name,
+            "type": final_type,
+            "merged_entities": len(entity_uuids),
+            "deleted_entities": len(secondary_uuids),
+        }
+
     # ----------------------------------------------------------------
     # Link/Relationship CRUD
     # ----------------------------------------------------------------

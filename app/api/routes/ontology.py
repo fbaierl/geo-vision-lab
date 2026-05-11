@@ -4,10 +4,12 @@ Ontology API Routes
 REST endpoints for ontology export/import.
 """
 
+from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel
 from app.services.ontology.export import OntologyExportService
-from app.core.di import get_ontology_service
+from app.core.di import get_ontology_service, get_graph_store
 
 router = APIRouter(prefix="/api/ontology", tags=["ontology"])
 
@@ -151,4 +153,60 @@ async def get_ontology(thread_id: str):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to load ontology: {str(e)}"
+        )
+
+
+class MergeEntitiesRequest(BaseModel):
+    entity_uuids: List[str]
+    target_name: str = None
+    target_type: str = None
+
+
+@router.post("/{thread_id}/merge-entities")
+async def merge_entities(thread_id: str, data: MergeEntitiesRequest):
+    """
+    Merge multiple similar entities into a single entity.
+
+    The first UUID in the list becomes the primary entity.
+    All other entities are deleted and their relationships are rewired to the primary.
+    Properties and mentions are merged.
+
+    Args:
+        thread_id: Thread ID
+        data: MergeEntitiesRequest containing entity UUIDs and optional target name/type
+
+    Returns:
+        Merge result with primary UUID and counts
+    """
+    if not data.entity_uuids or len(data.entity_uuids) < 2:
+        raise HTTPException(
+            status_code=400, detail="At least 2 entity UUIDs are required for merging"
+        )
+
+    try:
+        graph_store = get_graph_store()
+        result = graph_store.merge_entities(
+            entity_uuids=data.entity_uuids,
+            target_name=data.target_name,
+            target_type=data.target_type,
+        )
+
+        if not result:
+            raise HTTPException(
+                status_code=400, detail="Could not merge entities. Ensure all UUIDs are valid."
+            )
+
+        return {
+            "status": "success",
+            "primary_uuid": result["primary_uuid"],
+            "name": result["name"],
+            "type": result["type"],
+            "merged_entities": result["merged_entities"],
+            "deleted_entities": result["deleted_entities"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to merge entities: {str(e)}"
         )

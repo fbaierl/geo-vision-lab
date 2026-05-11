@@ -238,3 +238,93 @@ class TestGraphStoreService:
         graph_store._run_write.assert_called_once()
         call_args = graph_store._run_write.call_args[0]
         assert "thread-1" in call_args[1]["thread_id"]
+
+    def test_merge_entities_insufficient_uuids(self, graph_store):
+        """Test merge with fewer than 2 UUIDs returns None."""
+        result = graph_store.merge_entities(["uuid-1"])
+        assert result is None
+
+        result = graph_store.merge_entities([])
+        assert result is None
+
+    def test_merge_entities_not_all_found(self, graph_store):
+        """Test merge when some entities are missing returns None."""
+        graph_store.get_entity_by_uuid = Mock(return_value=None)
+        result = graph_store.merge_entities(["uuid-1", "uuid-2"])
+        assert result is None
+
+    def test_merge_entities_success(self, graph_store):
+        """Test successful merge of two entities."""
+        primary = {
+            "uuid": "uuid-1",
+            "name": "Germany",
+            "type": "Country",
+            "properties": '{"population": 83}',
+            "mentions": '[]',
+        }
+        secondary = {
+            "uuid": "uuid-2",
+            "name": "Deutschland",
+            "type": "Country",
+            "properties": '{"capital": "Berlin"}',
+            "mentions": '[]',
+        }
+
+        def get_entity_side_effect(uuid):
+            if uuid == "uuid-1":
+                return primary
+            elif uuid == "uuid-2":
+                return secondary
+            return None
+
+        graph_store.get_entity_by_uuid = Mock(side_effect=get_entity_side_effect)
+        graph_store._run = Mock(return_value=[])
+        graph_store._run_write = Mock()
+
+        result = graph_store.merge_entities(["uuid-1", "uuid-2"])
+
+        assert result is not None
+        assert result["primary_uuid"] == "uuid-1"
+        assert result["name"] == "Germany"
+        assert result["type"] == "Country"
+        assert result["merged_entities"] == 2
+        assert result["deleted_entities"] == 1
+
+        # Verify primary was updated with merged properties
+        update_call = graph_store._run_write.call_args_list[0]
+        assert update_call[0][1]["primary_uuid"] == "uuid-1"
+
+        # Verify secondary entity was deleted
+        delete_call = graph_store._run_write.call_args_list[-1]
+        assert "uuid-2" in delete_call[0][1]["secondary_uuids"]
+
+    def test_merge_entities_with_target_name(self, graph_store):
+        """Test merge with explicit target name."""
+        primary = {
+            "uuid": "uuid-1",
+            "name": "Germany",
+            "type": "Country",
+            "properties": '{}',
+            "mentions": '[]',
+        }
+        secondary = {
+            "uuid": "uuid-2",
+            "name": "Deutschland",
+            "type": "Country",
+            "properties": '{}',
+            "mentions": '[]',
+        }
+
+        def get_entity_side_effect(uuid):
+            return primary if uuid == "uuid-1" else secondary
+
+        graph_store.get_entity_by_uuid = Mock(side_effect=get_entity_side_effect)
+        graph_store._run = Mock(return_value=[])
+        graph_store._run_write = Mock()
+
+        result = graph_store.merge_entities(
+            ["uuid-1", "uuid-2"],
+            target_name="Federal Republic of Germany"
+        )
+
+        assert result["name"] == "Federal Republic of Germany"
