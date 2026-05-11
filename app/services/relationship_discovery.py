@@ -11,7 +11,7 @@ import re
 import json
 import uuid
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -22,8 +22,6 @@ from app.models.ontology import (
     OntologyLink,
     Mention,
     OntologyDelta,
-    OntologyDeltaEntity,
-    OntologyDeltaLink,
 )
 from app.core.di_llm import get_llm
 
@@ -138,7 +136,9 @@ class RelationshipDiscoveryService:
                 f"{m.type.upper()}: {m.content}" for m in prompt_messages
             )
         except Exception as fmt_err:
-            logger.warning(f"[RELATIONSHIP_DISCOVERY] Failed to format prompt: {fmt_err}")
+            logger.warning(
+                f"[RELATIONSHIP_DISCOVERY] Failed to format prompt: {fmt_err}"
+            )
             prompt_text = ""
 
         # Use fallback JSON parsing (same pattern as ontology extractor)
@@ -154,8 +154,10 @@ class RelationshipDiscoveryService:
             response = chain.invoke(
                 {
                     "selected_entities": selected_str,
-                    "ontology_context": ontology_context or "No existing ontology context.",
-                    "conversation_history": conversation_history or "No conversation history.",
+                    "ontology_context": ontology_context
+                    or "No existing ontology context.",
+                    "conversation_history": conversation_history
+                    or "No conversation history.",
                     "source_context": source_context or "No source documents.",
                 }
             )
@@ -175,9 +177,7 @@ class RelationshipDiscoveryService:
             return result, prompt_text
 
         except json.JSONDecodeError as json_err:
-            logger.error(
-                f"[RELATIONSHIP_DISCOVERY] JSON parsing failed: {json_err}"
-            )
+            logger.error(f"[RELATIONSHIP_DISCOVERY] JSON parsing failed: {json_err}")
             logger.error(
                 f"[RELATIONSHIP_DISCOVERY] Invalid JSON content: {content[:1000] if 'content' in locals() else 'N/A'}..."
             )
@@ -222,7 +222,9 @@ def _build_ontology_context(
 
     for entity_uuid in selected_uuids:
         try:
-            subgraph = graph_store.get_subgraph(entity_uuid, hops=2, thread_id=thread_id)
+            subgraph = graph_store.get_subgraph(
+                entity_uuid, hops=2, thread_id=thread_id
+            )
             for ent in _ensure_dict(subgraph).get("entities", []):
                 ent = _ensure_dict(ent)
                 if ent:
@@ -269,8 +271,12 @@ def _build_ontology_context(
             link = _ensure_dict(link)
             if not link:
                 continue
-            src_uuid = link.get("source_uuid") or link.get("source_id") or link.get("source")
-            tgt_uuid = link.get("target_uuid") or link.get("target_id") or link.get("target")
+            src_uuid = (
+                link.get("source_uuid") or link.get("source_id") or link.get("source")
+            )
+            tgt_uuid = (
+                link.get("target_uuid") or link.get("target_id") or link.get("target")
+            )
             rtype = link.get("type", "RELATED_TO")
 
             src_name = "?"
@@ -312,9 +318,7 @@ def _build_conversation_history(messages: List[Dict[str, Any]]) -> str:
     return "\n\n".join(parts[-20:])  # Last 20 messages
 
 
-def _build_source_context(
-    vector_store, entity_names: List[str], k: int = 5
-) -> str:
+def _build_source_context(vector_store, entity_names: List[str], k: int = 5) -> str:
     """Search source documents for relevant chunks related to entity names."""
     if not vector_store or not entity_names:
         return ""
@@ -332,7 +336,9 @@ def _build_source_context(
             if not doc:
                 continue
             content = doc.get("page_content", "")
-            source = _ensure_dict(doc.get("metadata", {})).get("source", "Unknown source")
+            source = _ensure_dict(doc.get("metadata", {})).get(
+                "source", "Unknown source"
+            )
             if content:
                 parts.append(f"[Source {i}: {source}]\n{content[:800]}")
 
@@ -389,7 +395,9 @@ def discover_relationships(
                         "uuid": uuid_str,
                         "name": pending_ent.get("name", "Unknown"),
                         "type": pending_ent.get("type", "Unknown"),
-                        "properties": _safe_parse_properties(pending_ent.get("properties", {})),
+                        "properties": _safe_parse_properties(
+                            pending_ent.get("properties", {})
+                        ),
                     }
                 )
         except Exception as e:
@@ -460,7 +468,8 @@ def discover_relationships(
                 properties=properties,
                 mentions=[
                     Mention(
-                        source_text=ext_ent.context or "Discovered via LLM relationship discovery",
+                        source_text=ext_ent.context
+                        or "Discovered via LLM relationship discovery",
                         thread_id=thread_id,
                     )
                 ],
@@ -544,7 +553,8 @@ def discover_relationships(
                 type=ext_link.relationship_type,
                 mentions=[
                     Mention(
-                        source_text=ext_link.context or "Discovered via LLM relationship discovery",
+                        source_text=ext_link.context
+                        or "Discovered via LLM relationship discovery",
                         thread_id=thread_id,
                     )
                 ],
