@@ -64,6 +64,14 @@ export class SessionManager {
                 this.hydratePendingOntology(session.pending_ontology);
             }
 
+            // Hydrate intelligence log
+            if (session.intel_log && session.intel_log.length > 0) {
+                window.sourceLog = session.intel_log;
+                if (window.mainTabManager) {
+                    window.mainTabManager._renderIntelLog();
+                }
+            }
+
             // Update pipeline status
             this.updatePipelineStatus(session);
         } catch (error) {

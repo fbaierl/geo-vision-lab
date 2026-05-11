@@ -265,6 +265,15 @@ async function sendQuery() {
                         }
                         if (currentLogEntry) {
                             window.sourceLog.push(currentLogEntry);
+                            try {
+                                fetch(`/api/sessions/${threadId}/intel-log`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(currentLogEntry),
+                                });
+                            } catch (e) {
+                                console.warn('[INTEL_LOG] Failed to persist:', e);
+                            }
                             currentLogEntry = null;
                         }
                     }
@@ -394,7 +403,7 @@ function handlePendingOntologyUpdated(pendingOntology) {
 
 // Event listeners
 sendBtn.addEventListener('click', sendQuery);
-chatInput.addEventListener('keypress', (e) => {
+chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendQuery();
 });
 

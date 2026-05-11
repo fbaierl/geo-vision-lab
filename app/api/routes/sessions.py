@@ -35,6 +35,14 @@ class SessionSave(BaseModel):
     pending_ontology: Optional[Dict[str, Any]] = None
 
 
+class IntelLogEntry(BaseModel):
+    query: str
+    timestamp: int
+    response: str = ""
+    tools: List[Dict[str, Any]] = Field(default_factory=list)
+    prompt: Optional[str] = None
+
+
 class SessionListResponse(BaseModel):
     thread_id: str
     title: str
@@ -125,6 +133,7 @@ async def get_session(thread_id: str):
             "updated_at": None,
             "messages": [],
             "ontology": {"entities": {}, "links": {}},
+            "intel_log": [],
         }
 
     # Load ontology from Neo4j (abstracted from frontend)
@@ -161,6 +170,7 @@ async def get_session(thread_id: str):
         "messages": session.get("messages", []),
         "ontology": ontology_data,
         "pending_ontology": session.get("pending_ontology", {"entities": {}, "links": {}}),
+        "intel_log": session.get("intel_log", []),
     }
 
 
@@ -302,6 +312,27 @@ async def save_session(thread_id: str, data: SessionSave):
         "thread_id": thread_id,
         "message_count": len(data.messages),
     }
+
+
+@router.post("/{thread_id}/intel-log")
+async def append_intel_log(thread_id: str, data: IntelLogEntry):
+    """
+    Append an entry to the session's intelligence log.
+    """
+    db = get_database()
+
+    entry = data.model_dump()
+
+    result = db.sessions.update_one(
+        {"thread_id": thread_id},
+        {
+            "$push": {"intel_log": entry},
+            "$set": {"updated_at": datetime.utcnow()},
+        },
+        upsert=True,
+    )
+
+    return {"status": "success", "appended": True}
 
 
 @router.get("/{thread_id}/pending-ontology")

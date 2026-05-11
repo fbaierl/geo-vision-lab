@@ -162,13 +162,23 @@ export class OntologyTabManager {
                 // Add to Intelligence Log so the user can inspect the LLM prompt
                 if (data.prompt) {
                     if (!window.sourceLog) window.sourceLog = [];
-                    window.sourceLog.push({
+                    const entry = {
                         query: `Discover relationships (${this.selectedGraphNodeIds.length} entities)`,
                         timestamp: Date.now(),
                         response: data.message || `Discovered ${data.links_discovered || 0} relationships, ${data.entities_discovered || 0} new entities`,
                         tools: [],
                         prompt: data.prompt,
-                    });
+                    };
+                    window.sourceLog.push(entry);
+                    try {
+                        fetch(`/api/sessions/${threadId}/intel-log`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(entry),
+                        });
+                    } catch (e) {
+                        console.warn('[INTEL_LOG] Failed to persist:', e);
+                    }
                     if (window.mainTabManager) {
                         window.mainTabManager._renderIntelLog();
                     }
