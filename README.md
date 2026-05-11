@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  <img src="geovision_showcase.gif" alt="GeoVision Lab Showcase — chat, knowledge graph, ontology review, relationship discovery, sources" width="900" />
+</p>
+
+<p align="center">
   <strong>Version:</strong> v0.4.0
 </p>
 
