@@ -15,6 +15,8 @@ from app.core.di_graph import get_graph_store
 from app.core.di import get_ontology_service
 from app.services.ontology.merge import merge_ontologies
 from app.models.ontology import SessionOntology
+from app.services.relationship_discovery import discover_relationships
+from app.core.di_services import get_vector_store
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -621,6 +623,96 @@ async def build_ontology_from_conversation(thread_id: str):
     except Exception as e:
         logger.error(f"[ONTOLOGY_BUILD] Failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to build ontology: {str(e)}")
+
+
+@router.post("/{thread_id}/discover-relationships")
+async def discover_relationships_endpoint(thread_id: str, data: Dict[str, Any]):
+    """
+    Discover relationships between selected entities using LLM analysis.
+
+    Analyzes existing ontology, conversation history, and source documents
+    to find new relationships and intermediary entities.
+
+    Discovered entities and links are added to pending ontology for review.
+    """
+    import logging
+    logger = logging.getLogger("agent_flow")
+
+    db = get_database()
+    session = db.sessions.find_one({"thread_id": thread_id})
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {thread_id} not found")
+
+    selected_uuids = data.get("entity_uuids", [])
+    if not selected_uuids or len(selected_uuids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 entities must be selected")
+
+    messages = session.get("messages", [])
+    pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+
+    try:
+        graph_store = get_graph_store()
+        vector_store = get_vector_store()
+
+        discovered, prompt_text = discover_relationships(
+            thread_id=thread_id,
+            selected_uuids=selected_uuids,
+            graph_store=graph_store,
+            vector_store=vector_store,
+            session_messages=messages,
+            pending_ontology=pending,
+        )
+
+        if not discovered.entities and not discovered.links:
+            return {
+                "status": "success",
+                "message": "No new relationships discovered",
+                "entities_discovered": 0,
+                "links_discovered": 0,
+                "prompt": prompt_text,
+            }
+
+        # Serialize discovered ontology
+        def serialize_entity(e):
+            return e.model_dump(mode="json") if hasattr(e, "model_dump") else e
+
+        def serialize_link(link):
+            return link.model_dump(mode="json") if hasattr(link, "model_dump") else link
+
+        new_entities = {str(k): serialize_entity(v) for k, v in discovered.entities.items()}
+        new_links = {str(k): serialize_link(v) for k, v in discovered.links.items()}
+
+        # Merge with existing pending
+        existing_pending = session.get("pending_ontology", {"entities": {}, "links": {}})
+        existing_pending["entities"].update(new_entities)
+        existing_pending["links"].update(new_links)
+
+        db.sessions.update_one(
+            {"thread_id": thread_id},
+            {"$set": {
+                "pending_ontology": existing_pending,
+                "updated_at": datetime.utcnow(),
+            }},
+        )
+
+        logger.info(
+            f"[DISCOVER_RELATIONSHIPS] Discovered {len(new_entities)} entities, {len(new_links)} links"
+        )
+
+        return {
+            "status": "success",
+            "entities_discovered": len(new_entities),
+            "links_discovered": len(new_links),
+            "total_pending_entities": len(existing_pending["entities"]),
+            "total_pending_links": len(existing_pending["links"]),
+            "discovered_entities": new_entities,
+            "discovered_links": new_links,
+            "prompt": prompt_text,
+        }
+
+    except Exception as e:
+        logger.error(f"[DISCOVER_RELATIONSHIPS] Failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Relationship discovery failed: {str(e)}")
 
 
 @router.get("/{thread_id}/documents")

@@ -4,12 +4,24 @@
 
 import { renderCards } from './ontology-cards.js';
 import { renderJsonTree, expandAllJson, collapseAllJson, copyJsonToClipboard, downloadJson } from './ontology-json-tree.js';
+import { getNetworkInstance } from './graph.js';
+
+const TYPE_COLORS = {
+    Person: '#D97706',
+    Location: '#2563EB',
+    Organization: '#4F46E5',
+    Event: '#DC2626',
+    Equipment: '#059669',
+    Concept: '#9333EA',
+    default: '#4B5563'
+};
 
 export class OntologyTabManager {
     constructor() {
         this.currentTab = 'graph';
         this.currentOntology = { entities: {}, links: {} };
         this.cardFilter = 'all';
+        this.selectedGraphNodeIds = [];
         this.init();
     }
 
@@ -44,6 +56,150 @@ export class OntologyTabManager {
                 this.sortTable(tableId, sortKey);
             });
         });
+
+        // Discover relationships button
+        this.discoverBtn = document.getElementById('discover-relationships-btn');
+        this.discoverBtn?.addEventListener('click', () => this._discoverRelationships());
+
+        // Selection panel clear button
+        document.getElementById('graph-selection-clear')?.addEventListener('click', () => {
+            const network = getNetworkInstance();
+            if (network) {
+                network.unselectAll();
+            }
+            this.selectedGraphNodeIds = [];
+            this._updateDiscoverButton();
+            this._renderSelectionPanel();
+        });
+
+        // Listen for graph selection changes
+        document.addEventListener('graph-selection-change', (e) => {
+            this.selectedGraphNodeIds = e.detail.selectedIds || [];
+            this._updateDiscoverButton();
+            this._renderSelectionPanel();
+        });
+    }
+
+    _getEntityByUuid(uuid) {
+        // Check current ontology
+        if (this.currentOntology.entities && this.currentOntology.entities[uuid]) {
+            return this.currentOntology.entities[uuid];
+        }
+        // Check pending ontology
+        const pending = window.pendingOntologyManager?.pendingOntology;
+        if (pending && pending.entities && pending.entities[uuid]) {
+            return pending.entities[uuid];
+        }
+        return null;
+    }
+
+    _renderSelectionPanel() {
+        const panel = document.getElementById('graph-selection-panel');
+        const list = document.getElementById('graph-selection-list');
+        const countEl = document.getElementById('graph-selection-count');
+        if (!panel || !list || !countEl) return;
+
+        const count = this.selectedGraphNodeIds.length;
+        countEl.textContent = count;
+
+        if (count === 0) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+
+        const html = this.selectedGraphNodeIds.map(uuid => {
+            const ent = this._getEntityByUuid(uuid);
+            if (!ent) return '';
+            const color = TYPE_COLORS[ent.type] || TYPE_COLORS.default;
+            const name = this.escapeHtml(ent.name || 'Unknown');
+            const type = this.escapeHtml(ent.type || 'Unknown');
+            return `
+                <div class="graph-selection-item">
+                    <span class="dot" style="background: ${color};"></span>
+                    <span class="name" title="${name}">${name}</span>
+                    <span class="type">${type}</span>
+                </div>
+            `;
+        }).join('');
+
+        list.innerHTML = html || '<div class="graph-selection-item"><span class="name" style="color:var(--text-muted)">Unknown entity</span></div>';
+    }
+
+    _updateDiscoverButton() {
+        if (!this.discoverBtn) return;
+        const count = this.selectedGraphNodeIds.length;
+        const countEl = document.getElementById('selection-count');
+        if (count >= 2) {
+            this.discoverBtn.disabled = false;
+            if (countEl) countEl.textContent = count;
+        } else {
+            this.discoverBtn.disabled = true;
+            if (countEl) countEl.textContent = '';
+        }
+    }
+
+    async _discoverRelationships() {
+        if (this.selectedGraphNodeIds.length < 2) return;
+
+        const btn = this.discoverBtn;
+        const spinner = btn.querySelector('.btn-spinner');
+        btn.disabled = true;
+        if (spinner) spinner.style.display = 'inline-block';
+
+        const threadId = localStorage.getItem('geovision_thread_id') || 'default';
+
+        try {
+            const res = await fetch(`/api/sessions/${threadId}/discover-relationships`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entity_uuids: this.selectedGraphNodeIds }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                // Add to Intelligence Log so the user can inspect the LLM prompt
+                if (data.prompt) {
+                    if (!window.sourceLog) window.sourceLog = [];
+                    window.sourceLog.push({
+                        query: `Discover relationships (${this.selectedGraphNodeIds.length} entities)`,
+                        timestamp: Date.now(),
+                        response: data.message || `Discovered ${data.links_discovered || 0} relationships, ${data.entities_discovered || 0} new entities`,
+                        tools: [],
+                        prompt: data.prompt,
+                    });
+                    if (window.mainTabManager) {
+                        window.mainTabManager._renderIntelLog();
+                    }
+                }
+                // Refresh pending ontology
+                if (window.pendingOntologyManager) {
+                    await window.pendingOntologyManager.loadPendingOntology();
+                }
+                // Show success notification via pending status
+                if (window.pendingOntologyManager) {
+                    window.pendingOntologyManager._showStatus(
+                        `Discovered ${data.links_discovered} relationships (${data.entities_discovered} new entities)`,
+                        'success'
+                    );
+                }
+            } else {
+                const err = await res.text();
+                console.error('[DISCOVER] Failed:', err);
+                if (window.pendingOntologyManager) {
+                    window.pendingOntologyManager._showStatus('Discovery failed', 'error');
+                }
+            }
+        } catch (e) {
+            console.error('[DISCOVER] Error:', e);
+            if (window.pendingOntologyManager) {
+                window.pendingOntologyManager._showStatus('Discovery failed', 'error');
+            }
+        } finally {
+            if (spinner) spinner.style.display = 'none';
+            this._updateDiscoverButton();
+        }
     }
 
     switchTab(tabId) {
