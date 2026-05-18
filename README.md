@@ -19,7 +19,7 @@
 
 ## Overview
 
-GeoVision Lab is a RAG (Retrieval-Augmented Generation) platform for geopolitical intelligence analysis. It ingests documents (PDF, Markdown), vectorizes them using semantic embeddings, and lets you query them through an AI-powered chat interface. Supports both **local LLM inference** (Ollama with qwen3.5 models) and **cloud LLM fallback** (Groq with Llama 4 Scout) — switch between online/offline modes as needed.
+GeoVision Lab is an AI-powered geopolitical intelligence analysis platform. It ingests documents (PDF, Markdown), chunks and embeds them with `all-MiniLM-L6-v2` into MongoDB's vector store, and lets you query them through a multi-agent LangGraph pipeline. A second-stage QA critic reviews responses before they're returned, and an automatic ontology extractor builds an interactive knowledge graph (7 entity types, 30+ relationship types) persisted to Neo4j. Location entities are geocoded via a self-hosted Nominatim service (with public API fallback). Supports both **local LLM inference** (Ollama with qwen3.5:9b/4b — switchable at runtime) and **cloud LLM** (Groq with Llama 4 Scout 17B) — toggle between online/offline modes via the browser-style desktop UI.
 
 ### Key Features
 
